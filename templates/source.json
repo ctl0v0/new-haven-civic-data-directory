@@ -16,7 +16,7 @@
   "formats": [],
   "fields": [],
   "steps": [
-    "Replace with practical access instructions."
+    "Open the source page, then replace this with practical access instructions."
   ],
   "contact": "Not confirmed",
   "limitations": [
@@ -29,6 +29,13 @@
     {
       "url": "https://example.org/replace-with-evidence",
       "note": "Replace with evidence and the scope of your check."
+    }
+  ],
+  "step_links": [
+    {
+      "step": 0,
+      "label": "source page",
+      "url": "https://example.org/replace-with-source"
     }
   ]
 }

@@ -4,7 +4,7 @@
 
 1. Copy templates/source.json to sources/a-stable-id.json. Match the filename to id.
 2. Use only confirmed official or clearly attributed community sources. Preserve unknown costs, terms, contacts and refresh dates as unknown.
-3. Write access steps another contributor can follow. Describe what a file, browser lookup or endpoint actually provides.
+3. Write access steps another contributor can follow. Include direct, clickable links within How to access for each named source page, download, API, query or separate navigation destination needed to follow those steps. Use step_links; a link in evidence or related sources alone is not sufficient. Describe what each destination actually provides. If a destination is not yet known, say so rather than inventing a link.
 4. Inspect a small sample when possible. Record its format and exact fields without assuming every year or layer has the same schema.
 5. Add evidence URLs and short notes describing how they were checked. Say if a page was visible only through indexed search, returned 403, or required a browser.
 6. Record checked_on when you perform a new check; changing wording alone does not refresh that date.
@@ -21,14 +21,14 @@ Use HTTPS links. Do not enter credentials or private contact information. Prefer
 - fields: pairs of the source's field label and a plain-language meaning. Use an empty array if the schema is unverified.
 - cost and terms: distinguish browser access from bulk exports and reuse rights. Do not turn unknown into free or open.
 - evidence: URL and note describing the claim or check it supports.
-- step_links: optional list of objects with step (zero-based step index), label (exact text within that step), and url. The website makes that label clickable inside the access instruction.
+- step_links: required nonempty list of objects with step (zero-based step index), label (exact text within that step), and url. The website makes that label clickable inside the access instruction.
 - related: optional labeled links to separate sources or community copies.
 
 A date the source claims to have been updated is not the date this directory checked it. Put reported update dates and their evidence in the entry's limitations or description until a structured update-date field is needed.
 
 ## Review
 
-Check that all links point to the intended New Haven, Connecticut source; unrelated New Haven and New Hanover results can appear in search. Review dates, field meanings, access scope, licensing and limitations. Confirm that missing data is described as unavailable rather than zero.
+Check that all links point to the intended New Haven, Connecticut source; unrelated New Haven and New Hanover results can appear in search. Follow the How to access instructions and confirm that their necessary destinations are linked directly in the instructions. Review dates, field meanings, access scope, licensing and limitations. Confirm that missing data is described as unavailable rather than zero.
 
 The build checks required fields, source IDs, status values, HTTPS links and evidence. It does not check remote link availability or certify data quality.
 

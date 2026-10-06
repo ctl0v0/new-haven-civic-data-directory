@@ -15,6 +15,7 @@ for (const file of (await readdir(new URL('sources/', root))).filter(f=>f.endsWi
   for (const field of ['formats','steps','limitations','next']) if (!Array.isArray(entry[field]) || entry[field].some(v=>typeof v!=='string')) throw new Error(file+': invalid '+field);
   if (!entry.steps.length || !Array.isArray(entry.fields) || entry.fields.some(v=>!Array.isArray(v)||v.length!==2||v.some(s=>typeof s!=='string'))) throw new Error(file+': invalid steps/fields');
   if (!Array.isArray(entry.evidence) || !entry.evidence.length) throw new Error(file+': evidence required');
+  if (!Array.isArray(entry.step_links) || !entry.step_links.length) throw new Error(file+': How to access requires at least one direct link in step_links');
   if (entry.step_links !== undefined) {
     if (!Array.isArray(entry.step_links)) throw new Error(file+': invalid step links');
     for (const item of entry.step_links) {

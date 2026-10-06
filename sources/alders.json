@@ -63,5 +63,12 @@
     "publisher": "New Haven · Board of Alders",
     "access": "Website table",
     "cost": "Not confirmed"
-  }
+  },
+  "step_links": [
+    {
+      "step": 0,
+      "label": "List of Alders page",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders"
+    }
+  ]
 }

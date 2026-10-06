@@ -60,5 +60,17 @@
     "publisher": "New Haven · Board of Alders",
     "access": "Legistar search",
     "cost": "Not confirmed"
-  }
+  },
+  "step_links": [
+    {
+      "step": 0,
+      "label": "meeting calendar",
+      "url": "https://newhaven-ct.legistar.com/Calendar.aspx"
+    },
+    {
+      "step": 2,
+      "label": "Legislation tab",
+      "url": "https://newhaven-ct.legistar.com/Legislation.aspx"
+    }
+  ]
 }
