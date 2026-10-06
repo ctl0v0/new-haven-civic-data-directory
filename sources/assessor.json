@@ -10,9 +10,9 @@
   "publisher": "City of New Haven — Assessor's Office; hosted by Vision Government Solutions",
   "source_type": "official-vendor",
   "status": "Access tested",
-  "description": "Look up the city's published property assessment information.",
+  "description": "Property assessment browser lookup, with a separate city GIS API identified for parcel and assessment attributes.",
   "url": "https://gis.vgsi.com/newhavenct/",
-  "access": "Browser lookup",
+  "access": "Browser lookup; city GIS API identified (live check pending)",
   "formats": [
     "HTML"
   ],
@@ -20,15 +20,19 @@
   "steps": [
     "Open the New Haven assessment database.",
     "Read the valuation-date and disclaimer information on the landing page.",
-    "Use the available browser lookup; confirm important assessment details with the Assessor's Office."
+    "Use the available browser lookup; confirm important assessment details with the Assessor's Office.",
+    "For programmatic access, inspect the city GIS API and test a one-record assessment query. These API requests could not be verified by this session's fetching tool."
   ],
   "contact": "assessor@newhavenct.gov; contact appears in indexed official city page.",
   "limitations": [
     "Only the landing page was inspected; sample property records and their fields have not been verified.",
     "The landing page describes values as of October 1, 2021. Do not assume these are current tax bills.",
-    "Bulk downloads, an assessment API, update timing, and licensing remain unknown."
+    "An existing application uses a city ArcGIS parcel API with assessment attributes. This is separate from the Vision browser, whose property pages are read as HTML; no full Vision assessor API was established.",
+    "Live city API metadata and sample queries were blocked by this session's fetching tool. Authentication, exact current fields, response formats, record limits, availability and freshness are not verified. This tool limitation does not establish that the API is down or private.",
+    "Bulk access costs, permitted reuse and full assessor coverage remain unconfirmed."
   ],
   "next": [
+    "Retrieve the city GIS layer metadata and one-record query in a browser or network-enabled environment; confirm the current assessment fields, dates and access requirements.",
     "Inspect a sample property record and document its actual field labels.",
     "Ask about an existing bulk export, its valuation date, any fees, and reuse terms."
   ],
@@ -40,6 +44,32 @@
     {
       "url": "https://www.newhavenct.gov/government/departments-divisions/assessor-s-office",
       "note": "Official contact identified through search; direct city-page retrieval blocked."
+    },
+    {
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
+      "note": "City API endpoint identified by inspecting an existing application's implementation. Live metadata and sample-query verification were blocked by this session's fetching tool."
+    }
+  ],
+  "step_links": [
+    {
+      "step": 3,
+      "label": "city GIS API",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0"
+    },
+    {
+      "step": 3,
+      "label": "one-record assessment query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?where=1%3D1&outFields=objectid%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=1&f=pjson"
+    }
+  ],
+  "related": [
+    {
+      "label": "City parcel and assessment GIS API — live verification pending",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0"
+    },
+    {
+      "label": "One-record assessment query — live verification pending",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?where=1%3D1&outFields=objectid%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=1&f=pjson"
     }
   ]
 }
