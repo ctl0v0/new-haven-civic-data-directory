@@ -61,6 +61,18 @@
     {
       "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532426904",
       "note": "Live city ward API check passed: 30 distinct ward identifiers (1–30), readable closed polygon rings in longitude/latitude, and City Hall point lookup returned Ward 7 matching an independent point-in-polygon calculation. Current legal boundary plan remains unconfirmed."
+    },
+    {
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0?f=pjson",
+      "note": "Live city-hosted ward metadata identifies BM_POL_Wards_2022, a SmallInteger ward field and polygon geometry. Its legal effective date is unconfirmed."
+    },
+    {
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0/query?f=json&where=1%3D1&outFields=ward&returnGeometry=true&outSR=4326&resultRecordCount=100",
+      "note": "The selected-field query returned 30 readable polygon records with exactly one ward identifier 1–30 and longitude/latitude coordinates."
+    },
+    {
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0/query?f=json&where=1%3D1&returnGeometry=true&outSR=4326&resultRecordCount=100&geometry=%7B%22x%22%3A-72.92457999988014%2C%22y%22%3A41.30727099977865%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=ward",
+      "note": "The City Hall point query returned one polygon with ward 7; independent point-in-polygon calculation against all retrieved polygons agreed."
     }
   ],
   "step_links": [
