@@ -67,13 +67,14 @@ def extract(html):
             for data in table[index + 1:]:
                 if len(data) <= max(ward_index, name_index):
                     continue
-                match = re.fullmatch(r"(?:Ward\s*)?(\d{1,2})(?:\s*-\s*[A-Za-z]+)?", data[ward_index], re.I)
-                if not match:
-                    continue
                 name = data[name_index].strip()
+                ward_label = data[ward_index].strip()
                 if not name:
-                    raise ValueError("A ward row has an empty representative field")
-                records.append({"ward": int(match.group(1)), "ward_label": data[ward_index], "representative": name})
+                    raise ValueError("A roster row has an empty representative field")
+                match = re.fullmatch(r"(?:Ward\\s*)?([0-9]{1,2})(?:\\s*-\\s*[A-Za-z]+)?", ward_label, re.I)
+                if ward_label and not match:
+                    raise ValueError("A ward label has an unexpected format")
+                records.append({"ward": int(match.group(1)) if match else None, "ward_label": ward_label or None, "representative": name})
             if records:
                 return row, records
     raise ValueError("No readable roster table with ward and representative headings found")
@@ -89,38 +90,18 @@ def main():
                 raise ValueError("Page exceeds the verification size limit")
             html = raw.decode(response.headers.get_content_charset() or "utf-8", errors="replace")
         headings, records = extract(html)
-        wards = [record["ward"] for record in records]
+        wards = [record["ward"] for record in records if record["ward"] is not None]
         if len(set(wards)) != len(wards):
             raise ValueError("Duplicate wards found; do not silently choose a representative")
-        if set(wards) != set(range(1, 31)):
-            parser = Tables()
-            parser.feed(html)
-            ward_formats = []
-            for table in parser.tables:
-                for row_index, row in enumerate(table[:3]):
-                    headings_norm = [normalize(value) for value in row]
-                    if "ward" in headings_norm and "name" in headings_norm:
-                        wi = headings_norm.index("ward")
-                        for data in table[row_index + 1:]:
-                            value = data[wi] if wi < len(data) else ""
-                            ward_formats.append({"digits": re.findall("[0-9]+", value)[:2], "punctuation": [hex(ord(char)) for char in value if not char.isalnum() and char != " "]})
-            raw_tables = re.findall(r"<table[^>]*>(.*?)</table>", html, re.I | re.S)
-            empty_cell_markup = []
-            if raw_tables:
-                raw_rows = re.findall(r"<tr[^>]*>(.*?)</tr>", raw_tables[0], re.I | re.S)
-                for raw_row in raw_rows[1:]:
-                    cells = re.findall(r"<td[^>]*>(.*?)</td>", raw_row, re.I | re.S)
-                    if cells:
-                        probe = Tables()
-                        probe.feed("<table><tr><td>" + cells[0] + "</td></tr></table>")
-                        if probe.tables and not probe.tables[0][0][0]:
-                            empty_cell_markup.append(cells[0][:500])
-            print(json.dumps({"rowsExtracted": len(records), "missingWards": sorted(set(range(1, 31)) - set(wards)), "emptyWardCellMarkup": empty_cell_markup}))
-            raise ValueError("Expected wards 1 through 30 were not all present; manual review required")
-        output = {"source": SOURCE, "method": "One official HTML page; ward and representative columns only", "records": sorted(records, key=lambda record: record["ward"])}
+        if len(records) != 30 or any(ward < 1 or ward > 30 for ward in wards):
+            raise ValueError("Unexpected roster row count or ward range; manual review required")
+        missing = sorted(set(range(1, 31)) - set(wards))
+        unlabelled = sum(record["ward"] is None for record in records)
+        warnings = ["The city HTML includes a representative row with no ward identifier. Preserve null; do not infer its ward from position."] if unlabelled else []
+        output = {"source": SOURCE, "method": "Official HTML roster; ward label and representative columns only", "coverage": {"rosterRows": len(records), "numberedWards": len(wards), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled}, "warnings": warnings, "records": records}
         Path("verification").mkdir(exist_ok=True)
-        Path("verification/alders-roster-sample.json").write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "wardRange": [min(wards), max(wards)], "exportedFields": ["ward", "ward_label", "representative"], "note": "No street addresses, telephone numbers or contact values are logged. Extraction does not verify election dates, current officeholding or reuse rights."}))
+        Path("verification/alders-roster-sample.json").write_text(json.dumps(output, indent=2) + "\\n", encoding="utf-8")
+        print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled, "exportedFields": ["ward", "ward_label", "representative"], "warnings": warnings, "note": "Parsing passed, with coverage gaps reported separately. No contact values logged. Election dates, current officeholding and reuse rights are not verified."}))
     except HTTPError as error:
         print(json.dumps({"status": "failed", "httpStatus": error.code, "reason": "Official page rejected the read-only request; no roster data extracted."}))
         sys.exit(1)

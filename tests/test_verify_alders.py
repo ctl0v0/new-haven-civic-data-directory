@@ -14,6 +14,15 @@ class RosterTests(unittest.TestCase):
         self.assertEqual([row["ward"] for row in records], [1, 30])
         self.assertEqual(records[0]["ward_label"], "1-D")
         self.assertEqual(records[0]["representative"], "Test Representative")
+    def test_blank_ward_is_preserved_without_guessing(self):
+        html = '<table><tr><th>Ward</th><th>Name</th></tr><tr><td></td><td>Test Representative</td></tr></table>'
+        _, records = module.extract(html)
+        self.assertIsNone(records[0]["ward"])
+        self.assertIsNone(records[0]["ward_label"])
+        self.assertEqual(records[0]["representative"], "Test Representative")
+    def test_malformed_ward_is_not_silently_dropped(self):
+        with self.assertRaises(ValueError):
+            module.extract('<table><tr><th>Ward</th><th>Name</th></tr><tr><td>unknown-label</td><td>Test Representative</td></tr></table>')
     def test_unrelated_page_is_not_roster_data(self):
         with self.assertRaises(ValueError):
             module.extract('<html><p>Please enable JavaScript</p></html>')
