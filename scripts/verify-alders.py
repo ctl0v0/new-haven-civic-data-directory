@@ -104,7 +104,18 @@ def main():
                         for data in table[row_index + 1:]:
                             value = data[wi] if wi < len(data) else ""
                             ward_formats.append({"digits": re.findall("[0-9]+", value)[:2], "punctuation": [hex(ord(char)) for char in value if not char.isalnum() and char != " "]})
-            print(json.dumps({"rowsExtracted": len(records), "missingWards": sorted(set(range(1, 31)) - set(wards)), "wardLabelFormats": ward_formats}))
+            raw_tables = re.findall(r"<table[^>]*>(.*?)</table>", html, re.I | re.S)
+            empty_cell_markup = []
+            if raw_tables:
+                raw_rows = re.findall(r"<tr[^>]*>(.*?)</tr>", raw_tables[0], re.I | re.S)
+                for raw_row in raw_rows[1:]:
+                    cells = re.findall(r"<td[^>]*>(.*?)</td>", raw_row, re.I | re.S)
+                    if cells:
+                        probe = Tables()
+                        probe.feed("<table><tr><td>" + cells[0] + "</td></tr></table>")
+                        if probe.tables and not probe.tables[0][0][0]:
+                            empty_cell_markup.append(cells[0][:500])
+            print(json.dumps({"rowsExtracted": len(records), "missingWards": sorted(set(range(1, 31)) - set(wards)), "emptyWardCellMarkup": empty_cell_markup}))
             raise ValueError("Expected wards 1 through 30 were not all present; manual review required")
         output = {"source": SOURCE, "method": "One official HTML page; ward and representative columns only", "records": sorted(records, key=lambda record: record["ward"])}
         Path("verification").mkdir(exist_ok=True)
