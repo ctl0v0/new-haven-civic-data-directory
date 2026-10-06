@@ -1,1 +1,98 @@
-{"sources":{}}
+{
+  "sources": {
+    "alders": {
+      "checked_at": "2026-10-06T20:11:41.142Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37524566724",
+      "revision": "4c0bec64b50f84635f9bfd00c569eb1b59b565e1",
+      "status": "passed",
+      "checks": [
+        {
+          "id": "alders-roster",
+          "status": "passed",
+          "warnings": [
+            "The city HTML includes a representative row with no ward identifier. Preserve null; do not infer its ward from position."
+          ]
+        }
+      ]
+    },
+    "assessor": {
+      "checked_at": "2026-10-06T20:11:41.142Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37524566724",
+      "revision": "4c0bec64b50f84635f9bfd00c569eb1b59b565e1",
+      "status": "passed",
+      "checks": [
+        {
+          "id": "city-property-apis",
+          "status": "passed",
+          "warnings": []
+        },
+        {
+          "id": "known-property-lookup",
+          "status": "passed",
+          "warnings": [
+            "Assessment valuation date, current tax implications, reuse rights and Vision browser comparison remain unverified. One address does not prove general address matching or identifier uniqueness."
+          ]
+        }
+      ]
+    },
+    "gis-parcels": {
+      "checked_at": "2026-10-06T20:11:41.142Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37524566724",
+      "revision": "4c0bec64b50f84635f9bfd00c569eb1b59b565e1",
+      "status": "passed",
+      "checks": [
+        {
+          "id": "city-property-apis",
+          "status": "passed",
+          "warnings": []
+        },
+        {
+          "id": "known-address-parcel-zoning",
+          "status": "passed",
+          "warnings": [
+            "One public address was tested. Other address formats, multiple matches, overlays, boundaries, pagination and bulk workflows need separate checks. Zoning meanings, effective dates, reuse rights and source freshness are unconfirmed."
+          ]
+        }
+      ]
+    },
+    "finance": {
+      "checked_at": "2026-10-06T20:11:41.142Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37524566724",
+      "revision": "4c0bec64b50f84635f9bfd00c569eb1b59b565e1",
+      "status": "not-configured",
+      "checks": [
+        {
+          "id": "finance-documents",
+          "status": "not-configured",
+          "warnings": []
+        }
+      ]
+    },
+    "meetings-legislation": {
+      "checked_at": "2026-10-06T20:11:41.142Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37524566724",
+      "revision": "4c0bec64b50f84635f9bfd00c569eb1b59b565e1",
+      "status": "not-configured",
+      "checks": [
+        {
+          "id": "meetings-legislation",
+          "status": "not-configured",
+          "warnings": []
+        }
+      ]
+    },
+    "ward-boundaries": {
+      "checked_at": "2026-10-06T20:11:41.142Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37524566724",
+      "revision": "4c0bec64b50f84635f9bfd00c569eb1b59b565e1",
+      "status": "not-configured",
+      "checks": [
+        {
+          "id": "ward-boundaries",
+          "status": "not-configured",
+          "warnings": []
+        }
+      ]
+    }
+  }
+}
