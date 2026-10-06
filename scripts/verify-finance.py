@@ -37,7 +37,8 @@ def inspect_pdf(document,kind):
     page_count=len(reader.pages)
     if page_count>700: raise ValueError('Selected PDF exceeds page-count inspection limit')
     inspected=min(page_count,12)
-    texts=[reader.pages[i].extract_text(extraction_mode='layout') or '' for i in range(inspected)]
+    texts=[(reader.pages[i].extract_text() or '') if '/Contents' in reader.pages[i] else '' for i in range(inspected)]
+    if sum(len(t.strip()) for t in texts)<200: raise ValueError('Inspected sample has insufficient extractable text; requires document investigation')
     table_pages=[]
     for i,text in enumerate(texts):
         upper=text.upper()
