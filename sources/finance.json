@@ -91,5 +91,22 @@
     "publisher": "New Haven · Policy, Management & Grants",
     "access": "Report indexes / downloads",
     "cost": "Not confirmed"
+  },
+  "build_readiness": {
+    "level": "not-assessed",
+    "summary": "Official report indexes are located, but current files and their extraction requirements have not been inspected.",
+    "preparation": [
+      "Inspect an actual current report and determine its file format and table structure.",
+      "Check whether text/tables can be extracted; use OCR only if the chosen document is scanned and requires it.",
+      "Verify extracted numbers, units and periods, distinguishing actual amounts from forecasts and cumulative totals.",
+      "Confirm available exports, reuse terms and archive coverage."
+    ],
+    "assessed_on": "2026-10-06",
+    "next_review_on": "2027-01-04",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
+      "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
+    ]
   }
 }

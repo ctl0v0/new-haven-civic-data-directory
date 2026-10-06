@@ -52,5 +52,20 @@
     "publisher": "City of New Haven",
     "access": "Maps; download unverified",
     "cost": "Not confirmed"
+  },
+  "build_readiness": {
+    "level": "not-assessed",
+    "summary": "Discovery pages are located; a current downloadable boundary dataset has not been verified.",
+    "preparation": [
+      "Locate the current ward layer or download and verify its effective boundary plan.",
+      "Check ward identifiers, geometry and coordinate system.",
+      "Confirm reuse terms and update responsibility before using it for location-to-representative matching."
+    ],
+    "assessed_on": "2026-10-06",
+    "next_review_on": "2027-01-04",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
+    ]
   }
 }

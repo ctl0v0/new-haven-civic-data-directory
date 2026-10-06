@@ -70,5 +70,20 @@
       "label": "List of Alders page",
       "url": "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders"
     }
-  ]
+  ],
+  "build_readiness": {
+    "level": "not-assessed",
+    "summary": "The roster source is located, but usable extraction from the current page has not been tested.",
+    "preparation": [
+      "Inspect the current roster table and verify the listed field labels.",
+      "If building a tool, establish an allowed method to read or export the table and check current representation.",
+      "Confirm reuse terms and a correction contact."
+    ],
+    "assessed_on": "2026-10-06",
+    "next_review_on": "2027-01-04",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders"
+    ]
+  }
 }

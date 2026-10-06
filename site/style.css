@@ -85,3 +85,5 @@ header .site-nav{flex:0 1 auto}
 @media(max-width:480px){.site-identity{flex-basis:100%}.site-identity .site-brand{font-size:1.5rem}}
 
 .agent-handoff textarea{font-size:.9rem;line-height:1.5;background:#f7f8f2;color:var(--ink)}.agent-copy-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.75rem 1rem}.agent-handoff [role="status"]:empty{display:none}
+
+.listing-readiness{display:block;font-size:.8rem;font-weight:400;line-height:1.4;color:var(--muted);margin-top:.45rem}.readiness-label{display:inline-block;font-weight:650;border:1px solid var(--line);border-radius:5px;padding:.2rem .55rem;background:#edf3e9}.review-due{display:inline-block;color:#7a3b0b;background:#fff1df;border-radius:4px;padding:.1rem .4rem;font-size:.8rem}.source-readiness h3{font-size:1.05rem;margin:1rem 0 .4rem}

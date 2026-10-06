@@ -1,3 +1,4 @@
+import {READINESS_LABELS} from './readiness.mjs';
 export function renderAgentBrief(entry) {
   const site='https://new-haven-civic-data-directory.vercel.app';
   return [
@@ -8,6 +9,9 @@ export function renderAgentBrief(entry) {
     'What it contains: '+entry.description,
     'Access: '+entry.access,
     'Directory status: '+entry.status,
+    'Build readiness: '+READINESS_LABELS[entry.build_readiness.level]+' — '+entry.build_readiness.summary,
+    'Readiness assessed: '+entry.build_readiness.assessed_on+'; review due: '+entry.build_readiness.next_review_on,
+    'Preparation: '+(entry.build_readiness.preparation.join(' ') || 'See the documented tested workflow.'),
     'Access last checked: '+entry.checked_on+' (not the data update date).',
     'Original source: '+entry.url,
     'Current source record: '+site+'/sources/'+entry.id+'.json',

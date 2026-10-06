@@ -169,5 +169,21 @@
     "publisher": "New Haven · Assessor / GIS",
     "access": "JSON API + browser",
     "cost": "Sample API access: free"
+  },
+  "build_readiness": {
+    "level": "sample-tested",
+    "summary": "A selected-field city GIS JSON query returned one record. A complete property lookup workflow has not been verified.",
+    "preparation": [
+      "Test a known property and confirm parcel/account identifiers and valuation date.",
+      "Verify address filters, matching and any joins required by the intended tool.",
+      "Confirm reuse terms, refresh responsibility and any bulk-access arrangements."
+    ],
+    "assessed_on": "2026-10-06",
+    "next_review_on": "2027-01-04",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Cnh_ward%2Cuse_code%2Ctotal_land_area_acres%2Cyear_building_built%2Cunits_commercial%2Cunits_residential%2Cunits_condo%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value%2Csale_date%2Cprice&returnGeometry=false&resultRecordCount=1"
+    ]
   }
 }

@@ -47,3 +47,7 @@ Later capabilities: community-maintained exports, documented refresh jobs and ch
 ## V1 completion
 
 A visitor can browse without using GitHub, open source details, understand access and limitations, and reach the original source. An agent can read source JSON or the generated catalog. Contributors can request data or propose a correction. Every entry has evidence and explicit unknowns; remaining access checks have next actions.
+
+## Build-readiness reviews
+
+Source records now track build readiness separately from access status, including preparation, evidence, assessment dates and a next review date. Review owners are initially unassigned. Assign an owner during weekly triage. The weekly repository workflow flags overdue reviews; this is a reminder to recheck evidence, not automatic source verification. Start with one known-property lookup pilot before labeling any source workflow-tested.

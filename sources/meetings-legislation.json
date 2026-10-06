@@ -72,5 +72,20 @@
       "label": "Legislation tab",
       "url": "https://newhaven-ct.legistar.com/Legislation.aspx"
     }
-  ]
+  ],
+  "build_readiness": {
+    "level": "preparation-needed",
+    "summary": "The calendar is readable, but building a tool requires collecting and checking meeting documents or finding supported structured access.",
+    "preparation": [
+      "Inspect a meeting detail, its agenda and a legislative record.",
+      "Confirm supported API/export access or a permitted document-collection method.",
+      "Document record identifiers, file formats, missing documents and historic coverage."
+    ],
+    "assessed_on": "2026-10-06",
+    "next_review_on": "2027-01-04",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://newhaven-ct.legistar.com/Calendar.aspx"
+    ]
+  }
 }

@@ -178,5 +178,22 @@
     "publisher": "New Haven · GIS",
     "access": "JSON APIs",
     "cost": "Sample API access: free"
+  },
+  "build_readiness": {
+    "level": "sample-tested",
+    "summary": "Parcel, address and zoning APIs each returned a selected-field JSON sample. Mapping and cross-layer workflows still need testing.",
+    "preparation": [
+      "Test geometry output, coordinate systems and a known address-to-parcel-to-zoning match.",
+      "Verify pagination and identifier joins before treating responses as a complete dataset.",
+      "Confirm zoning dates, classification meanings, reuse terms and refresh schedules."
+    ],
+    "assessed_on": "2026-10-06",
+    "next_review_on": "2027-01-04",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson"
+    ]
   }
 }

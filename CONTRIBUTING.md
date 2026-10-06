@@ -39,3 +39,13 @@ Use the data-request issue form. Keep a short progress comment with sources chec
 Review a small set of active investigations at each meeting, assign a volunteer and record the result. Review each entry at least quarterly as a proposed starting cadence, and sooner after a contributor reports a change. Revisit the cadence once maintainers are assigned.
 
 Prepare proposed city questions in docs/city-questions.md or in the relevant issue. Review before sending. Requests here are community investigations, not official records requests.
+
+## Build readiness assessments
+
+Every source requires build_readiness: level, summary, preparation (list), assessed_on, next_review_on, review_owner and evidence (URLs already in the source evidence list). Read the public [label definitions](https://new-haven-civic-data-directory.vercel.app/build-readiness.html). Level values are workflow-tested, sample-tested, preparation-needed and not-assessed. Match the judgment to the exact evidence; access method alone never earns a higher level. Preserve unknown preparation as unknown until an actual source sample is inspected.
+
+Document a representative input, reproducible procedure and checked output before selecting workflow-tested. For sample-tested, state what the sample did and did not prove. Record remaining work for every other level. Include costs, terms and freshness uncertainties in the entry even when structured access succeeds.
+
+Start with a quarterly review window (90 days), and reassess sooner after access failures, field/format changes, new evidence or corrections. Set review_owner to the volunteer responsible, or Unassigned honestly. Do not advance assessed_on or next_review_on merely because wording changed. Updating the record regenerates the page, catalog and agent brief. Copied briefs remain snapshots.
+
+The weekly Review build readiness workflow flags overdue assessments and validates their structure. It does not query sources or certify data. Review-due flags also use the visitor’s current date on the site. Run node scripts/review-readiness.mjs to check reviews locally.

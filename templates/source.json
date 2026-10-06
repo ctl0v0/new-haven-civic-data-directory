@@ -37,5 +37,18 @@
       "label": "source page",
       "url": "https://example.org/replace-with-source"
     }
-  ]
+  ],
+  "build_readiness": {
+    "level": "not-assessed",
+    "summary": "Build access and required preparation have not been assessed.",
+    "preparation": [
+      "Inspect an actual source sample and document the usable access path."
+    ],
+    "assessed_on": "YYYY-MM-DD",
+    "next_review_on": "YYYY-MM-DD",
+    "review_owner": "Unassigned",
+    "evidence": [
+      "https://example.org/replace-with-evidence"
+    ]
+  }
 }

@@ -1,0 +1,19 @@
+name: Review build readiness
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * 1'
+  push:
+    branches: [main]
+    paths: ['sources/**', 'scripts/readiness.mjs', 'scripts/review-readiness.mjs', '.github/workflows/review-readiness.yml']
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/review-readiness.mjs
