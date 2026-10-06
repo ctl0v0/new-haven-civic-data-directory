@@ -154,3 +154,18 @@ header .site-nav{flex:0 1 auto}
 .readiness-preparation-needed{background:#fff1dd;border-color:#d6b586;color:#714408}
 .readiness-not-assessed{background:#edf0ed;border-color:#bec7bf;color:#46534a}
 .listing-readiness .review-due{margin:.25rem 0 0}
+
+/* Readiness has its own column; the access-check date sits under status. */
+.directory-table{min-width:1100px}
+.directory-table th:nth-child(1){width:22%}
+.directory-table th:nth-child(2){width:9%}
+.directory-table th:nth-child(3){width:18%}
+.directory-table th:nth-child(4){width:15%}
+.directory-table th:nth-child(5){width:14%}
+.directory-table th:nth-child(6){width:10%}
+.directory-table th:nth-child(7){width:12%}
+.status-checked{display:block;margin-top:.4rem;font-size:.76rem;font-weight:400;line-height:1.4;color:var(--muted)}
+.readiness-column-info{display:inline-flex;vertical-align:middle;align-items:center;justify-content:center;padding:.15rem;background:transparent;color:var(--accent);border-radius:50%;min-width:32px;min-height:32px}
+.readiness-column-info:hover{background:#d9e6d9}
+.directory-table .review-due{display:block;width:fit-content;margin-top:.35rem}
+.readiness-dialog h2{font-size:1.35rem;line-height:1.3;margin:.25rem 0 1rem}
