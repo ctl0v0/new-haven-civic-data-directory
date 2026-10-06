@@ -88,12 +88,12 @@
     "source_ids": [
       "ward-boundaries"
     ],
-    "validator": null,
-    "reason": "No current boundary download or layer has been verified.",
-    "title": "Ward boundaries",
-    "scope": "No current boundary download or automated geography check is configured.",
+    "validator": "ward-boundaries",
+    "title": "Ward polygons and City Hall lookup",
+    "scope": "Retrieve the city-hosted Wards_2022 layer; check ward identifiers 1–30, polygon coordinates, and a City Hall point query against the downloaded polygons. Boundary currency is not established.",
     "source_urls": [
-      "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
-    ]
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0?f=pjson"
+    ],
+    "group": "wards"
   }
 ]

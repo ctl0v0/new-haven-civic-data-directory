@@ -6,12 +6,12 @@ on:
         description: Source checks to run
         type: choice
         default: all
-        options: [all, alders, property, finance]
+        options: [all, alders, property, finance, wards]
   schedule:
     - cron: '0 14 * * 1'
   push:
     branches: [main]
-    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'scripts/review-source-changes.mjs', 'scripts/discover-wards.mjs', 'scripts/verify-finance.py', 'validation/**', '.github/workflows/validate-sources.yml']
+    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'scripts/review-source-changes.mjs', 'scripts/verify-ward-boundaries.mjs', 'scripts/verify-finance.py', 'validation/**', '.github/workflows/validate-sources.yml']
 permissions:
   contents: read
 jobs:
@@ -23,7 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node scripts/discover-wards.mjs
       - run: python3 -m pip install pypdf==5.9.0
       - run: python3 -m unittest discover -s tests -p 'test_*.py'
       - run: node scripts/validate-sources.mjs "${{ inputs.source || 'all' }}"

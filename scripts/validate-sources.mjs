@@ -6,6 +6,7 @@ const commands={
  'city-property-apis':[process.execPath,['scripts/verify-property-api.mjs']],
  'known-property-lookup':[process.execPath,['scripts/verify-property-lookup.mjs']],
  'known-gis-workflow':[process.execPath,['scripts/verify-gis-workflow.mjs']],
+ 'ward-boundaries':[process.execPath,['scripts/verify-ward-boundaries.mjs']],
  'finance-documents':['python3',['scripts/verify-finance.py']]
 };
 export function interpret(result){
@@ -28,7 +29,7 @@ export function interpret(result){
 export async function main(){
  const registry=JSON.parse(await readFile(new URL('../validation/sources.json',import.meta.url),'utf8'));
  const selected=process.argv[2]||'all';
- if(!['all','alders','property','finance'].includes(selected))throw Error('Unknown source selection');
+ if(!['all','alders','property','finance','wards'].includes(selected))throw Error('Unknown source selection');
  const report={checked_at:new Date().toISOString(),scope:'Small read-only source checks; not a freshness, accuracy or rights certification',checks:[]};
  for(const check of registry){
   if(selected!=='all'&&check.group!==selected)continue;
@@ -38,7 +39,7 @@ export async function main(){
   const result=spawnSync(command[0],command[1],{cwd:fileURLToPath(new URL('../',import.meta.url)),encoding:'utf8',timeout:180000,maxBuffer:1000000});
   const outcome=interpret(result);
   report.checks.push({id:check.id,source_ids:check.source_ids,...outcome});
-  if(check.id==='finance-documents') for(const observation of outcome.observations) console.log(JSON.stringify({financeDocumentCheck:observation}));
+  if(['finance-documents','ward-boundaries'].includes(check.id)) for(const observation of outcome.observations) console.log(JSON.stringify({financeDocumentCheck:observation}));
   console.log(JSON.stringify({check:check.id,status:outcome.status,reason:outcome.reason||null,warnings:outcome.observations.flatMap(x=>x.warnings||[])}));
  }
  await mkdir('verification',{recursive:true});
