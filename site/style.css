@@ -23,3 +23,16 @@ header{padding-top:1.5rem;padding-bottom:1rem}header .eyebrow{margin:0 0 .5rem}h
 
 /* Primary action uses the same visual language as the form submit button. */
 nav{align-items:center}.button-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:.45rem 1rem;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:white;font-weight:600;line-height:1.4;text-decoration:none}.button-link:visited{color:white}.button-link:hover{background:#044d38;border-color:#044d38}.button-link:active{background:#033c2c}.button-link:focus-visible{outline:3px solid #ad571b;outline-offset:3px}
+
+/* Shared, compact navigation; the request action follows the browsing links. */
+.masthead{display:flex;align-items:center;gap:1.25rem;padding-bottom:.8rem;margin-bottom:.9rem;border-bottom:1px solid var(--line)}
+.site-brand{font-size:1rem;font-weight:700;line-height:1.25;text-decoration:none;color:var(--ink);white-space:nowrap}
+header .site-nav{margin:0 0 0 auto;display:flex;align-items:center;gap:1.25rem;flex-wrap:nowrap}
+.nav-links{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap}
+.nav-links a{font-size:.95rem;text-decoration:none;line-height:1.4;padding:.4rem 0}
+.nav-links a:hover{text-decoration:underline}
+.nav-links a[aria-current="page"]{font-weight:700;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.35em}
+.site-nav .button-link{flex-shrink:0}
+.button-link[aria-current="page"]{background:#044d38;border-color:#044d38}
+@media(max-width:800px){.masthead{flex-wrap:wrap;gap:.65rem}header .site-nav{width:100%;margin:0;justify-content:space-between;gap:1rem}.nav-links{gap:.45rem 1rem}}
+@media(max-width:480px){header .site-nav{flex-wrap:wrap;gap:.65rem}.nav-links{width:100%;justify-content:space-between}.site-nav .button-link{width:100%}}
