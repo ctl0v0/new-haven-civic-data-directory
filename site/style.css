@@ -144,3 +144,13 @@ header .site-nav{flex:0 1 auto}
 .latest-source-check{margin-top:1rem;padding:.8rem 0;border-top:1px solid var(--line)}
 .source-readiness .latest-source-check h3{font-size:.9rem;margin:0 0 .35rem;color:var(--muted)}
 .latest-source-check>p{font-size:.9rem;line-height:1.5;margin:.3rem 0;overflow-wrap:anywhere}
+
+/* Directory readiness is a distinct badge, labelled separately from access status. */
+.listing-readiness{margin-top:.55rem}
+.listing-readiness-caption{display:block;font-size:.76rem;color:var(--muted);margin-bottom:.2rem}
+.readiness-badge{display:inline-block;max-width:100%;padding:.2rem .5rem;border:1px solid;border-radius:5px;font-size:.78rem;font-weight:650;line-height:1.4}
+.readiness-workflow-tested{background:#e3f2e9;border-color:#91b8a2;color:#174d35}
+.readiness-sample-tested{background:#e8eff8;border-color:#a5b8d0;color:#294a71}
+.readiness-preparation-needed{background:#fff1dd;border-color:#d6b586;color:#714408}
+.readiness-not-assessed{background:#edf0ed;border-color:#bec7bf;color:#46534a}
+.listing-readiness .review-due{margin:.25rem 0 0}
