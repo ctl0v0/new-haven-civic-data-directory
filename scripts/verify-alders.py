@@ -102,7 +102,7 @@ def main():
                     examples = []
                     for data in table[row_index + 1:row_index + 6]:
                         value = data[wi] if wi < len(data) else ""
-                        examples.append({"cellCount": len(data), "wardCell": value if len(value) <= 24 and re.fullmatch(r"[\\w\\s.()#-]*", value) else "[format not displayed]"})
+                        examples.append({"cellCount": len(data), "wardCellLength": len(value), "wardNumberText": re.sub("[^0-9 .()-]", "?", value)[:40], "digitRuns": re.findall("[0-9]+", value)[:3]})
                     print(json.dumps({"wardColumn": wi, "nameColumn": headers.index("name"), "headerCellCount": len(row), "wardCellExamples": examples}))
         headings, records = extract(html)
         wards = [record["ward"] for record in records]
