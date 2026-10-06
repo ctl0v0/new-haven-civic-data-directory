@@ -27,12 +27,17 @@ ${entries.map(entry=>`<tr data-source="${escapeHTML(entry.id)}" data-category="$
 }
 export function renderSource(entry, repo) {
   const definition = (label,value) => `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
-  const content = `<article><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p>${escapeHTML(entry.description)}</p><p>${link(entry.url,'Open source')} · ${link(repo+'/blob/main/sources/'+entry.id+'.json','View entry in GitHub')}</p>
-<dl>${definition('Publisher / host',entry.publisher)}${definition('Source type',entry.source_type)}${definition('Contact',entry.contact)}${definition('Formats',entry.formats.join(', ')||'Not confirmed')}${definition('Cost',entry.cost)}${definition('Reuse terms',entry.terms)}${definition('Update frequency',entry.update_frequency)}${definition('Entry maintainer',entry.entry_maintainer)}${definition('Last checked',entry.checked_on+'; see evidence for scope')}</dl>
-<h2>How to access</h2><ol>${entry.steps.map((value,index)=>renderStep(entry,value,index)).join('')}</ol><h2>Key fields</h2>
-${entry.fields.length ? `<table><thead><tr><th scope="col">Field</th><th scope="col">Meaning</th></tr></thead><tbody>${entry.fields.map(field=>`<tr><th scope="row">${escapeHTML(field[0])}</th><td>${escapeHTML(field[1])}</td></tr>`).join('')}</tbody></table>` : '<p>Field schema not yet verified.</p>'}
-<h2>Known limitations</h2>${list(entry.limitations)}<h2>Next investigation</h2>${list(entry.next)}
-${entry.related ? `<h2>Related sources</h2><ul>${entry.related.map(value=>`<li>${link(value.url,value.label)}</li>`).join('')}</ul>` : ''}
-<h2>Check evidence</h2><ul>${entry.evidence.map(value=>`<li>${link(value.url,value.note)}</li>`).join('')}</ul><p>${link(repo+'/issues/new?template=source-correction.yml','Report a correction')} · ${link('../index.html','Back to directory')}</p></article>`;
+  const fact = (label,value) => `<div>${definition(label,value)}</div>`;
+  const content = `<article class="source-detail"><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p class="source-summary">${escapeHTML(entry.description)}</p><p class="source-actions">${link(entry.url,'Open source','button-link')}</p>
+<section aria-labelledby="overview-heading"><h2 id="overview-heading">At a glance</h2><dl class="source-overview">${fact('Access',entry.access)}${fact('Formats',entry.formats.join(', ')||'Not confirmed')}${fact('Data owner / publisher',entry.publisher)}${fact('Last checked',entry.checked_on)}</dl><p class="check-note">Last checked is when this directory verified access, not when the data was updated. See the evidence below for exactly what was checked.</p></section>
+<section aria-labelledby="access-heading"><h2 id="access-heading">How to access</h2><ol>${entry.steps.map((value,index)=>renderStep(entry,value,index)).join('')}</ol></section>
+<section aria-labelledby="limits-heading"><h2 id="limits-heading">Known limitations</h2>${list(entry.limitations)}</section>
+<section aria-labelledby="fields-heading"><h2 id="fields-heading">Key fields</h2>
+${entry.fields.length ? `<table class="source-fields"><thead><tr><th scope="col">Field</th><th scope="col">Meaning</th></tr></thead><tbody>${entry.fields.map(field=>`<tr><th scope="row">${escapeHTML(field[0])}</th><td>${escapeHTML(field[1])}</td></tr>`).join('')}</tbody></table>` : '<p>Field schema not yet verified.</p>'}</section>
+${entry.related ? `<section aria-labelledby="related-heading"><h2 id="related-heading">Related sources</h2><ul>${entry.related.map(value=>`<li>${link(value.url,value.label)}</li>`).join('')}</ul></section>` : ''}
+<section aria-labelledby="upkeep-heading"><h2 id="upkeep-heading">Contacts, costs and upkeep</h2><dl class="source-upkeep">${definition('Contact',entry.contact)}${definition('Cost',entry.cost)}${definition('Reuse terms',entry.terms)}${definition('Update frequency',entry.update_frequency)}${definition('Entry maintainer',entry.entry_maintainer)}${definition('Source type',entry.source_type)}</dl></section>
+<section aria-labelledby="next-heading"><h2 id="next-heading">Next investigation</h2>${list(entry.next)}</section>
+<section aria-labelledby="evidence-heading"><h2 id="evidence-heading">Check evidence</h2><ul>${entry.evidence.map(value=>`<li>${link(value.url,value.note)}</li>`).join('')}</ul></section>
+<p class="source-end-links">${link(repo+'/blob/main/sources/'+entry.id+'.json','View entry in GitHub')} · ${link(repo+'/issues/new?template=source-correction.yml','Report a correction')} · ${link('../index.html','Back to directory')}</p></article>`;
   return page({title:entry.title,repo,prefix:'../',content,source:true});
 }

@@ -36,3 +36,24 @@ header .site-nav{margin:0 0 0 auto;display:flex;align-items:center;gap:1.25rem;f
 .button-link[aria-current="page"]{background:#044d38;border-color:#044d38}
 @media(max-width:800px){.masthead{flex-wrap:wrap;gap:.65rem}header .site-nav{width:100%;margin:0;justify-content:space-between;gap:1rem}.nav-links{gap:.45rem 1rem}}
 @media(max-width:480px){header .site-nav{flex-wrap:wrap;gap:.65rem}.nav-links{width:100%;justify-content:space-between}.site-nav .button-link{width:100%}}
+
+/* Source pages follow one reading order, with access and limitations first. */
+.source-detail{padding:clamp(1rem,3vw,2rem)}
+.source-detail .source-summary{font-size:1.08rem;max-width:75ch;margin-top:0}
+.source-actions{margin:.8rem 0 1.5rem}
+.source-detail section{margin:0 0 1.75rem}
+.source-detail section+section{padding-top:1.5rem;border-top:1px solid var(--line)}
+.source-detail h2{font-size:1.35rem;line-height:1.3;margin:0 0 .8rem}
+.source-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;margin:0}
+.source-overview>div{background:#f0f4ec;border:1px solid var(--line);border-radius:6px;padding:.8rem 1rem;min-width:0}
+.source-overview dt{font-size:.85rem;color:var(--muted);margin-bottom:.25rem}
+.source-overview dd{margin:0;font-size:.95rem;line-height:1.5}
+.source-detail .check-note{font-size:.85rem;color:var(--muted);margin:.6rem 0 0}
+.source-detail li{margin-bottom:.6rem;overflow-wrap:anywhere}
+.source-detail ul,.source-detail ol{padding-left:1.4rem;max-width:85ch}
+.source-fields{table-layout:fixed;font-size:.95rem;line-height:1.5}
+.source-fields th:first-child{width:40%}
+.source-fields th,.source-fields td{overflow-wrap:anywhere;padding:.75rem}
+.source-upkeep{grid-template-columns:160px minmax(0,1fr)}
+.source-end-links{border-top:1px solid var(--line);padding-top:1rem;font-size:.9rem}
+@media(max-width:600px){.source-overview{grid-template-columns:1fr}.source-upkeep{grid-template-columns:1fr}.source-detail section+section{padding-top:1.25rem}.source-fields th,.source-fields td{padding:.6rem .4rem}}
