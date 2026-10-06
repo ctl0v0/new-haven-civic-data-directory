@@ -6,7 +6,14 @@ A static HTML table and source details are generated from sources/*.json. The pa
 
 Run npm run build with Node.js 22 or newer, then open dist/index.html in a browser. Review narrow and wide screens, keyboard navigation, no-JavaScript rendering, search/category filtering, empty results and source anchors. This setup does not require a server or dependencies.
 
-## GitHub Pages
+
+## Live hosting
+
+[Browse the directory](https://new-haven-civic-data-directory.vercel.app/).
+
+The site is hosted on Vercel, connected to the repository's main branch. Pushes to main automatically rebuild the static site using vercel.json. Deployment authentication is disabled for this directory so visitors can browse it without a Vercel account. The GitHub repository remains private; repository links and issue forms still require repository access.
+
+## Optional GitHub Pages alternative
 
 1. Merge the reviewed draft.
 2. In repository Settings → Pages, select GitHub Actions as the source.
@@ -14,6 +21,6 @@ Run npm run build with Node.js 22 or newer, then open dist/index.html in a brows
 4. Run the manual Deploy directory workflow on main.
 5. Inspect the deployed site and links.
 
-Deployment is manual. CI builds pull requests and pushes but does not publish. The repository starts private; the website is not yet public. Repository links and issue forms require repository access, and submitting issues requires a GitHub account. To support public visitors, make an explicit hosting/visibility choice before launch.
+The Pages workflow is manual and is not the current hosting path. GitHub CI checks builds; Vercel handles the live deployment. Repository links and issue forms require repository access, and submitting issues requires a GitHub account.
 
-No repository settings, visibility changes or deployment have been performed by this implementation.
+The repository's visibility has not been changed.
