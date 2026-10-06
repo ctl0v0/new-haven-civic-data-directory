@@ -72,7 +72,7 @@ def inspect_pdf(document,kind):
         if 'BUDGET' in upper and ('ACTUAL' in upper or 'EXPENDITURE' in upper or 'REVENUE' in upper):
             table_pages.append({'page':i+1,'excerpt':text[:5000]})
         if len(table_pages)>=3: break
-    return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'checked_revenue_sample':row,'table_pages_identified':[p['page'] for p in table_pages], 'rights_notices_observed':any('All Rights Reserved' in t for t in texts),'kind':kind,'scope':'PDF download and text extraction inspection only; one monthly revenue row and two formulas checked; no full report totals or reusable cross-report schema validated'}
+    return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'checked_revenue_sample':row,'table_pages_identified':[p['page'] for p in table_pages], 'rights_notices_observed':any('All Rights Reserved' in t for t in texts),'kind':kind,'scope':('PDF text and one revenue row with two formulas checked; full report extraction not validated' if kind=='monthly' else 'First 12 PDF pages inspected for text only; annual numeric tables not validated')}
 
 def main():
     failed=False
@@ -107,7 +107,7 @@ def main():
                 if not candidates: raise ValueError('No adopted budget link found')
                 sample=max(candidates,key=lambda doc: max([int(y) for y in re.findall(r'\b20\d{2}\b',doc['label'])] or [0]))
             result['sample']=inspect_pdf(sample,name)
-            result['warnings']=['Sample PDF text extraction works, and one monthly revenue row reconciles; other tables, full totals, archive completeness, posting dates and reuse rights need validation.']
+            result['warnings']=['The exact sample scope is recorded. Other tables, full totals, archive completeness, posting dates and reuse rights need validation.']
             result['scope']='Official index retrieval plus one selected PDF download and text inspection per series'
             if not documents: raise ValueError('No expected finance document links found')
             result['status']='passed'

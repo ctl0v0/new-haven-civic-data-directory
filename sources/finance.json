@@ -1,63 +1,86 @@
 {
   "checked_on": "2026-10-06",
   "entry_maintainer": "Unassigned",
-  "cost": "Unknown; no bulk-access price confirmed.",
-  "terms": "Reuse terms not confirmed.",
+  "cost": "Official index pages and two sample PDF downloads worked without credentials or payment. Bulk-access arrangements and costs are unconfirmed.",
+  "terms": "The inspected PDF covers contain “All Rights Reserved” and “Reprinted with permission” notices. No open reuse license has been verified; clarify permitted reuse and redistribution.",
   "update_frequency": "Monthly reports are described by the city as a monthly reporting requirement. Actual posting dates and archive completeness have not been verified; budgets and audits are annual document series.",
   "id": "finance",
   "title": "Budgets and monthly finance reports",
   "category": "Finance",
   "publisher": "City of New Haven — Office of Policy, Management and Grants",
   "source_type": "official",
-  "status": "Source located",
-  "description": "Official city monthly reports describe budgeted and actual revenues, agency expenditures and year-end projections. Annual budgets and audits are available from a separate city index.",
+  "status": "Access tested",
+  "description": "Official monthly financial reports, adopted and proposed budgets, and audits. PDF downloads and sample text extraction work; one monthly revenue row has been extracted and checked. Further table extraction still requires preparation.",
   "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
-  "access": "City report indexes and document downloads",
+  "access": "Official PDF downloads; text and one revenue row tested",
   "formats": [
     "HTML report indexes",
-    "PDF budget documents (advertised by city index)"
+    "PDF (downloads and sample text extraction tested)",
+    "JSON (repository-generated single-row verification sample; not a city export)"
   ],
   "fields": [
     [
       "Reporting month / fiscal year",
-      "The period represented by the selected report; exact document labels remain to be checked."
+      "June 2026 monthly sample identifies fiscal year 2025–2026. Preserve report type, period, source URL and PDF page."
     ],
     [
-      "Budgeted and actual revenues",
-      "Report content described on the city's monthly-report page; not a verified export column."
+      "Account Description",
+      "Revenue category label in the inspected General Fund Revenue table; Real Estate is the tested sample."
     ],
     [
-      "Agency budgeted and actual expenditures",
-      "Spending summaries by budgeted agency described by the city; exact table layouts remain to be checked."
+      "FY Approved Budget",
+      "Approved budget for the revenue category; printed currency, not a verified city CSV column."
     ],
     [
-      "Year-end revenue / expense estimates",
-      "Projections for the fiscal year, distinct from amounts already reported as actual."
+      "Monthly Collection",
+      "Collections for the report month; can include negative adjustments."
     ],
     [
-      "Projected surplus / deficit",
-      "Expected year-end budget result described on the monthly-report page."
+      "Year to Date Cumulative Total",
+      "Cumulative collections, not a separate monthly amount. Do not add cumulative totals across months."
+    ],
+    [
+      "Year to Date % of Budget Collected",
+      "Cumulative total divided by approved budget, displayed as a percentage."
+    ],
+    [
+      "Year End Forecast",
+      "Projected full-year amount; distinguish from actual collections."
+    ],
+    [
+      "Budget VS Forecast (column F)",
+      "The document labels this E − A: year-end forecast minus approved budget. This formula reconciled for the tested row."
+    ],
+    [
+      "Expenditure tables / annual budget schemas",
+      "Not validated by the single-row revenue example; inspect each relevant section before extending extraction."
     ]
   ],
   "steps": [
-    "Open the official monthly reports page and select the fiscal year and reporting month you need.",
-    "For annual budget books and audit reports, use the Annual City Budgets & Audits page. Check whether each budget is proposed or Board-approved.",
-    "Open the original document and read its reporting period, headings, notes and units before using its figures.",
-    "For software use, inspect the actual document format and table layout. A spreadsheet export or API has not been verified by this directory."
+    "Open the official monthly reports page and choose the period you need. June 2026 was the latest dated monthly link found in this index when checked; this does not establish archive completeness or posting dates.",
+    "Start with the tested June 2026 PDF. Text extraction worked on its first 12 pages; the tested General Fund Revenue row is on PDF viewer page 7. Preserve the document link, period and PDF page with every extracted value.",
+    "For annual budgets and audits, use the Annual City Budgets & Audits page. The tested 2025–2026 adopted budget PDF is separate from proposed budgets and audit documents; do not substitute one report type for another.",
+    "Run the finance verification script from a clone of this repository after installing pypdf==5.9.0: python3 scripts/verify-finance.py. Or run the shared validation workflow with the finance option. It discovers report links, downloads one monthly report and one adopted budget, and inspects at most 12 pages of each.",
+    "The script writes verification/finance-row-sample.json containing one Real Estate revenue row, its source, period and PDF page. It checks percentage-of-budget and forecast-minus-budget arithmetic. This is a repository-generated example, not a city-published dataset or a complete extraction.",
+    "Use the finance extraction guide to extend the sample. Normalize broken text and multiline headings, preserve parentheses as negative amounts, distinguish monthly and cumulative values, and check rows and totals against the PDF before using a table in a product.",
+    "Preserve original report links and PDF page references when presenting figures. Confirm reuse and redistribution terms before republishing copied documents or extracted tables."
   ],
   "contact": "Office of Policy, Management and Grants; data-maintenance contact not confirmed.",
   "limitations": [
-    "Report contents are documented from the city's indexed monthly-report page. The exact files, latest available month, archive completeness and detailed column labels have not been verified.",
-    "The annual index advertises PDF budget documents. A ready-to-query CSV, spreadsheet export or API has not been verified; document tables may require manual reading or extraction.",
-    "The city's described monthly reports summarize revenues, budgeted agencies and projections. This description does not establish access to vendor-level payments, invoices or a complete transaction ledger.",
-    "Proposed budgets, approved budgets, actual figures and forecasts represent different things. Read each document's labels; do not treat projections as money already spent or combine cumulative periods as separate monthly spending.",
-    "Monthly reporting and annual audit documents have different purposes. This directory has not established their accounting basis or how their totals reconcile.",
-    "Direct requests to the city monthly-report page returned 403 in this browsing tool. Browser access may work; reliable programmatic retrieval is not verified."
+    "On October 6, 2026, GitHub's runner retrieved both official indexes, downloaded the June 2026 monthly PDF (59 pages) and the 2025–2026 adopted budget PDF (503 pages), and extracted text from the first 12 pages of each. Browser-tool failures do not establish that these official downloads are unavailable.",
+    "The inspected monthly pages had substantial extractable text; automatic OCR was not needed for that sample. Other pages and documents have not been assessed. Some extracted words and headings lose spacing or characters, so plain text is not automatically a trustworthy table.",
+    "One Real Estate revenue row on PDF viewer page 7 was extracted into JSON. Its displayed percentage and forecast-minus-budget formula reconciled. Full report totals, other revenue rows, expenditure tables, annual budget tables and cross-period consistency have not been validated.",
+    "The latest dated monthly index link found was June 2026. The index contained 90 document links and the annual index 65; link counts do not prove complete monthly coverage, report freshness or successful downloads of every file.",
+    "No official finance API, CSV or spreadsheet export has been verified. The repository-generated JSON example is not a maintained city dataset.",
+    "Actual collections, approved budgets, year-end forecasts, monthly amounts and year-to-date cumulative totals are different quantities. Preserve report period, column meanings and sign conventions; do not sum cumulative totals across months.",
+    "The adopted-budget front matter describes different accounting bases for different funds. This check does not establish how monthly figures reconcile with audited financial statements.",
+    "The sample PDF covers include rights notices. Reuse and redistribution permissions, refresh responsibility and a published maintenance contact remain unconfirmed."
   ],
   "next": [
-    "Inspect a recent monthly report in a browser and document its format, exact fields, units and coverage.",
-    "Verify archive coverage, posting dates and any existing spreadsheets or supported API.",
-    "Confirm the city's published maintenance contact and document reuse terms."
+    "Validate additional monthly revenue rows and totals, then inspect a representative expenditure table.",
+    "Compare a second month and preserve account names, periods, revisions and missing entries before building comparisons.",
+    "Inspect annual budget table schemas and accounting context separately from the monthly report example.",
+    "Confirm posting cadence, archive coverage, supported structured exports and reuse permissions."
   ],
   "related": [
     {
@@ -68,11 +91,27 @@
   "evidence": [
     {
       "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
-      "note": "Official indexed page describes required monthly report contents: revenues, agency expenditures, fiscal-year estimates and projected surplus/deficit. Direct retrieval returned 403."
+      "note": "Official monthly index retrieved from GitHub's runner on October 6, 2026: 90 document links discovered; June 2026 was the latest dated monthly label found. This does not prove archive completeness or posting dates."
     },
     {
       "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
-      "note": "Official indexed page lists proposed and Board-approved budget documents and audits, including PDF budget links. Current file downloads have not been tested."
+      "note": "Official annual index retrieved: 65 document links discovered, with proposed and adopted budget labels and audit links. One adopted-budget PDF was downloaded and inspected; all files have not been checked."
+    },
+    {
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/29672/639231785179270000",
+      "note": "June 2026 PDF downloaded without credentials. It has 59 pages; the first 12 yielded text. A revenue row on PDF viewer page 7 was extracted and its percentage-of-budget and forecast-minus-budget formulas reconciled."
+    },
+    {
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/27540/639026920500400000",
+      "note": "2025–2026 adopted budget PDF downloaded without credentials. It has 503 pages; the first 12 were inspected for text. Annual numeric tables and totals were not validated."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-finance.py",
+      "note": "Repeatable discovery, bounded PDF download, plain text extraction and one-row arithmetic checks passed. Parser tests reject missing rows and incorrect variance; rights notices were observed in sampled covers."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml",
+      "note": "Shared validation run passed finance document and sample-row checks. The finance option repeats them weekly or on demand; successful extraction does not automatically change readiness or confirm full financial accuracy."
     }
   ],
   "step_links": [
@@ -83,30 +122,59 @@
     },
     {
       "step": 1,
+      "label": "tested June 2026 PDF",
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/29672/639231785179270000"
+    },
+    {
+      "step": 2,
       "label": "Annual City Budgets & Audits page",
       "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
+    },
+    {
+      "step": 2,
+      "label": "tested 2025–2026 adopted budget PDF",
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/27540/639026920500400000"
+    },
+    {
+      "step": 3,
+      "label": "finance verification script",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-finance.py"
+    },
+    {
+      "step": 3,
+      "label": "shared validation workflow",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
+    },
+    {
+      "step": 5,
+      "label": "finance extraction guide",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/docs/finance-extraction.md"
     }
   ],
   "listing": {
     "publisher": "New Haven · Policy, Management & Grants",
-    "access": "Report indexes / downloads",
-    "cost": "Not confirmed"
+    "access": "PDFs; sample extraction tested",
+    "cost": "Sample downloads: free"
   },
   "build_readiness": {
-    "level": "not-assessed",
-    "summary": "Official report indexes are located, but current files and their extraction requirements have not been inspected.",
+    "level": "preparation-needed",
+    "summary": "Official PDF downloads and sample text extraction work. One monthly revenue row and two formulas are tested; additional rows, tables and reports still need cleanup and validation.",
     "preparation": [
-      "Inspect an actual current report and determine its file format and table structure.",
-      "Check whether text/tables can be extracted; use OCR only if the chosen document is scanned and requires it.",
-      "Verify extracted numbers, units and periods, distinguishing actual amounts from forecasts and cumulative totals.",
-      "Confirm available exports, reuse terms and archive coverage."
+      "Inspect the sections your tool needs and extend extraction beyond the tested revenue row; preserve source PDF, page, period and report type.",
+      "Normalize broken headings and spacing, negative currency and percentages; validate rows and totals against the original PDF.",
+      "Compare multiple months, distinguish monthly from cumulative figures and forecasts, and track revised or missing reports.",
+      "Validate annual budget and expenditure schemas separately, and clarify reuse permissions, refresh responsibility and archive coverage."
     ],
     "assessed_on": "2026-10-06",
     "next_review_on": "2027-01-04",
     "review_owner": "Unassigned",
     "evidence": [
       "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
-      "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
+      "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
+      "https://www.newhavenct.gov/home/showpublisheddocument/29672/639231785179270000",
+      "https://www.newhavenct.gov/home/showpublisheddocument/27540/639026920500400000",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-finance.py",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
     ]
   }
 }
