@@ -1,9 +1,9 @@
 {
   "sources": {
     "alders": {
-      "checked_at": "2026-10-06T20:39:28.432Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-      "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+      "checked_at": "2026-10-06T21:12:41.311Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+      "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
       "status": "passed",
       "checks": [
         {
@@ -11,11 +11,35 @@
           "title": "Alders roster extraction",
           "scope": "Retrieve the official HTML table, parse 30 representative rows and report missing ward identifiers.",
           "status": "passed",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders"
+          ],
+          "findings": [
+            {
+              "rowsExtracted": 30,
+              "uniqueWards": 29,
+              "missingNumberedWards": [
+                10
+              ],
+              "rowsWithoutWard": 1,
+              "headings": [
+                "WARD",
+                "",
+                "NAME",
+                "ADDRESS",
+                "ZIP CODE",
+                "Telephone #"
+              ],
+              "exportedFields": [
+                "ward",
+                "ward_label",
+                "representative"
+              ],
+              "dataFingerprint": "040d68968ace478db588635977b377cc45a3c9c6bfcd8e0d6a1f4cd97a78aba4"
+            }
           ],
           "reason": null,
           "warnings": [
@@ -25,9 +49,9 @@
       ]
     },
     "assessor": {
-      "checked_at": "2026-10-06T20:39:28.432Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-      "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+      "checked_at": "2026-10-06T21:12:41.311Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+      "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
       "status": "passed",
       "checks": [
         {
@@ -35,9 +59,9 @@
           "title": "Property API samples",
           "scope": "Inspect parcel, address and zoning field definitions and request one selected-field record from each layer.",
           "status": "passed",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
@@ -45,6 +69,179 @@
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0"
+          ],
+          "findings": [
+            {
+              "schema": {
+                "missingFields": [],
+                "fields": [
+                  {
+                    "name": "account_number",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "nh_ward",
+                    "type": "esriFieldTypeSmallInteger"
+                  },
+                  {
+                    "name": "objectid",
+                    "type": "esriFieldTypeOID"
+                  },
+                  {
+                    "name": "parcel_id",
+                    "type": "esriFieldTypeInteger"
+                  },
+                  {
+                    "name": "price",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "property_address",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "sale_date",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "total_assessed_bldg_value",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "total_assessed_land_value",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "total_assessed_parcel_value_x",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "total_land_area_acres",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "units_commercial",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "units_condo",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "units_residential",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "use_code",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "year_building_built",
+                    "type": "esriFieldTypeDouble"
+                  }
+                ]
+              },
+              "sample": {
+                "rowsReturned": 1,
+                "returnedFields": [
+                  "account_number",
+                  "nh_ward",
+                  "objectid",
+                  "parcel_id",
+                  "price",
+                  "property_address",
+                  "sale_date",
+                  "total_assessed_bldg_value",
+                  "total_assessed_land_value",
+                  "total_assessed_parcel_value_x",
+                  "total_land_area_acres",
+                  "units_commercial",
+                  "units_condo",
+                  "units_residential",
+                  "use_code",
+                  "year_building_built"
+                ]
+              }
+            },
+            {
+              "schema": {
+                "missingFields": [],
+                "fields": [
+                  {
+                    "name": "district_category",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "districts",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "zone_code",
+                    "type": "esriFieldTypeString"
+                  }
+                ]
+              },
+              "sample": {
+                "rowsReturned": 1,
+                "returnedFields": [
+                  "district_category",
+                  "districts",
+                  "zone_code"
+                ]
+              }
+            },
+            {
+              "schema": {
+                "missingFields": [],
+                "fields": [
+                  {
+                    "name": "display_x",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "display_y",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "full_street_name",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "house_number",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "neighborhood",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "objectid",
+                    "type": "esriFieldTypeOID"
+                  },
+                  {
+                    "name": "street_name",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "zip",
+                    "type": "esriFieldTypeString"
+                  }
+                ]
+              },
+              "sample": {
+                "rowsReturned": 1,
+                "returnedFields": [
+                  "display_x",
+                  "display_y",
+                  "full_street_name",
+                  "house_number",
+                  "neighborhood",
+                  "objectid",
+                  "street_name",
+                  "zip"
+                ]
+              }
+            }
           ],
           "reason": null,
           "warnings": []
@@ -54,12 +251,33 @@
           "title": "City Hall property lookup",
           "scope": "Filter a known public address and verify that parcel and account queries reproduce its selected fields.",
           "status": "passed",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=UPPER%28property_address%29+LIKE+%27165%25CHURCH%25%27&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=10"
+          ],
+          "findings": [
+            {
+              "recordFingerprint": "c5801c213526c7794f8cb2d1d6ddc0bf6812b7130a9cc792fb985e89fa6e8d7b",
+              "identifiers": {
+                "parcelPresent": true,
+                "accountPresent": true
+              },
+              "repeatLookups": [
+                {
+                  "field": "parcel_id",
+                  "rowsReturned": 1,
+                  "sameRecordAndSelectedValues": true
+                },
+                {
+                  "field": "account_number",
+                  "rowsReturned": 1,
+                  "sameRecordAndSelectedValues": true
+                }
+              ]
+            }
           ],
           "reason": null,
           "warnings": [
@@ -69,9 +287,9 @@
       ]
     },
     "gis-parcels": {
-      "checked_at": "2026-10-06T20:39:28.432Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-      "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+      "checked_at": "2026-10-06T21:12:41.311Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+      "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
       "status": "passed",
       "checks": [
         {
@@ -79,9 +297,9 @@
           "title": "Property API samples",
           "scope": "Inspect parcel, address and zoning field definitions and request one selected-field record from each layer.",
           "status": "passed",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
@@ -89,6 +307,179 @@
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0"
+          ],
+          "findings": [
+            {
+              "schema": {
+                "missingFields": [],
+                "fields": [
+                  {
+                    "name": "account_number",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "nh_ward",
+                    "type": "esriFieldTypeSmallInteger"
+                  },
+                  {
+                    "name": "objectid",
+                    "type": "esriFieldTypeOID"
+                  },
+                  {
+                    "name": "parcel_id",
+                    "type": "esriFieldTypeInteger"
+                  },
+                  {
+                    "name": "price",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "property_address",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "sale_date",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "total_assessed_bldg_value",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "total_assessed_land_value",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "total_assessed_parcel_value_x",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "total_land_area_acres",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "units_commercial",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "units_condo",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "units_residential",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "use_code",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "year_building_built",
+                    "type": "esriFieldTypeDouble"
+                  }
+                ]
+              },
+              "sample": {
+                "rowsReturned": 1,
+                "returnedFields": [
+                  "account_number",
+                  "nh_ward",
+                  "objectid",
+                  "parcel_id",
+                  "price",
+                  "property_address",
+                  "sale_date",
+                  "total_assessed_bldg_value",
+                  "total_assessed_land_value",
+                  "total_assessed_parcel_value_x",
+                  "total_land_area_acres",
+                  "units_commercial",
+                  "units_condo",
+                  "units_residential",
+                  "use_code",
+                  "year_building_built"
+                ]
+              }
+            },
+            {
+              "schema": {
+                "missingFields": [],
+                "fields": [
+                  {
+                    "name": "district_category",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "districts",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "zone_code",
+                    "type": "esriFieldTypeString"
+                  }
+                ]
+              },
+              "sample": {
+                "rowsReturned": 1,
+                "returnedFields": [
+                  "district_category",
+                  "districts",
+                  "zone_code"
+                ]
+              }
+            },
+            {
+              "schema": {
+                "missingFields": [],
+                "fields": [
+                  {
+                    "name": "display_x",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "display_y",
+                    "type": "esriFieldTypeDouble"
+                  },
+                  {
+                    "name": "full_street_name",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "house_number",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "neighborhood",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "objectid",
+                    "type": "esriFieldTypeOID"
+                  },
+                  {
+                    "name": "street_name",
+                    "type": "esriFieldTypeString"
+                  },
+                  {
+                    "name": "zip",
+                    "type": "esriFieldTypeString"
+                  }
+                ]
+              },
+              "sample": {
+                "rowsReturned": 1,
+                "returnedFields": [
+                  "display_x",
+                  "display_y",
+                  "full_street_name",
+                  "house_number",
+                  "neighborhood",
+                  "objectid",
+                  "street_name",
+                  "zip"
+                ]
+              }
+            }
           ],
           "reason": null,
           "warnings": []
@@ -98,9 +489,9 @@
           "title": "City Hall parcel and zoning lookup",
           "scope": "Check matching address rows, their shared point, parcel identity, zoning intersections and longitude/latitude geometry.",
           "status": "passed",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
@@ -108,6 +499,26 @@
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0/query?f=json&where=house_number+%3D+%27165%27+AND+UPPER%28street_name%29+LIKE+%27CHURCH%25%27&returnGeometry=true&outSR=4326&resultRecordCount=100&outFields=objectid%2Chouse_number%2Cstreet_name%2Cfull_street_name",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&returnGeometry=true&outSR=4326&resultRecordCount=10&geometry=%7B%22x%22%3A-72.92457999988014%2C%22y%22%3A41.30727099977865%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0/query?f=json&where=1%3D1&returnGeometry=true&outSR=4326&resultRecordCount=10&geometry=%7B%22x%22%3A-72.92457999988014%2C%22y%22%3A41.30727099977865%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=zone_code%2Cdistrict_category%2Cdistricts"
+          ],
+          "findings": [
+            {
+              "recordFingerprint": "5fcd818bf74aa3f4c64868e80d8083de303ef455f7ccbfe1ca36b98562c1e75c",
+              "address": {
+                "rowsReturned": 11,
+                "normalizedAddressesMatchInput": true,
+                "distinctLocations": 1
+              },
+              "parcel": {
+                "rowsReturned": 1,
+                "validLongitudeLatitudePolygons": true,
+                "matchesIndependentAddressLookup": true
+              },
+              "zoning": {
+                "rowsReturned": 1,
+                "validLongitudeLatitudePolygons": true,
+                "requiredFieldsPresent": true
+              }
+            }
           ],
           "reason": null,
           "warnings": [
@@ -117,9 +528,9 @@
       ]
     },
     "finance": {
-      "checked_at": "2026-10-06T20:39:28.432Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-      "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+      "checked_at": "2026-10-06T21:12:41.311Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+      "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
       "status": "passed",
       "checks": [
         {
@@ -127,14 +538,41 @@
           "title": "Finance PDF extraction",
           "scope": "Discover official reports, download one monthly and one adopted-budget PDF, inspect up to 12 pages each, and check one monthly revenue row and two formulas.",
           "status": "passed",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
             "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
             "https://www.newhavenct.gov/home/showpublisheddocument/29672/639231785179270000",
             "https://www.newhavenct.gov/home/showpublisheddocument/27540/639026920500400000"
+          ],
+          "findings": [
+            {
+              "document": {
+                "label": "June 2026",
+                "url": "https://www.newhavenct.gov/home/showpublisheddocument/29672/639231785179270000",
+                "sha256": "34c63aa11238f1f2b023f2e5a03f90742356b54501ed83f96e91ffb1f3cd81eb",
+                "pages": 59,
+                "pagesInspected": 12,
+                "textPages": 12,
+                "revenueRowPage": 7,
+                "revenueRowChecks": {
+                  "percent_of_budget": true,
+                  "forecast_minus_budget": true
+                }
+              }
+            },
+            {
+              "document": {
+                "label": "Board of Alders 2025-2026 Adopted Budget",
+                "url": "https://www.newhavenct.gov/home/showpublisheddocument/27540/639026920500400000",
+                "sha256": "b246622e825cfa7742eef9f8fe70aff84e1837e5fa2852affd9e592c241e619d",
+                "pages": 503,
+                "pagesInspected": 12,
+                "textPages": 6
+              }
+            }
           ],
           "reason": null,
           "warnings": [
@@ -145,9 +583,9 @@
       ]
     },
     "meetings-legislation": {
-      "checked_at": "2026-10-06T20:39:28.432Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-      "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+      "checked_at": "2026-10-06T21:12:41.311Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+      "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
       "status": "not-configured",
       "checks": [
         {
@@ -155,21 +593,22 @@
           "title": "Meetings and legislation",
           "scope": "No automated calendar or document check is configured.",
           "status": "not-configured",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://newhaven-ct.legistar.com/Calendar.aspx"
           ],
+          "findings": [],
           "reason": "Calendar and document validators are not yet implemented.",
           "warnings": []
         }
       ]
     },
     "ward-boundaries": {
-      "checked_at": "2026-10-06T20:39:28.432Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-      "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+      "checked_at": "2026-10-06T21:12:41.311Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+      "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
       "status": "not-configured",
       "checks": [
         {
@@ -177,12 +616,13 @@
           "title": "Ward boundaries",
           "scope": "No current boundary download or automated geography check is configured.",
           "status": "not-configured",
-          "checked_at": "2026-10-06T20:39:28.432Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37528085877",
-          "revision": "918ce0765be45c26c2cbd0c61a65c46cad6cefec",
+          "checked_at": "2026-10-06T21:12:41.311Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532196060",
+          "revision": "aa650410e09e833eb95b2e26676ca6fff7700cd5",
           "source_urls": [
             "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
           ],
+          "findings": [],
           "reason": "No current boundary download or layer has been verified.",
           "warnings": []
         }
