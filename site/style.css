@@ -57,3 +57,5 @@ header .site-nav{margin:0 0 0 auto;display:flex;align-items:center;gap:1.25rem;f
 .source-upkeep{grid-template-columns:160px minmax(0,1fr)}
 .source-end-links{border-top:1px solid var(--line);padding-top:1rem;font-size:.9rem}
 @media(max-width:600px){.source-overview{grid-template-columns:1fr}.source-upkeep{grid-template-columns:1fr}.source-detail section+section{padding-top:1.25rem}.source-fields th,.source-fields td{padding:.6rem .4rem}}
+
+.source-actions .source-link-label{font-size:.85rem;font-weight:650;color:var(--muted);margin:0 0 .2rem}.source-actions>p:last-child{margin:0}.source-actions a{font-weight:600}
