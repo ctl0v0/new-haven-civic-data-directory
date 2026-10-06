@@ -120,3 +120,12 @@ header .site-nav{flex:0 1 auto}
 
 .source-actions h2.source-link-label{font-size:1.35rem;line-height:1.3;color:var(--ink);margin:0 0 .8rem}
 @media(max-width:360px){.source-index ul{grid-template-columns:1fr}}
+
+/* A compact summary uses aligned facts instead of separate cards. */
+.source-overview{grid-template-columns:minmax(0,1fr);gap:0}
+.source-overview>div{display:grid;grid-template-columns:145px minmax(0,1fr);gap:.25rem 1rem;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:.45rem 0}
+.source-overview>div:last-child{border-bottom:0}
+.source-overview dt{margin:0;line-height:1.5}
+.source-overview dd{font-size:.92rem;line-height:1.5}
+@media(max-width:600px){.source-overview>div{grid-template-columns:115px minmax(0,1fr);gap:.25rem .65rem}.source-overview dd{margin-bottom:0}}
+@media(max-width:360px){.source-overview>div{grid-template-columns:1fr}.source-overview dt{font-weight:650}}
