@@ -71,7 +71,7 @@ def extract(html):
                 ward_label = data[ward_index].strip()
                 if not name:
                     raise ValueError("A roster row has an empty representative field")
-                match = re.fullmatch(r"(?:Ward\\s*)?([0-9]{1,2})(?:\\s*-\\s*[A-Za-z]+)?", ward_label, re.I)
+                match = re.fullmatch(r"(?:Ward\s*)?([0-9]{1,2})(?:\s*-\s*[A-Za-z]+)?", ward_label, re.I)
                 if ward_label and not match:
                     raise ValueError("A ward label has an unexpected format")
                 records.append({"ward": int(match.group(1)) if match else None, "ward_label": ward_label or None, "representative": name})
@@ -100,7 +100,7 @@ def main():
         warnings = ["The city HTML includes a representative row with no ward identifier. Preserve null; do not infer its ward from position."] if unlabelled else []
         output = {"source": SOURCE, "method": "Official HTML roster; ward label and representative columns only", "coverage": {"rosterRows": len(records), "numberedWards": len(wards), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled}, "warnings": warnings, "records": records}
         Path("verification").mkdir(exist_ok=True)
-        Path("verification/alders-roster-sample.json").write_text(json.dumps(output, indent=2) + "\\n", encoding="utf-8")
+        Path("verification/alders-roster-sample.json").write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled, "exportedFields": ["ward", "ward_label", "representative"], "warnings": warnings, "note": "Parsing passed, with coverage gaps reported separately. No contact values logged. Election dates, current officeholding and reuse rights are not verified."}))
     except HTTPError as error:
         print(json.dumps({"status": "failed", "httpStatus": error.code, "reason": "Official page rejected the read-only request; no roster data extracted."}))
