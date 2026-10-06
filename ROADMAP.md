@@ -11,12 +11,12 @@ The static website, JSON catalog, source template and GitHub request/correction 
 | Priority | Investigation | Current state | Next action |
 | --- | --- | --- | --- |
 | 1 | Official roster and contacts | Source located | Inspect the city page in a browser and identify the correction route |
-| 1 | Assessment schema and bulk access | Landing page inspected | Inspect sample property records; identify available exports and fees |
-| 1 | Parcel service | Metadata inspected | Test a small query, coordinate output, joins, terms and freshness |
+| 1 | Assessment schema and bulk access | City API metadata and one-record query verified; browser landing page inspected | Compare a known property across sources; clarify valuation dates, exports, fees and terms |
+| 1 | Parcels, addresses and zoning | Three city API metadata/one-record JSON checks passed | Test geometry, spatial matching, pagination, terms and freshness |
 | 1 | Ward boundaries | Needs investigation | Locate a current downloadable layer and confirm effective date |
 | 1 | Finance access | Official reports located; file-level access and coverage checks in progress | Check current city downloads and published maintenance contact |
 | 1 | Legistar | Calendar inspected | Inspect one agenda and record; investigate supported exports |
-| 2 | Website launch | Implementation draft | Merge reviewed files, configure Pages, inspect desktop/mobile output |
+| 2 | Website launch | Live on Vercel with separate source pages | Continue usability review and source corrections |
 
 All investigation owners are unassigned. Request one small task at a weekly meeting; do not imply a city partnership exists.
 
@@ -34,7 +34,7 @@ A request should specify its intended use, geography, time span, fields, already
 | --- | --- | --- | --- |
 | Building permits and inspections | Development tracking and property research | Hartford and Cambridge publish useful precedents | Confirm New Haven source, fields, coverage, bulk access, fees and terms |
 | Service requests | Neighborhood maintenance analysis | Somerville and Hartford publish service-request data; New Haven has SeeClickFix discovery routes | Verify supported read access, geographic scope, historic coverage and permitted reuse |
-| Zoning and land use | Site-selection and planning tools | City zoning map discovery pages already exist | Find actual layers, current classifications and relevant effective dates |
+| Zoning and land use | Site-selection and planning tools | City zoning map discovery pages already exist | City layer and small JSON query verified; confirm classifications, effective dates and spatial access |
 
 These are candidates, not verified New Haven datasets. Do not expand V1 with all three before volunteers and practical access paths exist.
 

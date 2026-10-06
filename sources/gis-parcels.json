@@ -1,70 +1,177 @@
 {
   "checked_on": "2026-10-06",
   "entry_maintainer": "Unassigned",
-  "cost": "Unknown; no bulk-access price confirmed.",
+  "cost": "Metadata and one-record city API queries worked without credentials or payment. Bulk-export arrangements and costs remain unconfirmed.",
   "terms": "Reuse terms not confirmed.",
   "update_frequency": "Not confirmed.",
   "id": "gis-parcels",
-  "title": "Parcel geometry service",
+  "title": "Parcels, addresses and zoning",
   "category": "Geography",
-  "publisher": "Vision Government Solutions — New Haven property map service",
-  "source_type": "official-vendor",
+  "publisher": "City of New Haven — GIS",
+  "source_type": "official",
   "status": "Access tested",
-  "description": "Published parcel polygons and identifiers for mapping property boundaries.",
-  "url": "https://arcgis.vgsi.com/server/rest/services/New_Haven_CT/NewHavenCTPropMap/MapServer/2",
-  "access": "ArcGIS service metadata; query needs testing",
+  "description": "City GIS APIs publish parcel polygons and assessment attributes, address points, and zoning polygons. Metadata and small attribute queries have been verified for all three layers.",
+  "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
+  "access": "City GIS APIs (JSON queries tested)",
   "formats": [
-    "JSON",
-    "GeoJSON",
-    "PBF"
+    "JSON (query tested)",
+    "GeoJSON (advertised)",
+    "PBF (advertised)"
   ],
   "fields": [
     [
-      "objectid",
-      "Service object identifier"
+      "Parcels: objectid",
+      "Service record identifier"
     ],
     [
-      "parcel_id",
-      "Published parcel identifier"
+      "Parcels: parcel_id",
+      "Parcel identifier; confirm join semantics"
     ],
     [
-      "account_nu",
-      "Published account-number field; join semantics unconfirmed"
+      "Parcels: account_number",
+      "Assessment account number"
     ],
     [
-      "globalid",
-      "Global identifier"
+      "Parcels: property_address",
+      "Property address"
     ],
     [
-      "shape",
-      "Parcel polygon geometry"
+      "Parcels: nh_ward",
+      "Ward number"
+    ],
+    [
+      "Parcels: use_code",
+      "Property-use classification; code definitions unconfirmed"
+    ],
+    [
+      "Parcels: total_land_area_acres",
+      "Land area in acres"
+    ],
+    [
+      "Parcels: year_building_built",
+      "Published year built"
+    ],
+    [
+      "Parcels: units_commercial",
+      "Commercial unit count, stored as text"
+    ],
+    [
+      "Parcels: units_residential",
+      "Residential unit count, stored as text"
+    ],
+    [
+      "Parcels: units_condo",
+      "Condominium unit count, stored as text"
+    ],
+    [
+      "Parcels: total_assessed_parcel_value_x",
+      "Published total parcel assessment"
+    ],
+    [
+      "Parcels: total_assessed_land_value",
+      "Published land assessment"
+    ],
+    [
+      "Parcels: total_assessed_bldg_value",
+      "Published building assessment"
+    ],
+    [
+      "Parcels: sale_date",
+      "Published sale date, stored as text"
+    ],
+    [
+      "Parcels: price",
+      "Published sale price"
+    ],
+    [
+      "Addresses: objectid, house_number, street_name, full_street_name, neighborhood, zip, display_x, display_y",
+      "Address identifiers, street names, neighborhood, ZIP and display coordinates. Do not assume display coordinates are longitude/latitude."
+    ],
+    [
+      "Zoning: zone_code, district_category, districts",
+      "Zoning code, category and district labels"
+    ],
+    [
+      "Geometry",
+      "Parcel and zoning polygons; address points. Available in metadata; omitted from sample queries."
     ]
   ],
   "steps": [
-    "Open the parcel layer's service metadata page.",
-    "Inspect Fields, spatial reference, supported query formats, and Query operation.",
-    "Before integrating it, test a small read-only query and confirm identifiers and freshness."
+    "Open the city parcel layer, address-point layer or zoning layer for metadata, fields and the Query operation.",
+    "Try the tested parcel query, tested address query and tested zoning query. Each returns one JSON record without geometry and requires no API credentials.",
+    "Choose needed outFields and a where filter. Begin with a small resultRecordCount; the layers advertise a 1,000-record limit and pagination.",
+    "For mapping, inspect each layer's spatialReference and explicitly request the intended output coordinate system. outSR=4326 requests longitude/latitude; geometry output and reprojection still need testing.",
+    "A property tool can find an address point, use its location to identify a parcel, retrieve assessment attributes, and check zoning at the same point. This is an integration recipe; spatial matching and cross-layer joins have not yet been verified by this directory."
   ],
   "contact": "Assessor's Office for assessment information; GIS gallery lists gisadmin@newhavenct.gov. Service responsibility needs confirmation.",
   "limitations": [
-    "Metadata opened successfully; no feature query or bulk extraction has been tested.",
-    "Metadata advertises a 3,000-record response limit and pagination. One response must not be treated as the whole dataset.",
-    "Spatial reference is EPSG:2234; request or transform coordinates before treating them as latitude/longitude.",
-    "Technical access does not establish redistribution rights or a refresh schedule.",
-    "Parcel boundaries are distinct from full assessor records."
+    "Live metadata and one-record JSON queries succeeded without API credentials on October 6, 2026. These checks establish technical access, not data accuracy, completeness or continued availability.",
+    "The city layers advertise a 1,000-record response limit and pagination. One response is not the full dataset.",
+    "Sample checks omitted geometry; spatial intersections, cross-layer joins, pagination, property-specific filters and bulk extraction remain untested.",
+    "Refresh schedules, reuse terms and field-code definitions remain unconfirmed. Layer edit timestamps do not establish the freshness of every record.",
+    "All requested fields were present: 16 parcel fields, eight address fields and three zoning fields. GeoJSON and PBF are advertised, but only JSON attribute queries were tested.",
+    "Native coordinate systems differ: parcels EPSG:2234, zoning EPSG:6434, addresses EPSG:3857. Native coordinates should not be treated as longitude/latitude.",
+    "GIS access does not establish legal parcel boundaries or authoritative zoning advice. Confirm important decisions with the responsible city office."
   ],
   "next": [
-    "Test one sample query, including its coordinate output.",
-    "Verify the city's relationship to this service and clarify terms and refresh dates."
+    "Test geometry output and a known address-to-parcel-to-zoning lookup.",
+    "Verify pagination, stable joins, reuse terms and refresh responsibility.",
+    "Confirm zoning classification definitions and effective dates."
   ],
   "evidence": [
     {
-      "url": "https://arcgis.vgsi.com/server/rest/services/New_Haven_CT/NewHavenCTPropMap/MapServer/2",
-      "note": "Field schema, polygon geometry, spatial reference, formats and record limit read directly."
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
+      "note": "Live schema and one-record JSON query passed on October 6, 2026; all 16 requested parcel fields present."
     },
     {
-      "url": "https://maps.newhavenct.gov/?appid=03c5c7b828b54fa6a55dd47c7f6906f6&edit=true",
-      "note": "City GIS gallery located through indexed search; full interactive content not inspected."
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
+      "note": "Live schema and one-record JSON query passed; all eight requested address fields present."
+    },
+    {
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson",
+      "note": "Live schema and one-record JSON query passed; all three requested zoning fields present."
+    }
+  ],
+  "step_links": [
+    {
+      "step": 0,
+      "label": "city parcel layer",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson"
+    },
+    {
+      "step": 0,
+      "label": "address-point layer",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson"
+    },
+    {
+      "step": 0,
+      "label": "zoning layer",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson"
+    },
+    {
+      "step": 1,
+      "label": "tested parcel query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Cnh_ward%2Cuse_code%2Ctotal_land_area_acres%2Cyear_building_built%2Cunits_commercial%2Cunits_residential%2Cunits_condo%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value%2Csale_date%2Cprice&returnGeometry=false&resultRecordCount=1"
+    },
+    {
+      "step": 1,
+      "label": "tested address query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Chouse_number%2Cstreet_name%2Cfull_street_name%2Cneighborhood%2Czip%2Cdisplay_x%2Cdisplay_y&returnGeometry=false&resultRecordCount=1"
+    },
+    {
+      "step": 1,
+      "label": "tested zoning query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0/query?f=json&where=1%3D1&outFields=zone_code%2Cdistrict_category%2Cdistricts&returnGeometry=false&resultRecordCount=1"
+    }
+  ],
+  "related": [
+    {
+      "label": "Property assessment access and limitations",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/assessor.html"
+    },
+    {
+      "label": "Separate Vision-hosted parcel geometry service (metadata previously inspected)",
+      "url": "https://arcgis.vgsi.com/server/rest/services/New_Haven_CT/NewHavenCTPropMap/MapServer/2"
     }
   ]
 }
