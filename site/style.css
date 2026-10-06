@@ -129,3 +129,14 @@ header .site-nav{flex:0 1 auto}
 .source-overview dd{font-size:.92rem;line-height:1.5}
 @media(max-width:600px){.source-overview>div{grid-template-columns:115px minmax(0,1fr);gap:.25rem .65rem}.source-overview dd{margin-bottom:0}}
 @media(max-width:360px){.source-overview>div{grid-template-columns:1fr}.source-overview dt{font-weight:650}}
+
+.readiness-info-button{display:inline-flex;align-items:center;gap:.5rem;background:white;color:var(--accent);border:1px solid var(--line);font-size:.9rem;padding:.5rem .75rem}
+.readiness-info-button:hover{background:#edf3e9}
+.info-symbol{display:inline-flex;align-items:center;justify-content:center;width:1.15rem;height:1.15rem;border:1px solid currentColor;border-radius:50%;font-size:.8rem;font-weight:700}
+.readiness-dialog{width:min(680px,calc(100% - 2rem));max-height:calc(100vh - 2rem);overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:1.5rem;color:var(--ink);background:white}
+.readiness-dialog::backdrop{background:rgba(23,51,45,.45)}
+.source-detail .readiness-dialog h2{margin:.25rem 0 1rem}
+.readiness-dialog form{display:flex;justify-content:flex-end;margin:0 0 .75rem}
+.readiness-dialog .dialog-close{background:#edf3e9;color:var(--ink);padding:.4rem .75rem}
+.readiness-dialog dl{grid-template-columns:1fr;gap:.3rem}
+.readiness-dialog dd{margin-bottom:1rem;line-height:1.5}
