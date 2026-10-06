@@ -16,7 +16,7 @@ async function query(layer,parameters){
  for(const [key,value] of Object.entries({f:'json',where:'1=1',returnGeometry:'true',outSR:'4326',resultRecordCount:'10',...parameters}))url.searchParams.set(key,value);
  const data=await request(url);
  if(!Array.isArray(data.features))throw Error('Missing features response');
- if(data.exceededTransferLimit)throw Error('Spatial query exceeded sample row limit');
+ if(data.exceededTransferLimit)throw Error('Query exceeded sample row limit for '+Object.keys(layers).find(key=>layers[key]===layer)+' ('+data.features.length+' rows returned)');
  if(![4326].includes(data.spatialReference?.latestWkid||data.spatialReference?.wkid))throw Error('Unexpected output geometry coordinate system');
  return {url:url.toString(),...data};
 }
