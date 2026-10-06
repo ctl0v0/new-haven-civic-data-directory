@@ -104,3 +104,16 @@ header .site-nav{flex:0 1 auto}
 .readiness-checks>li+li{border-top:1px solid var(--line)}
 .readiness-checks a{font-weight:600}
 .source-detail .readiness-checks .check-note{margin:.3rem 0 0;line-height:1.55}
+
+/* Source section index: above the content on phones, alongside it on desktops. */
+.source-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;align-items:start}
+.source-layout .source-detail{margin:0;min-width:0}
+.source-index{display:block;min-width:0;border:1px solid var(--line);border-radius:8px;padding:.9rem 1rem;background:#f0f4ec}
+.source-index h2{font-size:1rem;line-height:1.4;margin:0 0 .5rem}
+.source-index ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.2rem .8rem;list-style:none;padding:0;margin:0}
+.source-index li{min-width:0}
+.source-index a{display:block;padding:.4rem 0;font-size:.88rem;line-height:1.45;overflow-wrap:anywhere;text-decoration:none}
+.source-index a:hover{text-decoration:underline}
+.source-detail h2[id]{scroll-margin-top:1.5rem}
+@media(min-width:1000px){.source-layout{grid-template-columns:210px minmax(0,1fr);gap:1.5rem}.source-index{position:sticky;top:1rem;max-height:calc(100vh - 2rem);overflow-y:auto}.source-index ul{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.source-detail h2[id]{scroll-margin-top:1rem}}

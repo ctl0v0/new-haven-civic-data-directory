@@ -51,22 +51,38 @@ ${entries.map(entry=>`<tr data-source="${escapeHTML(entry.id)}" data-category="$
 </tbody></table></div><p id="empty" hidden>No sources match. Clear your search or choose another category.</p></section>`;
   return page({title:'New Haven Civic Data Directory',repo,content,search:true});
 }
+
+const sourceSections = [
+  ['overview-heading','At a glance'],
+  ['original-heading','Original source'],
+  ['access-heading','How to access'],
+  ['readiness-heading','How ready is this data to use?'],
+  ['agent-heading','Use with your agent'],
+  ['limits-heading','Known limitations'],
+  ['fields-heading','Key fields'],
+  ['related-heading','Related sources'],
+  ['upkeep-heading','Contacts, costs and upkeep'],
+  ['next-heading','Next investigation'],
+  ['evidence-heading','Check evidence']
+];
+const renderSourceIndex = () => '<nav class="source-index" aria-labelledby="source-index-heading"><h2 id="source-index-heading">On this page</h2><ul>' + sourceSections.map(([id,label]) => '<li>' + link('#'+id,label) + '</li>').join('') + '</ul></nav>';
+
 export function renderSource(entry, repo) {
   const definition = (label,value) => `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
   const fact = (label,value) => `<div>${definition(label,value)}</div>`;
-  const content = `<article class="source-detail"><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p class="source-summary">${escapeHTML(entry.description)}</p>
+  const content = `<div class="source-layout">${renderSourceIndex()}<article class="source-detail"><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p class="source-summary">${escapeHTML(entry.description)}</p>
 <section aria-labelledby="overview-heading"><h2 id="overview-heading">At a glance</h2><dl class="source-overview">${fact('Access',entry.access)}${fact('Formats',entry.formats.join(', ')||'Not confirmed')}${fact('Data owner / publisher',entry.publisher)}${fact('Last checked',entry.checked_on)}</dl><p class="check-note">Last checked is when this directory verified access, not when the data was updated. See the evidence below for exactly what was checked.</p></section>
-<div class="source-actions"><p class="source-link-label">Original source</p><p>${link(entry.url,'View source','button-link')}</p></div>
+<div class="source-actions"><h2 class="source-link-label" id="original-heading">Original source</h2><p>${link(entry.url,'View source','button-link')}</p></div>
 <section aria-labelledby="access-heading"><h2 id="access-heading">How to access</h2><ol>${entry.steps.map((value,index)=>renderStep(entry,value,index)).join('')}</ol></section>
 <section aria-labelledby="readiness-heading" class="source-readiness"><h2 id="readiness-heading">How ready is this data to use?</h2><p><span class="readiness-label">${escapeHTML(readinessLabel(entry))}</span> ${reviewFlag(entry)}</p><p>${escapeHTML(entry.build_readiness.summary)}</p><h3>Preparation still needed</h3>${entry.build_readiness.preparation.length ? list(entry.build_readiness.preparation) : '<p>No additional preparation is documented for the tested workflow. Check its scope and limitations before adapting it.</p>'}<p class="check-note">Assessed ${escapeHTML(entry.build_readiness.assessed_on)} · Next review ${escapeHTML(entry.build_readiness.next_review_on)} · Review owner: ${escapeHTML(entry.build_readiness.review_owner)}</p><div class="readiness-support"><details class="readiness-help"><summary>What does this readiness label mean?</summary><div class="readiness-support-content"><p>${escapeHTML(readinessDefinitions[entry.build_readiness.level])}</p><p class="check-note">This describes the work needed to build with the source. It does not certify accuracy, completeness, freshness or reuse rights. A review-due label means the assessment needs a fresh check.</p><p>${link('../build-readiness.html','Compare all readiness labels')}</p></div></details><details class="readiness-evidence"><summary>Checks behind this assessment (${entry.build_readiness.evidence.length})</summary><div class="readiness-support-content">${renderReadinessEvidence(entry)}</div></details></div></section>
 <section aria-labelledby="agent-heading" class="agent-handoff"><h2 id="agent-heading">Use with your agent</h2><p>Copy this brief into your agent and replace the project description. It links to this entry’s current access instructions and limitations.</p><label for="agent-brief" class="sr-only">Source brief for your agent</label><textarea id="agent-brief" readonly rows="8" spellcheck="false">${escapeHTML(renderAgentBrief(entry))}</textarea><p class="agent-copy-actions"><button type="button" data-copy-brief="agent-brief" data-copy-status="agent-copy-status">Copy agent brief</button> ${link('../sources/'+entry.id+'.json','Read source JSON')}</p><p id="agent-copy-status" role="status" aria-live="polite"></p><p class="check-note">Generated from this entry. Copied text is a dated snapshot; source changes still need verification. You can select and copy the text manually.</p></section>
 <section aria-labelledby="limits-heading"><h2 id="limits-heading">Known limitations</h2>${list(entry.limitations)}</section>
 <section aria-labelledby="fields-heading"><h2 id="fields-heading">Key fields</h2>
 ${entry.fields.length ? `<table class="source-fields"><thead><tr><th scope="col">Field</th><th scope="col">Meaning</th></tr></thead><tbody>${entry.fields.map(field=>`<tr><th scope="row">${escapeHTML(field[0])}</th><td>${escapeHTML(field[1])}</td></tr>`).join('')}</tbody></table>` : '<p>Field schema not yet verified.</p>'}</section>
-${entry.related ? `<section aria-labelledby="related-heading"><h2 id="related-heading">Related sources</h2><ul>${entry.related.map(value=>`<li>${link(value.url,value.label)}</li>`).join('')}</ul></section>` : ''}
+<section aria-labelledby="related-heading"><h2 id="related-heading">Related sources</h2>${entry.related?.length ? `<ul>${entry.related.map(value=>`<li>${link(value.url,value.label)}</li>`).join('')}</ul>` : '<p>No related sources are documented yet.</p>'}</section>
 <section aria-labelledby="upkeep-heading"><h2 id="upkeep-heading">Contacts, costs and upkeep</h2><dl class="source-upkeep">${definition('Contact',entry.contact)}${definition('Cost',entry.cost)}${definition('Reuse terms',entry.terms)}${definition('Update frequency',entry.update_frequency)}${definition('Entry maintainer',entry.entry_maintainer)}${definition('Source type',entry.source_type)}</dl></section>
 <section aria-labelledby="next-heading"><h2 id="next-heading">Next investigation</h2>${list(entry.next)}</section>
 <section aria-labelledby="evidence-heading"><h2 id="evidence-heading">Check evidence</h2><ul>${entry.evidence.map(value=>`<li>${link(value.url,value.note)}</li>`).join('')}</ul></section>
-<p class="source-end-links">${link(repo+'/blob/main/sources/'+entry.id+'.json','View entry in GitHub')} · ${link(repo+'/issues/new?template=source-correction.yml','Report a correction')} · ${link('../index.html','Back to directory')}</p></article>`;
+<p class="source-end-links">${link(repo+'/blob/main/sources/'+entry.id+'.json','View entry in GitHub')} · ${link(repo+'/issues/new?template=source-correction.yml','Report a correction')} · ${link('../index.html','Back to directory')}</p></article></div>`;
   return page({title:entry.title,repo,prefix:'../',content,source:true});
 }
