@@ -87,7 +87,8 @@
     "Open the New Haven assessment database and read its valuation-date and disclaimer information before using the browser lookup.",
     "Open the city parcel API metadata to inspect field names and types. An API is a web address a program can request to receive structured data.",
     "Try the tested one-record JSON query: selected parcel and assessment fields, one record, and no geometry.",
-    "Use the Query operation with a where filter on parcel_id or property_address and select needed outFields. Match parcel and address identities carefully; tailored filters still need testing.",
+    "Try the tested City Hall address query for 165 Church Street. The filter returned exactly one record. Inspect the returned address and preserve its parcel_id and account_number; do not assume every address will have one match.",
+    "Use the property lookup verification script to repeat the lookup by parcel_id and account_number. Run node scripts/verify-property-lookup.mjs from the repository root, or run the shared validation workflow with the property option. For the City Hall example, both filters reproduced the same record and selected values.",
     "See related city GIS layers for address points and zoning. A possible lookup is address → location → parcel → assessment attributes, with zoning checked at the same location. Spatial matching still needs testing.",
     "Confirm assessment details and valuation dates with the Assessor's Office. Vision is a separate HTML browser; no Vision assessment API has been verified."
   ],
@@ -95,15 +96,16 @@
   "limitations": [
     "Live metadata and one-record JSON queries succeeded without API credentials on October 6, 2026. These checks establish technical access, not data accuracy, completeness or continued availability.",
     "The city layers advertise a 1,000-record response limit and pagination. One response is not the full dataset.",
-    "Sample checks omitted geometry; spatial intersections, cross-layer joins, pagination, property-specific filters and bulk extraction remain untested.",
+    "A known public-address filter and repeat parcel/account identifier queries were tested for City Hall at 165 Church Street. Geometry, spatial intersections, cross-layer joins, pagination, general address matching and bulk extraction remain untested.",
     "Refresh schedules, reuse terms and field-code definitions remain unconfirmed. Layer edit timestamps do not establish the freshness of every record.",
     "All 16 requested parcel fields were present in the live metadata and sample response.",
     "The Vision landing page describes values as of October 1, 2021. The city GIS assessment valuation date is unconfirmed. Assessment values are not current tax bills.",
-    "Individual Vision property pages and field mappings have not been verified here. Extracting HTML from those pages would be page extraction, not a verified API, and can break when their structure changes."
+    "Individual Vision property pages and field mappings have not been verified here. Extracting HTML from those pages would be page extraction, not a verified API, and can break when their structure changes.",
+    "The City Hall check requires exactly one address match and identical selected fields when re-querying by parcel_id and account_number. It does not prove identifier uniqueness across the dataset, confirm current assessment valuation dates or compare the record with Vision."
   ],
   "next": [
-    "Compare a known property across API and browser, including identifiers, valuation dates and differences.",
-    "Test address filters and coordinate-based parcel matching.",
+    "Compare the tested City Hall record with the assessor browser, including valuation dates and any differences.",
+    "Test additional address formats and ambiguous matches, then coordinate-based parcel matching if needed.",
     "Confirm bulk exports, fees, reuse terms and refresh responsibility."
   ],
   "evidence": [
@@ -122,6 +124,18 @@
     {
       "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Cnh_ward%2Cuse_code%2Ctotal_land_area_acres%2Cyear_building_built%2Cunits_commercial%2Cunits_residential%2Cunits_condo%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value%2Csale_date%2Cprice&returnGeometry=false&resultRecordCount=1",
       "note": "This exact selected-field JSON query returned one record; geometry and bulk access were not tested."
+    },
+    {
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=UPPER(property_address)%20LIKE%20'165%25CHURCH%25'&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=10",
+      "note": "Live City Hall address filter returned exactly one record on October 6, 2026. Required identifiers and assessment fields were present; no property values were logged."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-property-lookup.mjs",
+      "note": "Live parcel_id and account_number repeat queries each returned exactly one record with identical object ID and selected values for the City Hall example."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml",
+      "note": "The shared validation runner passed the known-property lookup, existing city API checks and roster check. The property option repeats the City Hall address and identifier assertions weekly or on demand."
     }
   ],
   "step_links": [
@@ -141,14 +155,24 @@
       "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Cnh_ward%2Cuse_code%2Ctotal_land_area_acres%2Cyear_building_built%2Cunits_commercial%2Cunits_residential%2Cunits_condo%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value%2Csale_date%2Cprice&returnGeometry=false&resultRecordCount=1"
     },
     {
+      "step": 5,
+      "label": "related city GIS layers",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html"
+    },
+    {
       "step": 3,
-      "label": "Query operation",
-      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query"
+      "label": "tested City Hall address query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=UPPER(property_address)%20LIKE%20'165%25CHURCH%25'&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=10"
     },
     {
       "step": 4,
-      "label": "related city GIS layers",
-      "url": "https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html"
+      "label": "property lookup verification script",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-property-lookup.mjs"
+    },
+    {
+      "step": 4,
+      "label": "shared validation workflow",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
     }
   ],
   "related": [
@@ -171,11 +195,11 @@
     "cost": "Sample API access: free"
   },
   "build_readiness": {
-    "level": "sample-tested",
-    "summary": "A selected-field city GIS JSON query returned one record. A complete property lookup workflow has not been verified.",
+    "level": "workflow-tested",
+    "summary": "A specific lookup is tested: City Hall at 165 Church Street → one city GIS record → repeat retrieval by parcel and account identifiers. Valuation-date confirmation and comparison with the assessor website remain unfinished.",
     "preparation": [
-      "Test a known property and confirm parcel/account identifiers and valuation date.",
-      "Verify address filters, matching and any joins required by the intended tool.",
+      "Confirm the GIS assessment valuation date and compare the tested property with the assessor browser before interpreting values.",
+      "Test additional addresses and handle missing or multiple matches; geometry, joins and bulk retrieval need separate checks.",
       "Confirm reuse terms, refresh responsibility and any bulk-access arrangements."
     ],
     "assessed_on": "2026-10-06",
@@ -183,7 +207,10 @@
     "review_owner": "Unassigned",
     "evidence": [
       "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
-      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Cnh_ward%2Cuse_code%2Ctotal_land_area_acres%2Cyear_building_built%2Cunits_commercial%2Cunits_residential%2Cunits_condo%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value%2Csale_date%2Cprice&returnGeometry=false&resultRecordCount=1"
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=1%3D1&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Cnh_ward%2Cuse_code%2Ctotal_land_area_acres%2Cyear_building_built%2Cunits_commercial%2Cunits_residential%2Cunits_condo%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value%2Csale_date%2Cprice&returnGeometry=false&resultRecordCount=1",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=UPPER(property_address)%20LIKE%20'165%25CHURCH%25'&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=10",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-property-lookup.mjs",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
     ]
   }
 }
