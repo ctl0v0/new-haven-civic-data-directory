@@ -93,6 +93,18 @@ def main():
         if len(set(wards)) != len(wards):
             raise ValueError("Duplicate wards found; do not silently choose a representative")
         if set(wards) != set(range(1, 31)):
+            parser = Tables()
+            parser.feed(html)
+            ward_formats = []
+            for table in parser.tables:
+                for row_index, row in enumerate(table[:3]):
+                    headings_norm = [normalize(value) for value in row]
+                    if "ward" in headings_norm and "name" in headings_norm:
+                        wi = headings_norm.index("ward")
+                        for data in table[row_index + 1:]:
+                            value = data[wi] if wi < len(data) else ""
+                            ward_formats.append({"digits": re.findall("[0-9]+", value)[:2], "punctuation": [hex(ord(char)) for char in value if not char.isalnum() and char != " "]})
+            print(json.dumps({"rowsExtracted": len(records), "missingWards": sorted(set(range(1, 31)) - set(wards)), "wardLabelFormats": ward_formats}))
             raise ValueError("Expected wards 1 through 30 were not all present; manual review required")
         output = {"source": SOURCE, "method": "One official HTML page; ward and representative columns only", "records": sorted(records, key=lambda record: record["ward"])}
         Path("verification").mkdir(exist_ok=True)
