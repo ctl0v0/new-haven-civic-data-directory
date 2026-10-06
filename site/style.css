@@ -59,3 +59,16 @@ header .site-nav{margin:0 0 0 auto;display:flex;align-items:center;gap:1.25rem;f
 @media(max-width:600px){.source-overview{grid-template-columns:1fr}.source-upkeep{grid-template-columns:1fr}.source-detail section+section{padding-top:1.25rem}.source-fields th,.source-fields td{padding:.6rem .4rem}}
 
 .source-actions .source-link-label{font-size:.85rem;font-weight:650;color:var(--muted);margin:0 0 .2rem}.source-actions>p:last-child{margin:0}.source-actions a{font-weight:600}
+
+/* Balanced site identity, page titles and plain breadcrumb navigation. */
+.site-identity{min-width:0;flex-shrink:0}
+.site-identity .site-brand{display:inline-block;font-size:1.25rem;line-height:1.3;letter-spacing:-.02em}
+header .site-subtitle{font-size:.82rem;line-height:1.4;color:var(--muted);margin:.2rem 0 0}
+.directory-page header h1{font-size:clamp(2rem,3.8vw,2.75rem)}
+.source-page header h1{font-size:clamp(1.75rem,3vw,2.25rem);line-height:1.2;letter-spacing:-.025em;margin:.4rem 0 .25rem}
+header .breadcrumbs{display:block;margin:.2rem 0 .8rem}
+.breadcrumbs ol{display:flex;align-items:baseline;flex-wrap:wrap;gap:.25rem .6rem;list-style:none;margin:0;padding:0;font-size:.85rem;line-height:1.5;color:var(--muted)}
+.breadcrumbs li{min-width:0;overflow-wrap:anywhere}
+.breadcrumbs li+li::before{content:"/";padding-right:.6rem;color:var(--muted)}
+.breadcrumbs [aria-current="page"]{color:var(--muted)}
+@media(max-width:480px){.site-identity .site-brand{white-space:normal;font-size:1.2rem}}
