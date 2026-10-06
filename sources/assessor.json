@@ -164,5 +164,10 @@
       "label": "Address and zoning GIS access",
       "url": "https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html"
     }
-  ]
+  ],
+  "listing": {
+    "publisher": "New Haven · Assessor / GIS",
+    "access": "JSON API + browser",
+    "cost": "Sample API access: free"
+  }
 }

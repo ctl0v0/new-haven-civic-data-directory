@@ -47,5 +47,10 @@
       "label": "city GIS gallery",
       "url": "https://maps.newhavenct.gov/?appid=03c5c7b828b54fa6a55dd47c7f6906f6&edit=true"
     }
-  ]
+  ],
+  "listing": {
+    "publisher": "City of New Haven",
+    "access": "Maps; download unverified",
+    "cost": "Not confirmed"
+  }
 }

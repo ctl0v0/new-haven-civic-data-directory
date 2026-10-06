@@ -173,5 +173,10 @@
       "label": "Separate Vision-hosted parcel geometry service (metadata previously inspected)",
       "url": "https://arcgis.vgsi.com/server/rest/services/New_Haven_CT/NewHavenCTPropMap/MapServer/2"
     }
-  ]
+  ],
+  "listing": {
+    "publisher": "New Haven · GIS",
+    "access": "JSON APIs",
+    "cost": "Sample API access: free"
+  }
 }

@@ -55,5 +55,10 @@
       "url": "https://newhaven-ct.legistar.com/Calendar.aspx",
       "note": "Calendar opened and meeting columns inspected directly."
     }
-  ]
+  ],
+  "listing": {
+    "publisher": "New Haven · Board of Alders",
+    "access": "Legistar search",
+    "cost": "Not confirmed"
+  }
 }

@@ -7,3 +7,10 @@ dl{display:grid;grid-template-columns:160px 1fr;gap:.5rem 1rem}dt{font-weight:65
 .skip{position:absolute;left:1rem;top:-100px;background:white;padding:.5rem;z-index:2}.skip:focus{top:1rem}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}[hidden]{display:none!important}
 @media(max-width:600px){dl{grid-template-columns:1fr}dd{margin-bottom:.6rem}header,main,footer{padding:1.25rem}article{padding:1rem}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+/* Directory overview: concise rows, with full notes on each source page. */
+.directory-page header,.directory-page main,.directory-page footer{max-width:1540px;padding-left:clamp(1rem,3vw,3rem);padding-right:clamp(1rem,3vw,3rem)}
+.directory-table{min-width:1060px;table-layout:fixed;font-size:.92rem;line-height:1.4}
+.directory-table th,.directory-table td{padding:.85rem .75rem;overflow-wrap:break-word}
+.directory-table th:nth-child(1){width:22%}.directory-table th:nth-child(2){width:10%}.directory-table th:nth-child(3){width:19%}.directory-table th:nth-child(4){width:16%}.directory-table th:nth-child(5){width:12%}.directory-table th:nth-child(6){width:12%}.directory-table th:nth-child(7){width:9%}
+.directory-table time{white-space:nowrap}.directory-table tbody tr:hover{background:#edf3e9}
