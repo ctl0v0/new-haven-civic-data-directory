@@ -1,5 +1,12 @@
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const link = (url, label) => `<a href="${escapeHTML(url)}">${escapeHTML(label)}</a>`;
+const renderStep = (entry, value, index) => {
+  let text = escapeHTML(value);
+  for (const item of entry.step_links || []) {
+    if (item.step === index) text = text.replace(escapeHTML(item.label), link(item.url, item.label));
+  }
+  return '<li>' + text + '</li>';
+};
 const list = values => `<ul>${values.map(value => `<li>${escapeHTML(value)}</li>`).join('')}</ul>`;
 const searchText = entry => [entry.title,entry.description,entry.category,entry.publisher,entry.access,entry.contact,entry.formats.join(' '),entry.fields.flat().join(' '),entry.steps.join(' '),entry.limitations.join(' '),entry.next.join(' ')].join(' ');
 function page({title, repo, prefix='', content, search=false, source=false}) {
@@ -23,7 +30,7 @@ export function renderSource(entry, repo) {
   const definition = (label,value) => `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
   const content = `<article><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p>${escapeHTML(entry.description)}</p><p>${link(entry.url,'Open source')} · ${link(repo+'/blob/main/sources/'+entry.id+'.json','View entry in GitHub')}</p>
 <dl>${definition('Publisher / host',entry.publisher)}${definition('Source type',entry.source_type)}${definition('Contact',entry.contact)}${definition('Formats',entry.formats.join(', ')||'Not confirmed')}${definition('Cost',entry.cost)}${definition('Reuse terms',entry.terms)}${definition('Update frequency',entry.update_frequency)}${definition('Entry maintainer',entry.entry_maintainer)}${definition('Last checked',entry.checked_on+'; see evidence for scope')}</dl>
-<h2>How to access</h2><ol>${entry.steps.map(value=>`<li>${escapeHTML(value)}</li>`).join('')}</ol><h2>Key fields</h2>
+<h2>How to access</h2><ol>${entry.steps.map((value,index)=>renderStep(entry,value,index)).join('')}</ol><h2>Key fields</h2>
 ${entry.fields.length ? `<table><thead><tr><th scope="col">Field</th><th scope="col">Meaning</th></tr></thead><tbody>${entry.fields.map(field=>`<tr><th scope="row">${escapeHTML(field[0])}</th><td>${escapeHTML(field[1])}</td></tr>`).join('')}</tbody></table>` : '<p>Field schema not yet verified.</p>'}
 <h2>Known limitations</h2>${list(entry.limitations)}<h2>Next investigation</h2>${list(entry.next)}
 ${entry.related ? `<h2>Related sources</h2><ul>${entry.related.map(value=>`<li>${link(value.url,value.label)}</li>`).join('')}</ul>` : ''}

@@ -21,6 +21,7 @@ Use HTTPS links. Do not enter credentials or private contact information. Prefer
 - fields: pairs of the source's field label and a plain-language meaning. Use an empty array if the schema is unverified.
 - cost and terms: distinguish browser access from bulk exports and reuse rights. Do not turn unknown into free or open.
 - evidence: URL and note describing the claim or check it supports.
+- step_links: optional list of objects with step (zero-based step index), label (exact text within that step), and url. The website makes that label clickable inside the access instruction.
 - related: optional labeled links to separate sources or community copies.
 
 A date the source claims to have been updated is not the date this directory checked it. Put reported update dates and their evidence in the entry's limitations or description until a structured update-date field is needed.

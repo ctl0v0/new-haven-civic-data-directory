@@ -15,7 +15,13 @@ for (const file of (await readdir(new URL('sources/', root))).filter(f=>f.endsWi
   for (const field of ['formats','steps','limitations','next']) if (!Array.isArray(entry[field]) || entry[field].some(v=>typeof v!=='string')) throw new Error(file+': invalid '+field);
   if (!entry.steps.length || !Array.isArray(entry.fields) || entry.fields.some(v=>!Array.isArray(v)||v.length!==2||v.some(s=>typeof s!=='string'))) throw new Error(file+': invalid steps/fields');
   if (!Array.isArray(entry.evidence) || !entry.evidence.length) throw new Error(file+': evidence required');
-  for (const item of [{url:entry.url},...entry.evidence,...(entry.related||[])]) if (new URL(item.url).protocol !== 'https:') throw new Error(file+': HTTPS links required');
+  if (entry.step_links !== undefined) {
+    if (!Array.isArray(entry.step_links)) throw new Error(file+': invalid step links');
+    for (const item of entry.step_links) {
+      if (!Number.isInteger(item.step) || item.step < 0 || item.step >= entry.steps.length || typeof item.label !== 'string' || !item.label.trim() || !entry.steps[item.step].includes(item.label)) throw new Error(file+': invalid linked step or label');
+    }
+  }
+  for (const item of [{url:entry.url},...entry.evidence,...(entry.related||[]),...(entry.step_links||[])]) if (new URL(item.url).protocol !== 'https:') throw new Error(file+': HTTPS links required');
   if (entry.evidence.some(v=>typeof v.note!=='string')) throw new Error(file+': evidence note required');
   entries.push(entry);
 }

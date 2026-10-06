@@ -35,5 +35,17 @@
       "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps",
       "note": "Official discovery page found in indexed search; ward map referenced."
     }
+  ],
+  "step_links": [
+    {
+      "step": 0,
+      "label": "Engineering maps page",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
+    },
+    {
+      "step": 0,
+      "label": "city GIS gallery",
+      "url": "https://maps.newhavenct.gov/?appid=03c5c7b828b54fa6a55dd47c7f6906f6&edit=true"
+    }
   ]
 }
