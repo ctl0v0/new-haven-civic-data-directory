@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Request data — New Haven Civic Data Directory</title><link rel="stylesheet" href="style.css"><script src="request.js" defer></script></head><body class="source-page">
+<a class="skip" href="#main">Skip to content</a><header><p class="eyebrow">A community resource</p><h1>Request data</h1><nav><a href="index.html">Browse sources</a><a href="https://github.com/ctl0v0/new-haven-civic-data-directory/issues">Existing requests</a></nav></header>
+<main id="main"><article><p>Tell the community what New Haven data you need and what you want to build. No GitHub account is needed to submit this form.</p>
+<p id="public-notice"><strong>Your submission will become a public GitHub issue.</strong> Do not include private contact details, personal information or confidential material. This is a community investigation, not an official city records request.</p>
+<p id="request-status" role="status" aria-live="polite" tabindex="-1">Loading the request form…</p>
+<form id="request-form" aria-describedby="public-notice"><fieldset id="request-fields" disabled><legend>Describe your request</legend>
+<label>Short title (required)<input name="title" required maxlength="120"></label>
+<label>What data and fields do you need? (required)<textarea name="need" required maxlength="3000" rows="4"></textarea></label>
+<label>What would you build or learn? (required)<textarea name="use" required maxlength="2000" rows="3"></textarea></label>
+<label>Geography and time span<input name="coverage" maxlength="300" placeholder="New Haven citywide; 2020 to present"></label>
+<label>Where have you already looked?<textarea name="checked" maxlength="1500" rows="2"></textarea></label>
+<label>Examples from other cities<textarea name="examples" maxlength="1500" rows="2"></textarea></label>
+<label>Preferred access<input name="access" maxlength="500" placeholder="For example: CSV, API or map layer"></label>
+<div class="spam-trap" aria-hidden="true"><label>Leave this field empty<input name="website" autocomplete="off" tabindex="-1"></label></div>
+<label class="check-label"><input type="checkbox" name="publicNotice" required> I understand my request will be published publicly.</label>
+<div id="bot-check"></div><button id="submit-request" type="submit">Submit request</button>
+</fieldset></form>
+<noscript><p>This form requires JavaScript and a bot check. Use the direct GitHub request link below instead.</p></noscript>
+<p><a id="existing-requests" href="https://github.com/ctl0v0/new-haven-civic-data-directory/issues">Check existing requests</a> · <a href="https://github.com/ctl0v0/new-haven-civic-data-directory/issues/new?template=data-request.yml">Submit directly through GitHub</a> (GitHub account required)</p>
+</article></main></body></html>
