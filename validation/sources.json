@@ -1,0 +1,43 @@
+[
+  {
+    "id": "alders-roster",
+    "source_ids": [
+      "alders"
+    ],
+    "group": "alders",
+    "validator": "alders-html"
+  },
+  {
+    "id": "city-property-apis",
+    "source_ids": [
+      "assessor",
+      "gis-parcels"
+    ],
+    "group": "property",
+    "validator": "city-property-apis"
+  },
+  {
+    "id": "finance-documents",
+    "source_ids": [
+      "finance"
+    ],
+    "validator": null,
+    "reason": "Inspect actual report files before defining reliable format and extraction checks."
+  },
+  {
+    "id": "meetings-legislation",
+    "source_ids": [
+      "meetings-legislation"
+    ],
+    "validator": null,
+    "reason": "Calendar and document validators are not yet implemented."
+  },
+  {
+    "id": "ward-boundaries",
+    "source_ids": [
+      "ward-boundaries"
+    ],
+    "validator": null,
+    "reason": "No current boundary download or layer has been verified."
+  }
+]

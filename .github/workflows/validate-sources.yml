@@ -1,0 +1,33 @@
+name: Validate civic sources
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Source checks to run
+        type: choice
+        default: all
+        options: [all, alders, property]
+  schedule:
+    - cron: '0 14 * * 1'
+  push:
+    branches: [main]
+    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'validation/**', '.github/workflows/validate-sources.yml']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - run: node scripts/validate-sources.mjs "${{ inputs.source || 'all' }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-validation
+          path: verification/
+          retention-days: 7
