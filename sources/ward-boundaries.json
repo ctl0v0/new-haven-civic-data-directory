@@ -1,7 +1,7 @@
 {
   "checked_on": "2026-10-06",
   "entry_maintainer": "Unassigned",
-  "cost": "Unknown; no bulk-access price confirmed.",
+  "cost": "The tested metadata, 30-polygon query and point query worked without credentials or payment. Other access arrangements remain unconfirmed.",
   "terms": "Reuse terms not confirmed.",
   "update_frequency": "Not confirmed.",
   "id": "ward-boundaries",
@@ -9,68 +9,132 @@
   "category": "Geography",
   "publisher": "City of New Haven",
   "source_type": "official",
-  "status": "Needs investigation",
-  "description": "Discovery routes for ward geography that can support finding a representative by location.",
-  "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps",
-  "access": "Map discovery page; data download unverified",
-  "formats": [],
-  "fields": [],
-  "steps": [
-    "Start with the Engineering maps page and the city GIS gallery.",
-    "Find the ward map or layer and confirm which boundary plan it represents.",
-    "Locate a downloadable layer and its metadata before building address-to-ward tools."
+  "status": "Access tested",
+  "description": "Retrieve New Haven's 30 ward polygons through the city's GIS API, or look up the ward containing a location. A City Hall example works; the layer's current legal boundary plan still needs confirmation.",
+  "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0?f=pjson",
+  "access": "City GIS JSON API; polygon and location queries tested",
+  "formats": [
+    "JSON (API; polygons returned in longitude/latitude)"
   ],
-  "contact": "GIS gallery lists gisadmin@newhavenct.gov; responsibility for current ward boundaries needs confirmation.",
+  "fields": [
+    [
+      "ward",
+      "Ward identifier; SmallInteger. All numbers 1–30 occurred once in the tested response."
+    ],
+    [
+      "geometry.rings",
+      "Polygon coordinates returned with outSR=4326 (longitude, latitude)."
+    ],
+    [
+      "objectid",
+      "Service record ID; present in metadata, not used as the ward identifier."
+    ],
+    [
+      "formal_name",
+      "Ward label present in metadata; values not validated."
+    ]
+  ],
+  "steps": [
+    "Open the city ward-layer metadata and check the ward field and polygon geometry type. The service is named Wards_2022; its name and last edit date do not confirm the current legal boundary plan.",
+    "Retrieve the tested ward polygon query. It returned 30 records, one for each ward 1–30, with closed polygon rings in longitude/latitude using outSR=4326. Keep the ward value as the identifier.",
+    "Try the tested City Hall point query. The city's address layer returned 11 rows for 165 Church Street sharing one location. That point intersected Ward 7; an independent point-in-polygon calculation against the retrieved boundaries agreed.",
+    "Run the ward verification script with node scripts/verify-ward-boundaries.mjs from the repository root, or run the shared workflow with the wards option. It checks field availability, identifier coverage, polygon coordinates and the City Hall lookup; the all option includes it weekly.",
+    "Before presenting a lookup as a current official ward assignment, confirm the effective boundary plan with city GIS or the City Clerk. Use the separately documented Alders roster for representative names; this boundary check does not validate those names."
+  ],
+  "contact": "gisadmin@newhavenct.gov is published in the city GIS gallery; responsibility for the current legal boundary plan needs confirmation.",
   "limitations": [
-    "A city engineering map referencing wards was located through official indexed search.",
-    "No current ward layer, field schema, downloadable file or effective date has been verified.",
-    "A map image alone is not a geographic dataset."
+    "The tested layer is Wards_2022 (BM_POL_Wards_2022). Its current legal boundary plan and effective date are not confirmed. A recent service edit timestamp does not establish boundary currency.",
+    "The tested City Hall point returned Ward 7 and agreed with the retrieved polygons. Other addresses, points on boundaries, ambiguous address matches, gaps and overlaps have not been validated. Ring and coordinate checks do not establish full topological correctness.",
+    "Representative and contact fields exist in metadata but were not retrieved or verified. Join to a separately checked roster using an explicit ward identifier; do not use this layer to fill a missing roster identifier by assumption.",
+    "Reuse terms and refresh responsibility remain unconfirmed. Successful API queries establish technical access within the stated scope, rather than legal permission or continued availability."
   ],
   "next": [
-    "Confirm the current boundary plan and effective date.",
-    "Record a layer/download URL, ward identifier, format and coordinate system."
+    "Confirm the layer's effective boundary plan and current official status with city GIS or the City Clerk.",
+    "Test additional known locations and boundary-edge cases; assess gaps and overlaps if the intended tool needs reliable citywide matching.",
+    "Confirm reuse terms and who maintains the boundary layer."
   ],
   "evidence": [
     {
       "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps",
       "note": "Official discovery page found in indexed search; ward map referenced."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532426904",
+      "note": "Live city ward API check passed: 30 distinct ward identifiers (1–30), readable closed polygon rings in longitude/latitude, and City Hall point lookup returned Ward 7 matching an independent point-in-polygon calculation. Current legal boundary plan remains unconfirmed."
     }
   ],
   "step_links": [
     {
       "step": 0,
-      "label": "Engineering maps page",
-      "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
+      "label": "city ward-layer metadata",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0?f=pjson"
     },
     {
-      "step": 0,
-      "label": "city GIS gallery",
-      "url": "https://maps.newhavenct.gov/?appid=03c5c7b828b54fa6a55dd47c7f6906f6&edit=true"
+      "step": 1,
+      "label": "tested ward polygon query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0/query?f=json&where=1%3D1&outFields=ward&returnGeometry=true&outSR=4326&resultRecordCount=100"
+    },
+    {
+      "step": 2,
+      "label": "tested City Hall point query",
+      "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0/query?f=json&where=1%3D1&returnGeometry=true&outSR=4326&resultRecordCount=100&geometry=%7B%22x%22%3A-72.92457999988014%2C%22y%22%3A41.30727099977865%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=ward"
+    },
+    {
+      "step": 3,
+      "label": "ward verification script",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-ward-boundaries.mjs"
+    },
+    {
+      "step": 3,
+      "label": "shared workflow",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
+    },
+    {
+      "step": 4,
+      "label": "Alders roster",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/alders.html"
     }
   ],
   "listing": {
-    "publisher": "City of New Haven",
-    "access": "Maps; download unverified",
-    "cost": "Not confirmed"
+    "publisher": "City of New Haven · GIS",
+    "access": "JSON API · ward polygons",
+    "cost": "Tested queries: free"
   },
   "build_readiness": {
-    "level": "not-assessed",
-    "summary": "Discovery pages are located; a current downloadable boundary dataset has not been verified.",
+    "level": "workflow-tested",
+    "summary": "A specific workflow is tested: retrieve all 30 ward polygons and locate City Hall in Ward 7, with an independent point-in-polygon cross-check. This is not confirmation that the boundary plan is legally current.",
     "preparation": [
-      "Locate the current ward layer or download and verify its effective boundary plan.",
-      "Check ward identifiers, geometry and coordinate system.",
-      "Confirm reuse terms and update responsibility before using it for location-to-representative matching."
+      "Confirm the current legal boundary plan and effective date before presenting official ward assignments.",
+      "Handle missing or ambiguous addresses and boundary-edge cases; validate more locations for broader use.",
+      "Confirm reuse terms and refresh responsibility; use the separate roster for representative information."
     ],
     "assessed_on": "2026-10-06",
     "next_review_on": "2027-01-04",
     "review_owner": "Unassigned",
     "evidence": [
-      "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0/query?f=json&where=1%3D1&outFields=ward&returnGeometry=true&outSR=4326&resultRecordCount=100",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0/query?f=json&where=1%3D1&returnGeometry=true&outSR=4326&resultRecordCount=100&geometry=%7B%22x%22%3A-72.92457999988014%2C%22y%22%3A41.30727099977865%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=ward",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37532426904"
     ]
   },
   "documentation_provenance": {
     "recorded_on": "2026-10-06",
     "record_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/74e0a30397036b2f7e4d93e700e1b0fb04eeb534/sources/ward-boundaries.json",
     "scope": "Immutable snapshot of the documented findings; not a new verification of the original source."
-  }
+  },
+  "related": [
+    {
+      "label": "Board of Alders roster",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/alders.html"
+    },
+    {
+      "label": "Parcels, addresses and zoning",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html"
+    },
+    {
+      "label": "City Engineering maps",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
+    }
+  ]
 }

@@ -39,7 +39,7 @@ export async function main(){
   const result=spawnSync(command[0],command[1],{cwd:fileURLToPath(new URL('../',import.meta.url)),encoding:'utf8',timeout:180000,maxBuffer:1000000});
   const outcome=interpret(result);
   report.checks.push({id:check.id,source_ids:check.source_ids,...outcome});
-  if(['finance-documents','ward-boundaries'].includes(check.id)) for(const observation of outcome.observations) console.log(JSON.stringify({financeDocumentCheck:observation}));
+  if(['finance-documents','ward-boundaries'].includes(check.id)) for(const observation of outcome.observations) console.log(JSON.stringify({documentOrBoundaryCheck:observation}));
   console.log(JSON.stringify({check:check.id,status:outcome.status,reason:outcome.reason||null,warnings:outcome.observations.flatMap(x=>x.warnings||[])}));
  }
  await mkdir('verification',{recursive:true});

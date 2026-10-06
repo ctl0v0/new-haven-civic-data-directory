@@ -8,6 +8,7 @@ export function summarizeFindings(observations){
   const result={};
   for(const key of ['rowsExtracted','uniqueWards','missingNumberedWards','rowsWithoutWard','headings','exportedFields','dataFingerprint','recordFingerprint'])if(Object.hasOwn(item,key))result[key]=item[key];
   if(item.metadata)result.schema={missingFields:item.metadata.missingRequestedFields||[],fields:(item.metadata.requestedFields||[]).map(f=>({name:f.name,type:f.type})).sort((a,b)=>a.name.localeCompare(b.name))};
+  if(item.knownLocation)result.knownLocation={ward:item.knownLocation.ward,apiMatchesDownloadedPolygons:item.knownLocation.apiMatchesDownloadedPolygons};
   if(item.query)result.sample={rowsReturned:item.query.rowsReturned,returnedFields:[...(item.query.returnedFields||[])].sort()};
   for(const key of ['address','parcel','zoning','identifiers'])if(item[key])result[key]=Object.fromEntries(Object.entries(item[key]).filter(([name])=>['rowsReturned','distinctLocations','normalizedAddressesMatchInput','validLongitudeLatitudePolygons','matchesIndependentAddressLookup','requiredFieldsPresent','parcelPresent','accountPresent'].includes(name)));
   if(item.repeatLookups)result.repeatLookups=item.repeatLookups.map(({field,rowsReturned,sameRecordAndSelectedValues})=>({field,rowsReturned,sameRecordAndSelectedValues}));

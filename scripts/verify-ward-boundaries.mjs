@@ -58,6 +58,7 @@ export async function main(){
   if(spatial.features.length!==1||!spatial.features.every(validPolygon))throw Error('City Hall must intersect exactly one readable ward polygon');
   const independent=all.features.filter(f=>containsPoint(f.geometry.rings,point));
   const ward=Number(spatial.features[0].attributes[field.name]);
+  if(ward!==7)throw Error('City Hall ward differs from the documented Ward 7 baseline; review the boundary plan');
   if(independent.length!==1||Number(independent[0].attributes[field.name])!==ward)throw Error('Point-in-polygon check disagrees with API ward lookup');
   result.address={rowsReturned:rows.features.length,distinctLocations:points.size,normalizedAddressesMatchInput:true};
   result.knownLocation={label:'City Hall, 165 Church Street',ward,apiMatchesDownloadedPolygons:true,queryUrl:spatial.url};
