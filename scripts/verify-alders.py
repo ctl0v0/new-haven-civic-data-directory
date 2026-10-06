@@ -67,13 +67,13 @@ def extract(html):
             for data in table[index + 1:]:
                 if len(data) <= max(ward_index, name_index):
                     continue
-                match = re.fullmatch(r"(?:Ward\s*)?(\d{1,2})", data[ward_index], re.I)
+                match = re.fullmatch(r"(?:Ward\s*)?(\d{1,2})(?:\s*-\s*[A-Za-z]+)?", data[ward_index], re.I)
                 if not match:
                     continue
                 name = data[name_index].strip()
                 if not name:
                     raise ValueError("A ward row has an empty representative field")
-                records.append({"ward": int(match.group(1)), "representative": name})
+                records.append({"ward": int(match.group(1)), "ward_label": data[ward_index], "representative": name})
             if records:
                 return row, records
     raise ValueError("No readable roster table with ward and representative headings found")
@@ -88,22 +88,6 @@ def main():
             if len(raw) > 3000000:
                 raise ValueError("Page exceeds the verification size limit")
             html = raw.decode(response.headers.get_content_charset() or "utf-8", errors="replace")
-        diagnostic = Tables()
-        diagnostic.feed(html)
-        title = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
-        known_headers = {"ward", "name", "alder", "aldername", "representative", "addresszipcode", "addresszip", "telephone", "wardemail", "email", "phonenumber"}
-        header_matches = [[value for row in table[:3] for value in row if normalize(value) in known_headers] for table in diagnostic.tables]
-        print(json.dumps({"httpStatus": status, "contentType": content_type, "pageBytes": len(raw), "pageTitle": re.sub(r"\\s+", " ", title.group(1)).strip() if title else None, "tableCount": len(diagnostic.tables), "tableRowCounts": [len(table) for table in diagnostic.tables], "recognizedHeaderText": header_matches, "hasWardText": bool(re.search(r"\\bward\\b", html, re.I)), "challengeIndicators": [marker for marker in ["access denied", "captcha", "enable javascript", "request blocked", "verifying your browser"] if marker in html.lower()]}))
-        for table in diagnostic.tables:
-            for row_index, row in enumerate(table[:3]):
-                headers = [normalize(value) for value in row]
-                if "ward" in headers and "name" in headers:
-                    wi = headers.index("ward")
-                    examples = []
-                    for data in table[row_index + 1:row_index + 6]:
-                        value = data[wi] if wi < len(data) else ""
-                        examples.append({"cellCount": len(data), "wardCellLength": len(value), "wardNumberText": re.sub("[^0-9 .()-]", "?", value)[:40], "digitRuns": re.findall("[0-9]+", value)[:3]})
-                    print(json.dumps({"wardColumn": wi, "nameColumn": headers.index("name"), "headerCellCount": len(row), "wardCellExamples": examples}))
         headings, records = extract(html)
         wards = [record["ward"] for record in records]
         if len(set(wards)) != len(wards):
@@ -113,7 +97,7 @@ def main():
         output = {"source": SOURCE, "method": "One official HTML page; ward and representative columns only", "records": sorted(records, key=lambda record: record["ward"])}
         Path("verification").mkdir(exist_ok=True)
         Path("verification/alders-roster-sample.json").write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "wardRange": [min(wards), max(wards)], "exportedFields": ["ward", "representative"], "note": "No street addresses, telephone numbers or contact values are logged. Extraction does not verify election dates, current officeholding or reuse rights."}))
+        print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "wardRange": [min(wards), max(wards)], "exportedFields": ["ward", "ward_label", "representative"], "note": "No street addresses, telephone numbers or contact values are logged. Extraction does not verify election dates, current officeholding or reuse rights."}))
     except HTTPError as error:
         print(json.dumps({"status": "failed", "httpStatus": error.code, "reason": "Official page rejected the read-only request; no roster data extracted."}))
         sys.exit(1)
