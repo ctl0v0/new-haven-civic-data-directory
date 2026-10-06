@@ -25,6 +25,14 @@
     "validator": "known-property-lookup"
   },
   {
+    "id": "known-address-parcel-zoning",
+    "source_ids": [
+      "gis-parcels"
+    ],
+    "group": "property",
+    "validator": "known-gis-workflow"
+  },
+  {
     "id": "finance-documents",
     "source_ids": [
       "finance"
