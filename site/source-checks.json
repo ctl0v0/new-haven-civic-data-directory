@@ -1,9 +1,9 @@
 {
   "sources": {
     "alders": {
-      "checked_at": "2026-10-06T20:22:59.257Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37525994867",
-      "revision": "4ea2fe89cd2c1e285f4bd879d381682311bc24d0",
+      "checked_at": "2026-10-06T20:23:42.320Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37526088437",
+      "revision": "ec858188e1cff60d318ffd0d6a6a9879ed4a71f1",
       "status": "passed",
       "checks": [
         {
@@ -16,9 +16,9 @@
       ]
     },
     "assessor": {
-      "checked_at": "2026-10-06T20:22:59.257Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37525994867",
-      "revision": "4ea2fe89cd2c1e285f4bd879d381682311bc24d0",
+      "checked_at": "2026-10-06T20:23:42.320Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37526088437",
+      "revision": "ec858188e1cff60d318ffd0d6a6a9879ed4a71f1",
       "status": "passed",
       "checks": [
         {
@@ -36,9 +36,9 @@
       ]
     },
     "gis-parcels": {
-      "checked_at": "2026-10-06T20:22:59.257Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37525994867",
-      "revision": "4ea2fe89cd2c1e285f4bd879d381682311bc24d0",
+      "checked_at": "2026-10-06T20:23:42.320Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37526088437",
+      "revision": "ec858188e1cff60d318ffd0d6a6a9879ed4a71f1",
       "status": "passed",
       "checks": [
         {
@@ -56,9 +56,9 @@
       ]
     },
     "finance": {
-      "checked_at": "2026-10-06T20:22:59.257Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37525994867",
-      "revision": "4ea2fe89cd2c1e285f4bd879d381682311bc24d0",
+      "checked_at": "2026-10-06T20:23:42.320Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37526088437",
+      "revision": "ec858188e1cff60d318ffd0d6a6a9879ed4a71f1",
       "status": "passed",
       "checks": [
         {
@@ -72,9 +72,9 @@
       ]
     },
     "meetings-legislation": {
-      "checked_at": "2026-10-06T20:22:59.257Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37525994867",
-      "revision": "4ea2fe89cd2c1e285f4bd879d381682311bc24d0",
+      "checked_at": "2026-10-06T20:23:42.320Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37526088437",
+      "revision": "ec858188e1cff60d318ffd0d6a6a9879ed4a71f1",
       "status": "not-configured",
       "checks": [
         {
@@ -85,9 +85,9 @@
       ]
     },
     "ward-boundaries": {
-      "checked_at": "2026-10-06T20:22:59.257Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37525994867",
-      "revision": "4ea2fe89cd2c1e285f4bd879d381682311bc24d0",
+      "checked_at": "2026-10-06T20:23:42.320Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/37526088437",
+      "revision": "ec858188e1cff60d318ffd0d6a6a9879ed4a71f1",
       "status": "not-configured",
       "checks": [
         {
