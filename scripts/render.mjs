@@ -13,6 +13,28 @@ const list = values => `<ul>${values.map(value => `<li>${escapeHTML(value)}</li>
 const readinessLabel = entry => READINESS_LABELS[entry.build_readiness.level];
 const reviewFlag = entry => `<span class="review-due" data-review-on="${escapeHTML(entry.build_readiness.next_review_on)}"${reviewDue(entry.build_readiness) ? '' : ' hidden'}>Review due</span>`;
 const searchText = entry => [entry.title,entry.description,entry.category,entry.publisher,readinessLabel(entry),entry.build_readiness.summary,entry.build_readiness.preparation.join(' '),entry.access,entry.contact,entry.formats.join(' '),entry.fields.flat().join(' '),entry.steps.join(' '),entry.limitations.join(' '),entry.next.join(' ')].join(' ');
+
+const readinessDefinitions = {
+  'workflow-tested': 'A specific documented use case has been reproduced with a representative input, checked output and known limitations. Other integrations may still need testing.',
+  'sample-tested': 'A structured query or download returned a sample with expected fields. Filtering, joins, geometry, pagination or bulk use may still need testing.',
+  'preparation-needed': 'The inspected source needs collection, extraction, cleanup or validation before the intended use. The remaining work is listed above.',
+  'not-assessed': 'There is not enough evidence yet to determine a usable build path or the preparation required. This does not mean the data is unusable.'
+};
+const evidenceLabel = (entry, url) => {
+  const named = [...(entry.step_links || []), ...(entry.related || [])].find(item => item.url === url);
+  if (named) return named.label.charAt(0).toUpperCase() + named.label.slice(1);
+  if (url === entry.url) return 'Original source';
+  const path = new URL(url).pathname;
+  if (path.includes('/actions/workflows/')) return 'Validation workflow';
+  if (path.includes('/scripts/')) return 'Verification script';
+  if (/\/(FeatureServer|MapServer)\//i.test(path)) return 'GIS service check';
+  return 'Source documentation on ' + new URL(url).hostname;
+};
+const renderReadinessEvidence = entry => '<ul class="readiness-checks">' + entry.build_readiness.evidence.map(url => {
+  const evidence = entry.evidence.find(item => item.url === url);
+  return '<li>' + link(url, evidenceLabel(entry,url)) + (evidence ? '<p class="check-note">' + escapeHTML(evidence.note) + '</p>' : '') + '</li>';
+}).join('') + '</ul>';
+
 function page({title, repo, prefix='', content, search=false, source=false}) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(title)}</title><meta name="description" content="Find New Haven civic data, access instructions, contacts and known gaps."><link rel="stylesheet" href="${prefix}style.css"></head><body class="${source ? 'source-page' : 'directory-page'}">
@@ -36,7 +58,7 @@ export function renderSource(entry, repo) {
 <section aria-labelledby="overview-heading"><h2 id="overview-heading">At a glance</h2><dl class="source-overview">${fact('Access',entry.access)}${fact('Formats',entry.formats.join(', ')||'Not confirmed')}${fact('Data owner / publisher',entry.publisher)}${fact('Last checked',entry.checked_on)}</dl><p class="check-note">Last checked is when this directory verified access, not when the data was updated. See the evidence below for exactly what was checked.</p></section>
 <div class="source-actions"><p class="source-link-label">Original source</p><p>${link(entry.url,'View source','button-link')}</p></div>
 <section aria-labelledby="access-heading"><h2 id="access-heading">How to access</h2><ol>${entry.steps.map((value,index)=>renderStep(entry,value,index)).join('')}</ol></section>
-<section aria-labelledby="readiness-heading" class="source-readiness"><h2 id="readiness-heading">Build readiness</h2><p><span class="readiness-label">${escapeHTML(readinessLabel(entry))}</span> ${reviewFlag(entry)}</p><p>${escapeHTML(entry.build_readiness.summary)}</p><h3>Preparation still needed</h3>${entry.build_readiness.preparation.length ? list(entry.build_readiness.preparation) : '<p>No additional preparation is documented for the tested workflow. Check its scope and limitations before adapting it.</p>'}<p class="check-note">Assessed ${escapeHTML(entry.build_readiness.assessed_on)} · Next review ${escapeHTML(entry.build_readiness.next_review_on)} · Review owner: ${escapeHTML(entry.build_readiness.review_owner)}</p><p class="check-note">This describes the work needed to build with the source. It does not certify accuracy, completeness, freshness or reuse rights. A review-due label means the assessment needs a fresh check.</p><p class="check-note">Based on ${entry.build_readiness.evidence.map((url,index)=>link(url,'source check '+(index+1))).join(', ')}. ${link('../build-readiness.html','What the readiness labels mean')}</p></section>
+<section aria-labelledby="readiness-heading" class="source-readiness"><h2 id="readiness-heading">Build readiness</h2><p><span class="readiness-label">${escapeHTML(readinessLabel(entry))}</span> ${reviewFlag(entry)}</p><p>${escapeHTML(entry.build_readiness.summary)}</p><h3>Preparation still needed</h3>${entry.build_readiness.preparation.length ? list(entry.build_readiness.preparation) : '<p>No additional preparation is documented for the tested workflow. Check its scope and limitations before adapting it.</p>'}<p class="check-note">Assessed ${escapeHTML(entry.build_readiness.assessed_on)} · Next review ${escapeHTML(entry.build_readiness.next_review_on)} · Review owner: ${escapeHTML(entry.build_readiness.review_owner)}</p><div class="readiness-support"><details class="readiness-help"><summary>What does this readiness label mean?</summary><div class="readiness-support-content"><p>${escapeHTML(readinessDefinitions[entry.build_readiness.level])}</p><p class="check-note">This describes the work needed to build with the source. It does not certify accuracy, completeness, freshness or reuse rights. A review-due label means the assessment needs a fresh check.</p><p>${link('../build-readiness.html','Compare all readiness labels')}</p></div></details><details class="readiness-evidence"><summary>Checks behind this assessment (${entry.build_readiness.evidence.length})</summary><div class="readiness-support-content">${renderReadinessEvidence(entry)}</div></details></div></section>
 <section aria-labelledby="agent-heading" class="agent-handoff"><h2 id="agent-heading">Use with your agent</h2><p>Copy this brief into your agent and replace the project description. It links to this entry’s current access instructions and limitations.</p><label for="agent-brief" class="sr-only">Source brief for your agent</label><textarea id="agent-brief" readonly rows="8" spellcheck="false">${escapeHTML(renderAgentBrief(entry))}</textarea><p class="agent-copy-actions"><button type="button" data-copy-brief="agent-brief" data-copy-status="agent-copy-status">Copy agent brief</button> ${link('../sources/'+entry.id+'.json','Read source JSON')}</p><p id="agent-copy-status" role="status" aria-live="polite"></p><p class="check-note">Generated from this entry. Copied text is a dated snapshot; source changes still need verification. You can select and copy the text manually.</p></section>
 <section aria-labelledby="limits-heading"><h2 id="limits-heading">Known limitations</h2>${list(entry.limitations)}</section>
 <section aria-labelledby="fields-heading"><h2 id="fields-heading">Key fields</h2>
