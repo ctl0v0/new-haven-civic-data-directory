@@ -40,6 +40,7 @@ ${entries.map(entry=>`<tr data-source="${escapeHTML(entry.id)}" data-category="$
 
 const sourceSections = [
   ['original-heading','Original source'],
+  ['description-heading','Description'],
   ['overview-heading','At a glance'],
   ['agent-heading','Use with your agent'],
   ['fields-heading','Key fields'],
@@ -78,7 +79,8 @@ export function renderSource(entry, repo, latestCheck) {
   const definition = (label,value) => `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
   const fact = (label,value) => `<div>${definition(label,value)}</div>`;
   const content = `<div class="source-layout">${renderSourceIndex()}<article class="source-detail"><div class="source-card-top"><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><div class="source-actions"><h2 class="source-link-label" id="original-heading">Original source</h2><p>${link(entry.url,'View source','button-link')}</p></div></div>
-<section aria-labelledby="overview-heading"><h2 id="overview-heading">At a glance</h2><dl class="source-overview">${fact('Description',entry.description)}${fact('Access',entry.access)}${fact('Formats',entry.formats.join(', ')||'Not confirmed')}${fact('Data owner / publisher',entry.publisher)}${fact('Source type',({'official':'Official source','official-vendor':'Official source hosted by a vendor','community':'Community-maintained source'})[entry.source_type])}${fact('Contact',entry.contact)}${fact('Cost',entry.cost)}${fact('Last checked',entry.checked_on)}</dl><p class="check-note">Last checked is when this directory verified access, not when the data was updated. See the evidence below for exactly what was checked.</p></section>
+<section aria-labelledby="description-heading"><h2 id="description-heading">Description</h2><p>${escapeHTML(entry.description)}</p></section>
+<section aria-labelledby="overview-heading"><h2 id="overview-heading">At a glance</h2><dl class="source-overview">${fact('Access',entry.access)}${fact('Formats',entry.formats.join(', ')||'Not confirmed')}${fact('Data owner / publisher',entry.publisher)}${fact('Source type',({'official':'Official source','official-vendor':'Official source hosted by a vendor','community':'Community-maintained source'})[entry.source_type])}${fact('Contact',entry.contact)}${fact('Cost',entry.cost)}${fact('Last checked',entry.checked_on)}</dl><p class="check-note">Last checked is when this directory verified access, not when the data was updated. See the evidence below for exactly what was checked.</p></section>
 
 <section aria-labelledby="agent-heading" class="agent-handoff"><h2 id="agent-heading">Use with your agent</h2><p>Copy this brief into your agent and replace the project description. It links to this entry’s current access instructions and limitations.</p><label for="agent-brief" class="sr-only">Source brief for your agent</label><textarea id="agent-brief" readonly rows="8" spellcheck="false">${escapeHTML(renderAgentBrief(entry))}</textarea><p class="agent-copy-actions"><button type="button" data-copy-brief="agent-brief" data-copy-status="agent-copy-status">Copy agent brief</button> ${link('../sources/'+entry.id+'.json','Read source JSON')}</p><p id="agent-copy-status" role="status" aria-live="polite"></p><p class="check-note">Generated from this entry. Copied text is a dated snapshot; source changes still need verification. You can select and copy the text manually.</p></section>
 <section aria-labelledby="fields-heading"><h2 id="fields-heading">Key fields</h2>
