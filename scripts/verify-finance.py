@@ -36,14 +36,15 @@ def inspect_pdf(document,kind):
     if reader.is_encrypted: raise ValueError('Selected PDF is encrypted')
     page_count=len(reader.pages)
     if page_count>700: raise ValueError('Selected PDF exceeds page-count inspection limit')
-    texts=[page.extract_text(extraction_mode='layout') or '' for page in reader.pages]
+    inspected=min(page_count,12)
+    texts=[reader.pages[i].extract_text(extraction_mode='layout') or '' for i in range(inspected)]
     table_pages=[]
     for i,text in enumerate(texts):
         upper=text.upper()
         if 'BUDGET' in upper and ('ACTUAL' in upper or 'EXPENDITURE' in upper or 'REVENUE' in upper):
             table_pages.append({'page':i+1,'excerpt':text[:5000]})
         if len(table_pages)>=3: break
-    return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'first_page_excerpt':texts[0][:1800] if texts else '', 'table_page_samples':table_pages,'kind':kind,'scope':'PDF download and text extraction inspection only; no financial totals reconciled or reusable table schema validated'}
+    return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'first_page_excerpt':texts[0][:1800] if texts else '', 'table_page_samples':table_pages,'kind':kind,'scope':'PDF download and text extraction inspection only; no financial totals reconciled or reusable table schema validated'}
 
 failed=False
 for name,url in indexes:
