@@ -1,4 +1,18 @@
 import {READINESS_LABELS} from './readiness.mjs';
+
+const officialReferences = entry => {
+  const originalHost = new URL(entry.url).hostname;
+  const references = new Map();
+  for (const url of [entry.url,...(entry.step_links || []).map(item=>item.url)]) {
+    const parsed = new URL(url);
+    const cityHost = parsed.hostname === 'newhavenct.gov' || parsed.hostname.endsWith('.newhavenct.gov');
+    if (parsed.hostname !== originalHost && !cityHost) continue;
+    if (/\/query\/?$/i.test(parsed.pathname)) continue;
+    references.set(parsed.origin+parsed.pathname,url);
+  }
+  return [...references.values()].join(' ; ');
+};
+
 export function renderAgentBrief(entry) {
   const site='https://new-haven-civic-data-directory.vercel.app';
   return [
@@ -14,6 +28,7 @@ export function renderAgentBrief(entry) {
     'Preparation: '+(entry.build_readiness.preparation.join(' ') || 'See the documented tested workflow.'),
     'Access last checked: '+entry.checked_on+' (not the data update date).',
     'Original source: '+entry.url,
+    'Official reference links: '+officialReferences(entry),
     'Current source record: '+site+'/sources/'+entry.id+'.json',
     'Readable documentation: '+site+'/sources/'+entry.id+'.html',
     '',
