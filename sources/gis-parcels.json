@@ -10,9 +10,9 @@
   "publisher": "City of New Haven — GIS",
   "source_type": "official",
   "status": "Access tested",
-  "description": "City GIS APIs publish parcel polygons and assessment attributes, address points, and zoning polygons. Metadata and small attribute queries have been verified for all three layers.",
+  "description": "City GIS APIs publish parcel and assessment attributes, address points and zoning polygons. A City Hall address-to-parcel-to-zoning lookup and longitude/latitude geometry output have been tested.",
   "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
-  "access": "City GIS APIs (JSON queries tested)",
+  "access": "City GIS APIs; City Hall spatial lookup tested",
   "formats": [
     "JSON (query tested)",
     "GeoJSON (advertised)",
@@ -93,28 +93,31 @@
     ],
     [
       "Geometry",
-      "Parcel and zoning polygons; address points. Available in metadata; omitted from sample queries."
+      "Parcel and zoning polygons and address points. JSON geometry with outSR=4326 was tested for the City Hall example."
     ]
   ],
   "steps": [
     "Open the city parcel layer, address-point layer or zoning layer for metadata, fields and the Query operation.",
     "Try the tested parcel query, tested address query and tested zoning query. Each returns one JSON record without geometry and requires no API credentials.",
     "Choose needed outFields and a where filter. Begin with a small resultRecordCount; the layers advertise a 1,000-record limit and pagination.",
-    "For mapping, inspect each layer's spatialReference and explicitly request the intended output coordinate system. outSR=4326 requests longitude/latitude; geometry output and reprojection still need testing.",
-    "A property tool can find an address point, use its location to identify a parcel, retrieve assessment attributes, and check zoning at the same point. This is an integration recipe; spatial matching and cross-layer joins have not yet been verified by this directory."
+    "For mapping, inspect each layer's spatialReference and explicitly request the intended output coordinate system. outSR=4326 requests longitude/latitude; point and polygon output were tested for the City Hall example.",
+    "Run the GIS workflow verification script with node scripts/verify-gis-workflow.mjs from the repository root, or rerun the shared validation workflow with the property option. It looks up City Hall at 165 Church Street, requests address geometry in longitude/latitude, and queries intersecting parcel and zoning polygons.",
+    "Handle multiple address matches explicitly: the City Hall query returned multiple rows, but their normalized house/street values matched and all had exactly the same point geometry. The script uses that shared location only after those checks; it stops if distinct locations appear.",
+    "Use geometryType=esriGeometryPoint, inSR=4326 and spatialRel=esriSpatialRelIntersects for the location queries, requesting outSR=4326 for returned polygons. The matched parcel's parcel_id and account_number agreed with the separate property-address query. Preserve every returned zoning record rather than assuming the first is the only applicable district."
   ],
   "contact": "Assessor's Office for assessment information; GIS gallery lists gisadmin@newhavenct.gov. Service responsibility needs confirmation.",
   "limitations": [
     "Live metadata and one-record JSON queries succeeded without API credentials on October 6, 2026. These checks establish technical access, not data accuracy, completeness or continued availability.",
     "The city layers advertise a 1,000-record response limit and pagination. One response is not the full dataset.",
-    "Sample checks omitted geometry; spatial intersections, cross-layer joins, pagination, property-specific filters and bulk extraction remain untested.",
+    "The City Hall example tested an address filter, shared-location handling for multiple address rows, point-to-parcel and point-to-zoning intersections, polygon geometry output and reprojection to EPSG:4326. Pagination, general identifier joins, alternative address formats and bulk extraction remain untested.",
     "Refresh schedules, reuse terms and field-code definitions remain unconfirmed. Layer edit timestamps do not establish the freshness of every record.",
-    "All requested fields were present: 16 parcel fields, eight address fields and three zoning fields. GeoJSON and PBF are advertised, but only JSON attribute queries were tested.",
+    "All originally requested fields were present: 16 parcel fields, eight address fields and three zoning fields. JSON attributes and geometry are tested; GeoJSON and PBF remain advertised but untested.",
     "Native coordinate systems differ: parcels EPSG:2234, zoning EPSG:6434, addresses EPSG:3857. Native coordinates should not be treated as longitude/latitude.",
-    "GIS access does not establish legal parcel boundaries or authoritative zoning advice. Confirm important decisions with the responsible city office."
+    "GIS access does not establish legal parcel boundaries or authoritative zoning advice. Confirm important decisions with the responsible city office.",
+    "The tested address returned multiple rows at one identical location. This does not establish that other duplicate address rows share a point or that every point intersects exactly one parcel. The checker rejects distinct address locations, missing parcels and multiple parcel matches; resolving such cases requires a separate documented method."
   ],
   "next": [
-    "Test geometry output and a known address-to-parcel-to-zoning lookup.",
+    "Test additional public addresses, missing matches, different address spellings, boundary points and overlapping zoning records.",
     "Verify pagination, stable joins, reuse terms and refresh responsibility.",
     "Confirm zoning classification definitions and effective dates."
   ],
@@ -130,6 +133,14 @@
     {
       "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson",
       "note": "Live schema and one-record JSON query passed; all three requested zoning fields present."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-gis-workflow.mjs",
+      "note": "Live City Hall workflow passed on October 6, 2026. Matching address rows shared one point; its intersecting parcel matched the independent address query's parcel/account identifiers. Address point and parcel/zoning polygons returned valid New Haven longitude/latitude coordinates with outSR=4326; expected zoning fields were present."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml",
+      "note": "The shared validation runner passed the combined spatial workflow plus existing roster, API and property-identifier checks. The property option repeats these checks weekly or on demand; it does not verify legal zoning, freshness or reuse rights."
     }
   ],
   "step_links": [
@@ -162,6 +173,16 @@
       "step": 1,
       "label": "tested zoning query",
       "url": "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0/query?f=json&where=1%3D1&outFields=zone_code%2Cdistrict_category%2Cdistricts&returnGeometry=false&resultRecordCount=1"
+    },
+    {
+      "step": 4,
+      "label": "GIS workflow verification script",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-gis-workflow.mjs"
+    },
+    {
+      "step": 4,
+      "label": "shared validation workflow",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
     }
   ],
   "related": [
@@ -180,12 +201,12 @@
     "cost": "Sample API access: free"
   },
   "build_readiness": {
-    "level": "sample-tested",
-    "summary": "Parcel, address and zoning APIs each returned a selected-field JSON sample. Mapping and cross-layer workflows still need testing.",
+    "level": "workflow-tested",
+    "summary": "A specific workflow is tested: City Hall address → shared address-point location → matching parcel and zoning records, with longitude/latitude geometry. Multiple address rows were accepted only because their addresses and locations agreed.",
     "preparation": [
-      "Test geometry output, coordinate systems and a known address-to-parcel-to-zoning match.",
-      "Verify pagination and identifier joins before treating responses as a complete dataset.",
-      "Confirm zoning dates, classification meanings, reuse terms and refresh schedules."
+      "Test other address formats, distinct-location matches, boundary points and zoning overlaps before generalizing the City Hall workflow.",
+      "Verify pagination and any broader identifier joins before treating responses as a complete dataset.",
+      "Confirm zoning meanings and effective dates, reuse terms and refresh responsibility; GIS results are not authoritative zoning advice."
     ],
     "assessed_on": "2026-10-06",
     "next_review_on": "2027-01-04",
@@ -193,7 +214,9 @@
     "evidence": [
       "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
       "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
-      "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson"
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-gis-workflow.mjs",
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml"
     ]
   }
 }
