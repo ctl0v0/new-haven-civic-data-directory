@@ -28,7 +28,7 @@ ${entries.map(entry=>`<tr data-source="${escapeHTML(entry.id)}" data-category="$
 export function renderSource(entry, repo) {
   const definition = (label,value) => `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
   const fact = (label,value) => `<div>${definition(label,value)}</div>`;
-  const content = `<article class="source-detail"><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p class="source-summary">${escapeHTML(entry.description)}</p><div class="source-actions"><p class="source-link-label">Original source</p><p>${link(entry.url,'View source')}</p></div>
+  const content = `<article class="source-detail"><p class="eyebrow">${escapeHTML(entry.category)} · ${escapeHTML(entry.status)}</p><p class="source-summary">${escapeHTML(entry.description)}</p><div class="source-actions"><p class="source-link-label">Original source</p><p>${link(entry.url,'View source','button-link')}</p></div>
 <section aria-labelledby="overview-heading"><h2 id="overview-heading">At a glance</h2><dl class="source-overview">${fact('Access',entry.access)}${fact('Formats',entry.formats.join(', ')||'Not confirmed')}${fact('Data owner / publisher',entry.publisher)}${fact('Last checked',entry.checked_on)}</dl><p class="check-note">Last checked is when this directory verified access, not when the data was updated. See the evidence below for exactly what was checked.</p></section>
 <section aria-labelledby="access-heading"><h2 id="access-heading">How to access</h2><ol>${entry.steps.map((value,index)=>renderStep(entry,value,index)).join('')}</ol></section>
 <section aria-labelledby="limits-heading"><h2 id="limits-heading">Known limitations</h2>${list(entry.limitations)}</section>
