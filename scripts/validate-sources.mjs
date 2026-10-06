@@ -5,7 +5,8 @@ const commands={
  'alders-html':['python3',['scripts/verify-alders.py']],
  'city-property-apis':[process.execPath,['scripts/verify-property-api.mjs']],
  'known-property-lookup':[process.execPath,['scripts/verify-property-lookup.mjs']],
- 'known-gis-workflow':[process.execPath,['scripts/verify-gis-workflow.mjs']]
+ 'known-gis-workflow':[process.execPath,['scripts/verify-gis-workflow.mjs']],
+ 'finance-documents':['python3',['scripts/verify-finance.py']]
 };
 export function interpret(result){
  const observations=(result.stdout||'').split('\n').map(line=>{try{return JSON.parse(line);}catch{return null;}}).filter(Boolean);
@@ -27,7 +28,7 @@ export function interpret(result){
 export async function main(){
  const registry=JSON.parse(await readFile(new URL('../validation/sources.json',import.meta.url),'utf8'));
  const selected=process.argv[2]||'all';
- if(!['all','alders','property'].includes(selected))throw Error('Unknown source selection');
+ if(!['all','alders','property','finance'].includes(selected))throw Error('Unknown source selection');
  const report={checked_at:new Date().toISOString(),scope:'Small read-only source checks; not a freshness, accuracy or rights certification',checks:[]};
  for(const check of registry){
   if(selected!=='all'&&check.group!==selected)continue;

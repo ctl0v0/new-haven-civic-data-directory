@@ -37,8 +37,8 @@
     "source_ids": [
       "finance"
     ],
-    "validator": null,
-    "reason": "Inspect actual report files before defining reliable format and extraction checks."
+    "validator": "finance-documents",
+    "group": "finance"
   },
   {
     "id": "meetings-legislation",

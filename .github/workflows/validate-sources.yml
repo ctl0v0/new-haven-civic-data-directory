@@ -6,12 +6,12 @@ on:
         description: Source checks to run
         type: choice
         default: all
-        options: [all, alders, property]
+        options: [all, alders, property, finance]
   schedule:
     - cron: '0 14 * * 1'
   push:
     branches: [main]
-    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'validation/**', '.github/workflows/validate-sources.yml']
+    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'scripts/verify-finance.py', 'validation/**', '.github/workflows/validate-sources.yml']
 permissions:
   contents: read
 jobs:
