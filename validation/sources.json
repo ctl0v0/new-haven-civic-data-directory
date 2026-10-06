@@ -17,6 +17,14 @@
     "validator": "city-property-apis"
   },
   {
+    "id": "known-property-lookup",
+    "source_ids": [
+      "assessor"
+    ],
+    "group": "property",
+    "validator": "known-property-lookup"
+  },
+  {
     "id": "finance-documents",
     "source_ids": [
       "finance"

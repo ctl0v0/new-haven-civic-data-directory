@@ -3,7 +3,8 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const commands={
  'alders-html':['python3',['scripts/verify-alders.py']],
- 'city-property-apis':[process.execPath,['scripts/verify-property-api.mjs']]
+ 'city-property-apis':[process.execPath,['scripts/verify-property-api.mjs']],
+ 'known-property-lookup':[process.execPath,['scripts/verify-property-lookup.mjs']]
 };
 export function interpret(result){
  const observations=(result.stdout||'').split('\n').map(line=>{try{return JSON.parse(line);}catch{return null;}}).filter(Boolean);
