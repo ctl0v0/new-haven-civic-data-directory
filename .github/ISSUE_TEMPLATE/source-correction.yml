@@ -1,0 +1,25 @@
+name: Source correction
+description: Report an outdated link, changed field or access issue.
+title: "[Source correction]: "
+body:
+  - type: input
+    id: source
+    attributes:
+      label: Source ID or directory link
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What changed or seems wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and proposed correction
+      description: Include official links and what you tested. Do not include credentials.
+  - type: input
+    id: date
+    attributes:
+      label: When did you check?

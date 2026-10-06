@@ -1,5 +1,52 @@
 # New Haven Civic Data Directory
 
-A community directory of New Haven civic data sources, access instructions and investigations.
+A community guide to finding and using New Haven civic data. People and their agents can read the same source records; a static website makes those records easier to browse.
 
-The first implementation is being prepared in a draft pull request.
+## Start here
+
+| Source | What it helps you find |
+| --- | --- |
+| [Alders](sources/alders.json) | Elected representatives and published ward contacts |
+| [Assessor](sources/assessor.json) | Property assessment lookup |
+| [Parcels](sources/gis-parcels.json) | Parcel geometry and identifiers |
+| [Finance](sources/finance.json) | Official report indexes and a separately maintained community package |
+| [Ward boundaries](sources/ward-boundaries.json) | Discovery routes; usable boundary data still needs verification |
+| [Meetings and legislation](sources/meetings-legislation.json) | Meeting calendars, agendas and legislative records |
+
+[Request data](https://github.com/ctl0v0/new-haven-civic-data-directory/issues/new?template=data-request.yml) · [Report a correction](https://github.com/ctl0v0/new-haven-civic-data-directory/issues/new?template=source-correction.yml) · [Roadmap](ROADMAP.md) · [Peer-city research](research/peer-cities.md)
+
+The website is not deployed yet. Deployment instructions are in [site/README.md](site/README.md).
+
+## Understand the status
+
+- **Source located:** a source was identified, but its access instructions have not been fully tested.
+- **Access tested:** a page, metadata, download or query was inspected successfully. The evidence and limitations state exactly what was checked; this does not imply the complete dataset was downloaded.
+- **Needs investigation:** a significant discovery or access question remains.
+
+The initial research/check date is October 6, 2026. An entry's checked_on date is when access was checked, not the date the publisher updated the data. Indexed search results are marked as such; they are weaker evidence than inspecting current content directly.
+
+A source being public does not establish its reuse license, currentness, completeness or bulk-access cost. Unknowns stay explicit. A browser lookup, map viewer, dataset download and API are different access methods.
+
+## Build
+
+Requires Node.js 22 or later. No dependency installation is needed.
+
+```sh
+npm run build
+```
+
+This validates sources/*.json and generates dist/index.html and dist/catalog.json, then copies the website styles and search script. Open dist/index.html directly in a browser. All six details are rendered as static HTML, so the directory also works without JavaScript. Search and category filtering enhance browsing when JavaScript is available.
+
+## Contribute and maintain
+
+Edit one canonical JSON source record and submit a pull request. CI validates records and builds the website; pages are generated rather than edited separately. See [CONTRIBUTING.md](CONTRIBUTING.md) and [the source template](templates/source.json).
+
+At weekly meetings, contributors can take one investigation or review one entry. Record the evidence, what was tested and unresolved questions. Entry maintainers are initially unassigned; they are distinct from the organizations publishing the original data.
+
+## Scope
+
+V1 provides documentation, a simple directory website, requests and an investigation roadmap. Data acquisition infrastructure, dataset explorers, accounts, databases and MCP servers are future work driven by actual requests.
+
+The [Civic Data Commons finance project](https://github.com/ctl0v0/civic-data-commons) remains separate. This directory links to its documented research preview rather than copying its application or data. Its repository is private at initial directory setup; public visitors may not be able to follow those links.
+
+The directory is independent of city government. City outreach is drafted for review before sending. No city or vendor data is redistributed here.

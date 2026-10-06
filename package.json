@@ -1,0 +1,11 @@
+{
+  "name": "new-haven-civic-data-directory",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

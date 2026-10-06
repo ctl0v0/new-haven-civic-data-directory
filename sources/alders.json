@@ -1,0 +1,62 @@
+{
+  "checked_on": "2026-10-06",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "alders",
+  "title": "Board of Alders roster",
+  "category": "Government",
+  "publisher": "City of New Haven — Board of Alders / Legislative Services",
+  "source_type": "official",
+  "status": "Source located",
+  "description": "Find elected representatives and their published ward contact information.",
+  "url": "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders",
+  "access": "Website table",
+  "formats": [
+    "HTML"
+  ],
+  "fields": [
+    [
+      "Ward",
+      "Ward identifier"
+    ],
+    [
+      "Name",
+      "Published representative name"
+    ],
+    [
+      "Address / ZIP code",
+      "Published contact address"
+    ],
+    [
+      "Telephone",
+      "Published contact number"
+    ],
+    [
+      "Ward email",
+      "Published ward contact information"
+    ]
+  ],
+  "steps": [
+    "Open the city's List of Alders page in a browser.",
+    "Use its ward column to find the representative and published contact details.",
+    "Check the roster again before using it for current representation."
+  ],
+  "contact": "Board of Alders / Legislative Services; website-maintenance contact not confirmed.",
+  "limitations": [
+    "Official search results show the table headings; direct page retrieval returned 403 in this session.",
+    "No CSV download or API has been verified.",
+    "A roster does not establish ward geography or historical terms."
+  ],
+  "next": [
+    "Verify the full roster in a browser.",
+    "Identify a published contact responsible for roster corrections."
+  ],
+  "evidence": [
+    {
+      "url": "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders",
+      "note": "Official page identified through indexed search; direct retrieval blocked."
+    }
+  ]
+}

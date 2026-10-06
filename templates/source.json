@@ -1,0 +1,34 @@
+{
+  "checked_on": "YYYY-MM-DD",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "replace-with-source-id",
+  "title": "Source title",
+  "category": "Category",
+  "publisher": "Publishing organization",
+  "source_type": "official",
+  "status": "Needs investigation",
+  "description": "What this source enables someone to build or understand.",
+  "url": "https://example.org/replace-with-source",
+  "access": "Unknown",
+  "formats": [],
+  "fields": [],
+  "steps": [
+    "Replace with practical access instructions."
+  ],
+  "contact": "Not confirmed",
+  "limitations": [
+    "Availability and scope have not been verified."
+  ],
+  "next": [
+    "Locate an authoritative source and test access."
+  ],
+  "evidence": [
+    {
+      "url": "https://example.org/replace-with-evidence",
+      "note": "Replace with evidence and the scope of your check."
+    }
+  ]
+}
