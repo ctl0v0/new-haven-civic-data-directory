@@ -9,7 +9,7 @@ for (const file of (await readdir(new URL('sources/', root))).filter(f=>f.endsWi
     if (typeof entry[field] !== 'string' || !entry[field].trim()) throw new Error(file+': missing '+field);
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.id) || file !== entry.id+'.json') throw new Error(file+': invalid ID');
-  if (!['Source located','Access tested','Needs investigation'].includes(entry.status)) throw new Error(file+': invalid status');
+  if (!['Source located','Access tested','Needs investigation','In progress'].includes(entry.status)) throw new Error(file+': invalid status');
   if (!['official','official-vendor','community'].includes(entry.source_type)) throw new Error(file+': invalid source type');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.checked_on) || !Number.isFinite(Date.parse(entry.checked_on))) throw new Error(file+': invalid date');
   for (const field of ['formats','steps','limitations','next']) if (!Array.isArray(entry[field]) || entry[field].some(v=>typeof v!=='string')) throw new Error(file+': invalid '+field);

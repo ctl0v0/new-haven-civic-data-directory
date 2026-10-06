@@ -16,7 +16,7 @@ Use HTTPS links. Do not enter credentials or private contact information. Prefer
 
 - id: stable lowercase words joined by hyphens.
 - source_type: official, official-vendor, or community.
-- status: Source located, Access tested, or Needs investigation.
+- status: Source located, Access tested, Needs investigation, or In progress.
 - formats: only inspected or explicitly advertised formats; clarify advertised-only access in limitations.
 - fields: pairs of the source's field label and a plain-language meaning. Use an empty array if the schema is unverified.
 - cost and terms: distinguish browser access from bulk exports and reuse rights. Do not turn unknown into free or open.

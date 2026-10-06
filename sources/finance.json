@@ -9,66 +9,51 @@
   "category": "Finance",
   "publisher": "City of New Haven — Office of Policy, Management and Grants",
   "source_type": "official",
-  "status": "Source located",
-  "description": "Official financial reports and links to the community's separately maintained finance research package.",
+  "status": "In progress",
+  "description": "Finance source documentation is in progress. Official city report links are provided as starting points.",
   "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
-  "access": "Official report indexes; community CSV package",
-  "formats": [
-    "PDF",
-    "CSV (community copy)"
-  ],
-  "fields": [
-    [
-      "Fiscal year / reporting period",
-      "Document-specific period"
-    ],
-    [
-      "Department / account",
-      "Labels vary by report"
-    ],
-    [
-      "Budget / actual / encumbrance",
-      "Different financial measures; availability varies"
-    ]
-  ],
+  "access": "In progress — official city links only",
+  "formats": [],
+  "fields": [],
   "steps": [
-    "Start at the official annual budget/audit or monthly-report index.",
-    "Choose the exact document and reporting period; inspect its column definitions.",
-    "For community-extracted CSVs, read the finance package README, dictionary, coverage and issues before analysis."
+    "This directory entry is still being prepared. For now, visit the official annual budget/audit index or official monthly reports.",
+    "Available files, field definitions and access instructions will be documented after verification."
   ],
-  "contact": "Office of Policy, Management and Grants; data-maintenance contact unconfirmed. Community package README publishes contact@miscellany.blog for corrections.",
+  "contact": "Office of Policy, Management and Grants; data-maintenance contact not confirmed.",
   "limitations": [
-    "Official indexes are documented by the existing project; current file downloads were not tested in this session.",
-    "Community extracts are a research preview with incomplete review, not city-validated data.",
-    "Missing payment-register coverage means unavailable data, not zero payments.",
-    "Monthly financial measures and aggregation levels must not be summed indiscriminately."
+    "This is an in-progress directory entry; available files, formats, coverage and field definitions have not yet been verified.",
+    "The official report links are starting points, not a ready-to-use dataset."
   ],
   "next": [
-    "Verify current official download links in a browser.",
-    "Confirm finance source contacts, native spreadsheet availability and refresh practices."
+    "Verify the official report indexes and current downloads.",
+    "Document available files, formats, fields, reporting periods and city maintenance contact."
   ],
   "related": [
     {
       "label": "Official monthly reports",
       "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports"
-    },
-    {
-      "label": "Community finance package",
-      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/README.md"
-    },
-    {
-      "label": "Community data dictionary",
-      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/docs/data-dictionary.md"
     }
   ],
   "evidence": [
     {
-      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/docs/source-notes.md",
-      "note": "Existing project's documented official source locations reviewed."
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
+      "note": "Official report index identified; current file downloads have not been verified."
     },
     {
-      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/data/metadata.json",
-      "note": "Research-preview scope and review limitations inspected."
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
+      "note": "Official monthly-report index identified; current file downloads have not been verified."
+    }
+  ],
+  "step_links": [
+    {
+      "step": 0,
+      "label": "official annual budget/audit index",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
+    },
+    {
+      "step": 0,
+      "label": "official monthly reports",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports"
     }
   ]
 }

@@ -9,7 +9,7 @@ A community guide to finding and using New Haven civic data. People and their ag
 | [Alders](sources/alders.json) | Elected representatives and published ward contacts |
 | [Assessor](sources/assessor.json) | Property assessment lookup |
 | [Parcels](sources/gis-parcels.json) | Parcel geometry and identifiers |
-| [Finance](sources/finance.json) | Official budget, audit and monthly-report indexes |
+| [Finance](sources/finance.json) | In progress — official report links only |
 | [Ward boundaries](sources/ward-boundaries.json) | Discovery routes; usable boundary data still needs verification |
 | [Meetings and legislation](sources/meetings-legislation.json) | Meeting calendars, agendas and legislative records |
 
@@ -22,6 +22,7 @@ A community guide to finding and using New Haven civic data. People and their ag
 - **Source located:** a source was identified, but its access instructions have not been fully tested.
 - **Access tested:** a page, metadata, download or query was inspected successfully. The evidence and limitations state exactly what was checked; this does not imply the complete dataset was downloaded.
 - **Needs investigation:** a significant discovery or access question remains.
+- **In progress:** documentation is being prepared; any links are preliminary starting points, not a ready-to-use dataset.
 
 The initial research/check date is October 6, 2026. An entry's checked_on date is when access was checked, not the date the publisher updated the data. Indexed search results are marked as such; they are weaker evidence than inspecting current content directly.
 
