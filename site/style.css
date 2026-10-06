@@ -117,3 +117,6 @@ header .site-nav{flex:0 1 auto}
 .source-detail h2[id]{scroll-margin-top:1.5rem}
 @media(min-width:1000px){.source-layout{grid-template-columns:210px minmax(0,1fr);gap:1.5rem}.source-index{position:sticky;top:1rem;max-height:calc(100vh - 2rem);overflow-y:auto}.source-index ul{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.source-detail h2[id]{scroll-margin-top:1rem}}
+
+.source-actions h2.source-link-label{font-size:1.35rem;line-height:1.3;color:var(--ink);margin:0 0 .8rem}
+@media(max-width:360px){.source-index ul{grid-template-columns:1fr}}
