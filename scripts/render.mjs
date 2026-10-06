@@ -1,5 +1,5 @@
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
-const link = (url, label) => `<a href="${escapeHTML(url)}">${escapeHTML(label)}</a>`;
+const link = (url, label, className='') => `<a${className ? ` class="${escapeHTML(className)}"` : ''} href="${escapeHTML(url)}">${escapeHTML(label)}</a>`;
 const renderStep = (entry, value, index) => {
   let text = escapeHTML(value);
   for (const item of entry.step_links || []) {
@@ -14,7 +14,7 @@ function page({title, repo, prefix='', content, search=false, source=false}) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(title)}</title><meta name="description" content="Find New Haven civic data, access instructions, contacts and known gaps."><link rel="stylesheet" href="${prefix}style.css"></head><body class="${source ? 'source-page' : 'directory-page'}">
 <a class="skip" href="#main">Skip to content</a>
 <header><p class="eyebrow">A community resource</p>${source ? `<p>${link(prefix+'index.html','New Haven Civic Data Directory')}</p><h1>${escapeHTML(title)}</h1>` : '<h1>New Haven Civic Data Directory</h1><p>Find city data. Understand how to use it. Help fill the gaps.</p>'}
-<nav aria-label="Project">${source ? link(prefix+'index.html','Browse all sources') : ''} ${link(repo,'Repository')} ${link(prefix+'request.html','Request data')} ${link(repo+'/blob/main/ROADMAP.md','Investigation roadmap')}</nav></header>
+<nav aria-label="Project">${source ? link(prefix+'index.html','Browse all sources') : ''} ${link(repo,'Repository')} ${link(prefix+'request.html','Request data','button-link')} ${link(repo+'/blob/main/ROADMAP.md','Investigation roadmap')}</nav></header>
 <main id="main">${content}</main><footer><p>Independent community directory. Source publishers maintain their original data; entry maintainers document access. Confirm dates, costs and terms before relying on a source.</p><p>${link(repo+'/blob/main/research/peer-cities.md','Peer-city research')} · ${link(prefix+'catalog.json','Download directory JSON')}</p></footer>
 ${search ? '<script src="search.js" defer></script>' : ''}</body></html>`;
 }
