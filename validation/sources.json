@@ -5,7 +5,12 @@
       "alders"
     ],
     "group": "alders",
-    "validator": "alders-html"
+    "validator": "alders-html",
+    "title": "Alders roster extraction",
+    "scope": "Retrieve the official HTML table, parse 30 representative rows and report missing ward identifiers.",
+    "source_urls": [
+      "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders"
+    ]
   },
   {
     "id": "city-property-apis",
@@ -14,7 +19,14 @@
       "gis-parcels"
     ],
     "group": "property",
-    "validator": "city-property-apis"
+    "validator": "city-property-apis",
+    "title": "Property API samples",
+    "scope": "Inspect parcel, address and zoning field definitions and request one selected-field record from each layer.",
+    "source_urls": [
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson"
+    ]
   },
   {
     "id": "known-property-lookup",
@@ -22,7 +34,12 @@
       "assessor"
     ],
     "group": "property",
-    "validator": "known-property-lookup"
+    "validator": "known-property-lookup",
+    "title": "City Hall property lookup",
+    "scope": "Filter a known public address and verify that parcel and account queries reproduce its selected fields.",
+    "source_urls": [
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson"
+    ]
   },
   {
     "id": "known-address-parcel-zoning",
@@ -30,7 +47,14 @@
       "gis-parcels"
     ],
     "group": "property",
-    "validator": "known-gis-workflow"
+    "validator": "known-gis-workflow",
+    "title": "City Hall parcel and zoning lookup",
+    "scope": "Check matching address rows, their shared point, parcel identity, zoning intersections and longitude/latitude geometry.",
+    "source_urls": [
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
+      "https://gis.newhavenct.gov/server/rest/services/Hosted/Zoning_(View)/FeatureServer/0?f=pjson"
+    ]
   },
   {
     "id": "finance-documents",
@@ -38,7 +62,13 @@
       "finance"
     ],
     "validator": "finance-documents",
-    "group": "finance"
+    "group": "finance",
+    "title": "Finance PDF extraction",
+    "scope": "Discover official reports, download one monthly and one adopted-budget PDF, inspect up to 12 pages each, and check one monthly revenue row and two formulas.",
+    "source_urls": [
+      "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
+      "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
+    ]
   },
   {
     "id": "meetings-legislation",
@@ -46,7 +76,12 @@
       "meetings-legislation"
     ],
     "validator": null,
-    "reason": "Calendar and document validators are not yet implemented."
+    "reason": "Calendar and document validators are not yet implemented.",
+    "title": "Meetings and legislation",
+    "scope": "No automated calendar or document check is configured.",
+    "source_urls": [
+      "https://newhaven-ct.legistar.com/Calendar.aspx"
+    ]
   },
   {
     "id": "ward-boundaries",
@@ -54,6 +89,11 @@
       "ward-boundaries"
     ],
     "validator": null,
-    "reason": "No current boundary download or layer has been verified."
+    "reason": "No current boundary download or layer has been verified.",
+    "title": "Ward boundaries",
+    "scope": "No current boundary download or automated geography check is configured.",
+    "source_urls": [
+      "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
+    ]
   }
 ]

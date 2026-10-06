@@ -67,5 +67,10 @@
     "evidence": [
       "https://www.newhavenct.gov/government/departments-divisions/engineering/maps"
     ]
+  },
+  "documentation_provenance": {
+    "recorded_on": "2026-10-06",
+    "record_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/74e0a30397036b2f7e4d93e700e1b0fb04eeb534/sources/ward-boundaries.json",
+    "scope": "Immutable snapshot of the documented findings; not a new verification of the original source."
   }
 }

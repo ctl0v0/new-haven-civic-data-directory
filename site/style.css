@@ -177,3 +177,15 @@ header .site-nav{flex:0 1 auto}
 .source-card-top .source-actions h2.source-link-label{font-size:.8rem;line-height:1.4;color:var(--muted);margin:0 0 .3rem}
 .source-card-top .source-actions .button-link{font-size:.9rem;min-height:40px;padding:.4rem .8rem}
 @media(max-width:480px){.source-card-top{gap:.75rem}.source-card-top>.eyebrow{font-size:.85rem}.source-card-top .source-actions .button-link{font-size:.85rem;padding:.4rem .65rem}}
+
+.source-evidence h3{font-size:1.05rem;margin:1.2rem 0 .6rem}
+.source-detail .evidence-check-list{list-style:none;padding:0;margin:0;max-width:none}
+.evidence-check-list>li{border:1px solid var(--line);border-radius:6px;padding:.85rem 1rem;margin-bottom:.75rem}
+.evidence-check-list h4{font-size:1rem;margin:0 0 .4rem;line-height:1.4}
+.evidence-check-list>li>p{font-size:.9rem;line-height:1.5;margin:.4rem 0}
+.evidence-check-list .evidence-check-meta{font-size:.8rem;line-height:1.7}
+.source-detail .evidence-check-list ul{margin:.5rem 0 0}
+.source-detail .evidence-check-list ul li{margin-bottom:.3rem}
+.documented-evidence{margin-top:.75rem;border-top:1px solid var(--line);padding-top:.75rem}
+.documented-evidence summary{cursor:pointer;color:var(--accent);font-size:.9rem;font-weight:600}
+.documented-evidence .check-note{margin-top:.3rem}

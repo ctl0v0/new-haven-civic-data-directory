@@ -61,6 +61,27 @@ const renderLatestCheck = check => {
  return '<div class="latest-source-check"><h3>Latest source check</h3><p><strong>'+escapeHTML(labels[check.status]||'Review needed')+(check.status==='passed'&&notes?' with notes':'')+'</strong> · <time datetime="'+escapeHTML(check.checked_at)+'">'+escapeHTML(check.checked_at.slice(0,10))+'</time> · '+link(check.run_url,'View check on GitHub')+'</p><p class="check-note">Checks access and the documented sample. It does not automatically renew this readiness assessment.</p></div>';
 };
 
+
+const renderCheckEvidence = (entry, repo, latestCheck) => {
+ const statusLabels={passed:'Passed',changed:'Changed — review needed',blocked:'Blocked',unavailable:'Unavailable','not-configured':'Not configured'};
+ const checks=latestCheck?.checks||[];
+ const automated=checks.length ? '<ul class="evidence-check-list">'+checks.map(check=>{
+  const run=check.run_url||latestCheck.run_url;
+  const revision=check.revision||latestCheck.revision;
+  const date=(check.checked_at||latestCheck.checked_at).slice(0,10);
+  const status=(statusLabels[check.status]||'Review needed')+(check.status==='passed'&&check.warnings?.length?' with notes':'');
+  return '<li><h4>'+escapeHTML(check.title||'Source validation')+'</h4><p class="evidence-check-meta"><span class="badge">'+escapeHTML(status)+'</span> · '+escapeHTML(date)+' · '+link(run,check.status==='not-configured'?'View validation report':'View exact GitHub run')+' · '+link(repo+'/commit/'+revision,'Checked code')+'</p><p>'+escapeHTML(check.scope||'See the run for the exact tested scope.')+'</p>'+(check.reason?'<p class="check-note">'+escapeHTML(check.reason)+'</p>':'')+(check.warnings?.length?'<ul class="check-note">'+check.warnings.map(note=>'<li>'+escapeHTML(note)+'</li>').join('')+'</ul>':'')+(check.source_urls?.length?'<p class="check-note">Original sources: '+check.source_urls.map((url,index)=>link(url,check.source_urls.length===1?'Open original source':'Source '+(index+1))).join(' · ')+'</p>':'')+'</li>';
+ }).join('')+'</ul>' : '<p>No automated evidence has been published for this source yet.</p>';
+ const provenance=entry.documentation_provenance;
+ const snapshot=provenance?'<p class="check-note">Documentation snapshot: '+escapeHTML(provenance.recorded_on)+' · '+link(provenance.record_url,'View dated repository record')+'. '+escapeHTML(provenance.scope)+'</p>':'<p class="check-note">These references are documentation notes, not a fresh automated source check.</p>';
+ const references='<details class="documented-evidence"><summary>Documented references ('+entry.evidence.length+')</summary><ul>'+entry.evidence.map(item=>{
+  const named=(entry.step_links||[]).find(link=>link.url===item.url);
+  const label=named?.label||(item.url===entry.url?'Original source':new URL(item.url).hostname==='github.com'?'Repository reference':'Official reference');
+  return '<li>'+link(item.url,label)+'<p class="check-note">'+escapeHTML(item.note)+'</p></li>';
+ }).join('')+'</ul></details>';
+ return '<h3>Automated checks</h3>'+automated+'<h3>Documentation references</h3>'+snapshot+references;
+};
+
 export function renderSource(entry, repo, latestCheck) {
   const definition = (label,value) => `<dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd>`;
   const fact = (label,value) => `<div>${definition(label,value)}</div>`;
@@ -78,7 +99,7 @@ ${entry.fields.length ? `<table class="source-fields"><thead><tr><th scope="col"
 <section aria-labelledby="related-heading"><h2 id="related-heading">Related sources</h2>${entry.related?.length ? `<ul>${entry.related.map(value=>`<li>${link(value.url,value.label)}</li>`).join('')}</ul>` : '<p>No related sources are documented yet.</p>'}</section>
 <section aria-labelledby="upkeep-heading"><h2 id="upkeep-heading">Contacts, costs and upkeep</h2><dl class="source-upkeep">${definition('Contact',entry.contact)}${definition('Cost',entry.cost)}${definition('Reuse terms',entry.terms)}${definition('Update frequency',entry.update_frequency)}${definition('Entry maintainer',entry.entry_maintainer)}${definition('Source type',entry.source_type)}</dl></section>
 <section aria-labelledby="next-heading"><h2 id="next-heading">Next investigation</h2>${list(entry.next)}</section>
-<section aria-labelledby="evidence-heading"><h2 id="evidence-heading">Check evidence</h2><ul>${entry.evidence.map(value=>`<li>${link(value.url,value.note)}</li>`).join('')}</ul></section>
+<section aria-labelledby="evidence-heading" class="source-evidence"><h2 id="evidence-heading">Check evidence</h2>${renderCheckEvidence(entry,repo,latestCheck)}</section>
 <p class="source-end-links">${link(repo+'/blob/main/sources/'+entry.id+'.json','View entry in GitHub')} · ${link(repo+'/issues/new?template=source-correction.yml','Report a correction')} · ${link('../index.html','Back to directory')}</p>${renderReadinessDialog()}</article></div>`;
   return page({title:entry.title,repo,prefix:'../',content,source:true});
 }

@@ -20,3 +20,15 @@ test('reject unsupported links and states',()=>{
  assert.throws(()=>updateResults({},{checked_at:'2026-10-06',checks:[]},'https://example.com',sha));
  assert.throws(()=>updateResults({},{checked_at:'2026-10-06',checks:[{source_ids:['alders'],status:'unknown'}]},url,sha));
 });
+
+test('each finding retains scope, provenance and official links without exposing attributes',()=>{
+ const report={checked_at:'2026-10-06T20:00:00Z',checks:[{id:'finance',source_ids:['finance'],status:'passed',observations:[{url:'https://www.newhavenct.gov/reports',sample:{url:'https://www.newhavenct.gov/report.pdf',records:[{owner:'excluded'}]}}]}]};
+ const result=updateResults({sources:{}},report,url,sha,[{id:'finance',title:'PDF sample',scope:'One table row',source_urls:['https://example.com/untrusted']}]);
+ const finding=result.sources.finance.checks[0];
+ assert.equal(finding.title,'PDF sample');
+ assert.equal(finding.scope,'One table row');
+ assert.equal(finding.run_url,url);
+ assert.equal(finding.revision,sha);
+ assert.deepEqual(finding.source_urls,['https://www.newhavenct.gov/reports','https://www.newhavenct.gov/report.pdf']);
+ assert.equal(JSON.stringify(finding).includes('owner'),false);
+});
