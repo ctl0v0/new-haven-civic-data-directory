@@ -14,7 +14,7 @@ The static website, JSON catalog, source template and GitHub request/correction 
 | 1 | Assessment schema and bulk access | Landing page inspected | Inspect sample property records; identify available exports and fees |
 | 1 | Parcel service | Metadata inspected | Test a small query, coordinate output, joins, terms and freshness |
 | 1 | Ward boundaries | Needs investigation | Locate a current downloadable layer and confirm effective date |
-| 1 | Finance access | In progress — official report links only | Check current city downloads and published maintenance contact |
+| 1 | Finance access | Official reports located; file-level access and coverage checks in progress | Check current city downloads and published maintenance contact |
 | 1 | Legistar | Calendar inspected | Inspect one agenda and record; investigate supported exports |
 | 2 | Website launch | Implementation draft | Merge reviewed files, configure Pages, inspect desktop/mobile output |
 

@@ -3,57 +3,88 @@
   "entry_maintainer": "Unassigned",
   "cost": "Unknown; no bulk-access price confirmed.",
   "terms": "Reuse terms not confirmed.",
-  "update_frequency": "Not confirmed.",
+  "update_frequency": "Monthly reports are described by the city as a monthly reporting requirement. Actual posting dates and archive completeness have not been verified; budgets and audits are annual document series.",
   "id": "finance",
   "title": "Budgets and monthly finance reports",
   "category": "Finance",
   "publisher": "City of New Haven — Office of Policy, Management and Grants",
   "source_type": "official",
-  "status": "In progress",
-  "description": "Finance source documentation is in progress. Official city report links are provided as starting points.",
-  "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
-  "access": "In progress — official city links only",
-  "formats": [],
-  "fields": [],
+  "status": "Source located",
+  "description": "Official city monthly reports describe budgeted and actual revenues, agency expenditures and year-end projections. Annual budgets and audits are available from a separate city index.",
+  "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
+  "access": "City report indexes and document downloads",
+  "formats": [
+    "HTML report indexes",
+    "PDF budget documents (advertised by city index)"
+  ],
+  "fields": [
+    [
+      "Reporting month / fiscal year",
+      "The period represented by the selected report; exact document labels remain to be checked."
+    ],
+    [
+      "Budgeted and actual revenues",
+      "Report content described on the city's monthly-report page; not a verified export column."
+    ],
+    [
+      "Agency budgeted and actual expenditures",
+      "Spending summaries by budgeted agency described by the city; exact table layouts remain to be checked."
+    ],
+    [
+      "Year-end revenue / expense estimates",
+      "Projections for the fiscal year, distinct from amounts already reported as actual."
+    ],
+    [
+      "Projected surplus / deficit",
+      "Expected year-end budget result described on the monthly-report page."
+    ]
+  ],
   "steps": [
-    "This directory entry is still being prepared. For now, visit the official annual budget/audit index or official monthly reports.",
-    "Available files, field definitions and access instructions will be documented after verification."
+    "Open the official monthly reports page and select the fiscal year and reporting month you need.",
+    "For annual budget books and audit reports, use the Annual City Budgets & Audits page. Check whether each budget is proposed or Board-approved.",
+    "Open the original document and read its reporting period, headings, notes and units before using its figures.",
+    "For software use, inspect the actual document format and table layout. A spreadsheet export or API has not been verified by this directory."
   ],
   "contact": "Office of Policy, Management and Grants; data-maintenance contact not confirmed.",
   "limitations": [
-    "This is an in-progress directory entry; available files, formats, coverage and field definitions have not yet been verified.",
-    "The official report links are starting points, not a ready-to-use dataset."
+    "Report contents are documented from the city's indexed monthly-report page. The exact files, latest available month, archive completeness and detailed column labels have not been verified.",
+    "The annual index advertises PDF budget documents. A ready-to-query CSV, spreadsheet export or API has not been verified; document tables may require manual reading or extraction.",
+    "The city's described monthly reports summarize revenues, budgeted agencies and projections. This description does not establish access to vendor-level payments, invoices or a complete transaction ledger.",
+    "Proposed budgets, approved budgets, actual figures and forecasts represent different things. Read each document's labels; do not treat projections as money already spent or combine cumulative periods as separate monthly spending.",
+    "Monthly reporting and annual audit documents have different purposes. This directory has not established their accounting basis or how their totals reconcile.",
+    "Direct requests to the city monthly-report page returned 403 in this browsing tool. Browser access may work; reliable programmatic retrieval is not verified."
   ],
   "next": [
-    "Verify the official report indexes and current downloads.",
-    "Document available files, formats, fields, reporting periods and city maintenance contact."
+    "Inspect a recent monthly report in a browser and document its format, exact fields, units and coverage.",
+    "Verify archive coverage, posting dates and any existing spreadsheets or supported API.",
+    "Confirm the city's published maintenance contact and document reuse terms."
   ],
   "related": [
     {
-      "label": "Official monthly reports",
-      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports"
+      "label": "Official annual budgets and audits",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
     }
   ],
   "evidence": [
     {
-      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
-      "note": "Official report index identified; current file downloads have not been verified."
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
+      "note": "Official indexed page describes required monthly report contents: revenues, agency expenditures, fiscal-year estimates and projected surplus/deficit. Direct retrieval returned 403."
     },
     {
-      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
-      "note": "Official monthly-report index identified; current file downloads have not been verified."
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
+      "note": "Official indexed page lists proposed and Board-approved budget documents and audits, including PDF budget links. Current file downloads have not been tested."
     }
   ],
   "step_links": [
     {
       "step": 0,
-      "label": "official annual budget/audit index",
-      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
+      "label": "official monthly reports page",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports"
     },
     {
-      "step": 0,
-      "label": "official monthly reports",
-      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports"
+      "step": 1,
+      "label": "Annual City Budgets & Audits page",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits"
     }
   ]
 }
