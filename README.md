@@ -15,7 +15,7 @@ A community guide to finding and using New Haven civic data. People and their ag
 
 [Request data](https://github.com/ctl0v0/new-haven-civic-data-directory/issues/new?template=data-request.yml) · [Report a correction](https://github.com/ctl0v0/new-haven-civic-data-directory/issues/new?template=source-correction.yml) · [Roadmap](ROADMAP.md) · [Peer-city research](research/peer-cities.md)
 
-Website deployment and local preview instructions are in [site/README.md](site/README.md).
+**[Browse the live directory](https://new-haven-civic-data-directory.vercel.app/).** Deployment and local preview instructions are in [site/README.md](site/README.md).
 
 ## Understand the status
 
