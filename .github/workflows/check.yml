@@ -15,6 +15,7 @@ jobs:
           node-version: '22'
       - run: npm test
       - run: node --check site/request.js
+      - run: node --check site/agent-brief.js
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:

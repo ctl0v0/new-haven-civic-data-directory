@@ -30,7 +30,10 @@ if (!entries.length || new Set(entries.map(e=>e.id)).size !== entries.length) th
 await mkdir(new URL('dist/',root),{recursive:true});
 await writeFile(new URL('dist/index.html',root),render(entries,repo));
 await mkdir(new URL('dist/sources/',root),{recursive:true});
-for (const entry of entries) await writeFile(new URL('dist/sources/'+entry.id+'.html',root),renderSource(entry,repo));
+for (const entry of entries) {
+  await writeFile(new URL('dist/sources/'+entry.id+'.html',root),renderSource(entry,repo));
+  await writeFile(new URL('dist/sources/'+entry.id+'.json',root),JSON.stringify(entry,null,2)+'\n');
+}
 await writeFile(new URL('dist/catalog.json',root),JSON.stringify(entries,null,2)+'\n');
-for (const name of ['style.css','search.js','request.js','request.html']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
+for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
 console.log('Validated and built '+entries.length+' source entries.');
