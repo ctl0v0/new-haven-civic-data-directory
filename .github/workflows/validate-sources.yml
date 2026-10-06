@@ -11,7 +11,7 @@ on:
     - cron: '0 14 * * 1'
   push:
     branches: [main]
-    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'scripts/verify-finance.py', 'validation/**', '.github/workflows/validate-sources.yml']
+    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'scripts/review-source-changes.mjs', 'scripts/discover-wards.mjs', 'scripts/verify-finance.py', 'validation/**', '.github/workflows/validate-sources.yml']
 permissions:
   contents: read
 jobs:
@@ -23,6 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node scripts/discover-wards.mjs
       - run: python3 -m pip install pypdf==5.9.0
       - run: python3 -m unittest discover -s tests -p 'test_*.py'
       - run: node scripts/validate-sources.mjs "${{ inputs.source || 'all' }}"
@@ -42,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +56,10 @@ jobs:
           name: source-validation
           path: verification/
       - run: node scripts/publish-source-checks.mjs
+      - name: Review changed source findings
+        run: node scripts/review-source-changes.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Save public check summaries
         run: |
           git config user.name "github-actions[bot]"

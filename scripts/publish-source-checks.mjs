@@ -2,6 +2,20 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 const statuses=new Set(['passed','changed','blocked','unavailable','not-configured']);
 const priority=['unavailable','blocked','changed','not-configured','passed'];
+
+export function summarizeFindings(observations){
+ return (observations||[]).map(item=>{
+  const result={};
+  for(const key of ['rowsExtracted','uniqueWards','missingNumberedWards','rowsWithoutWard','headings','exportedFields','dataFingerprint','recordFingerprint'])if(Object.hasOwn(item,key))result[key]=item[key];
+  if(item.metadata)result.schema={missingFields:item.metadata.missingRequestedFields||[],fields:(item.metadata.requestedFields||[]).map(f=>({name:f.name,type:f.type})).sort((a,b)=>a.name.localeCompare(b.name))};
+  if(item.query)result.sample={rowsReturned:item.query.rowsReturned,returnedFields:[...(item.query.returnedFields||[])].sort()};
+  for(const key of ['address','parcel','zoning','identifiers'])if(item[key])result[key]=Object.fromEntries(Object.entries(item[key]).filter(([name])=>['rowsReturned','distinctLocations','normalizedAddressesMatchInput','validLongitudeLatitudePolygons','matchesIndependentAddressLookup','requiredFieldsPresent','parcelPresent','accountPresent'].includes(name)));
+  if(item.repeatLookups)result.repeatLookups=item.repeatLookups.map(({field,rowsReturned,sameRecordAndSelectedValues})=>({field,rowsReturned,sameRecordAndSelectedValues}));
+  if(item.sample)result.document={label:item.sample.label,url:item.sample.url,sha256:item.sample.source_sha256,pages:item.sample.pages,pagesInspected:item.sample.pages_inspected,textPages:item.sample.pages_with_substantial_text,revenueRowPage:item.sample.checked_revenue_sample?.pdf_page,revenueRowChecks:item.sample.checked_revenue_sample?.checks};
+  return result;
+ });
+}
+
 export function updateResults(previous,report,runUrl,revision,registry=[]){
  if(!/^https:\/\/github\.com\/ctl0v0\/new-haven-civic-data-directory\/actions\/runs\/\d+$/.test(runUrl))throw Error('Invalid validation run link');
  if(!/^[a-f0-9]{40}$/.test(revision)||!Number.isFinite(Date.parse(report.checked_at)))throw Error('Invalid validation provenance');
@@ -18,7 +32,7 @@ export function updateResults(previous,report,runUrl,revision,registry=[]){
     if(typeof url!=='string')return false;
     try{const parsed=new URL(url);return parsed.protocol==='https:'&&!parsed.username&&!parsed.password&&(parsed.hostname==='newhavenct.gov'||parsed.hostname.endsWith('.newhavenct.gov')||parsed.hostname==='newhaven-ct.legistar.com'||parsed.hostname==='gis.vgsi.com');}catch{return false;}
    }))];
-   (grouped[id]||=[]).push({id:check.id,title:definition.title||'Source validation',scope:definition.scope||'See the exact run for the tested scope.',status:check.status,checked_at:report.checked_at,run_url:runUrl,revision,source_urls,reason:typeof check.reason==='string'?check.reason.slice(0,500):null,warnings:(check.observations||[]).flatMap(x=>x.warnings||[]).filter(x=>typeof x==='string').map(x=>x.slice(0,500))});
+   (grouped[id]||=[]).push({id:check.id,title:definition.title||'Source validation',scope:definition.scope||'See the exact run for the tested scope.',status:check.status,checked_at:report.checked_at,run_url:runUrl,revision,source_urls,findings:summarizeFindings(check.observations),reason:typeof check.reason==='string'?check.reason.slice(0,500):null,warnings:(check.observations||[]).flatMap(x=>x.warnings||[]).filter(x=>typeof x==='string').map(x=>x.slice(0,500))});
   }
  }
  for(const [id,checks] of Object.entries(grouped)){
@@ -34,6 +48,7 @@ async function main(){
  const runUrl='https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/'+process.env.GITHUB_RUN_ID;
  const registry=JSON.parse(await readFile('validation/sources.json','utf8'));
  const result=updateResults(previous,report,runUrl,process.env.GITHUB_SHA,registry);
+ await writeFile('verification/previous-source-checks.json',JSON.stringify(previous,null,2)+'\n');
  await writeFile('site/source-checks.json',JSON.stringify(result,null,2)+'\n');
  console.log('Published validation summaries only; source attributes and readiness assessments are unchanged.');
 }

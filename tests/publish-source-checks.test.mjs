@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {updateResults} from '../scripts/publish-source-checks.mjs';
+import {updateResults,summarizeFindings} from '../scripts/publish-source-checks.mjs';
 const url='https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/123';
 const sha='a'.repeat(40);
 test('publish only summaries and include failed checks',()=>{
@@ -31,4 +31,11 @@ test('each finding retains scope, provenance and official links without exposing
  assert.equal(finding.revision,sha);
  assert.deepEqual(finding.source_urls,['https://www.newhavenct.gov/reports','https://www.newhavenct.gov/report.pdf']);
  assert.equal(JSON.stringify(finding).includes('owner'),false);
+});
+
+test('findings preserve coverage and document hashes without raw attributes',()=>{
+ const findings=summarizeFindings([{rowsWithoutWard:1,dataFingerprint:'abc',records:[{owner:'PRIVATE'}],sample:{label:'Monthly',url:'https://www.newhavenct.gov/report',source_sha256:'def',pages:59,checked_revenue_sample:{amount:'PRIVATE',checks:{percentage:true}}}}]);
+ assert.equal(findings[0].rowsWithoutWard,1);
+ assert.equal(findings[0].document.sha256,'def');
+ assert.equal(JSON.stringify(findings).includes('PRIVATE'),false);
 });

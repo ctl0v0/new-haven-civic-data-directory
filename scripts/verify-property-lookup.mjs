@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 const layer='https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0';
 const fields=['objectid','parcel_id','account_number','property_address','total_assessed_parcel_value_x','total_assessed_land_value','total_assessed_bldg_value'];
 async function query(where){
@@ -32,6 +33,7 @@ try{
  }
  result.assessmentFields=fields.filter(f=>f.startsWith('total_assessed')).map(field=>({field,present:true,isNull:record[field]===null,isNonnegativeNumber:typeof record[field]==='number'&&Number.isFinite(record[field])&&record[field]>=0}));
  result.warnings=['Assessment valuation date, current tax implications, reuse rights and Vision browser comparison remain unverified. One address does not prove general address matching or identifier uniqueness.'];
+ result.recordFingerprint=createHash('sha256').update(JSON.stringify(fields.map(field=>[field,record[field]]))).digest('hex');
  result.status='passed';
 }catch(error){result.status='failed';result.error=error.message;process.exitCode=1;}
 console.log(JSON.stringify(result));

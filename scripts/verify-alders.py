@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """One read-only roster check. No contact addresses or phone values are logged."""
+import hashlib
 import json
 import re
 import sys
@@ -101,7 +102,7 @@ def main():
         output = {"source": SOURCE, "method": "Official HTML roster; ward label and representative columns only", "coverage": {"rosterRows": len(records), "numberedWards": len(wards), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled}, "warnings": warnings, "records": records}
         Path("verification").mkdir(exist_ok=True)
         Path("verification/alders-roster-sample.json").write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled, "exportedFields": ["ward", "ward_label", "representative"], "warnings": warnings, "note": "Parsing passed, with coverage gaps reported separately. No contact values logged. Election dates, current officeholding and reuse rights are not verified."}))
+        print(json.dumps({"status": "passed", "httpStatus": status, "contentType": content_type, "headings": headings, "dataFingerprint": hashlib.sha256(json.dumps(sorted(records,key=lambda r: (r["ward_label"] or "",r["representative"])),sort_keys=True).encode()).hexdigest(), "rowsExtracted": len(records), "uniqueWards": len(set(wards)), "missingNumberedWards": missing, "rowsWithoutWard": unlabelled, "exportedFields": ["ward", "ward_label", "representative"], "warnings": warnings, "note": "Parsing passed, with coverage gaps reported separately. No contact values logged. Election dates, current officeholding and reuse rights are not verified."}))
     except HTTPError as error:
         print(json.dumps({"status": "failed", "httpStatus": error.code, "reason": "Official page rejected the read-only request; no roster data extracted."}))
         sys.exit(1)

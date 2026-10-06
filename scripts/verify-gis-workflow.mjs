@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 const base='https://gis.newhavenct.gov/server/rest/services/Hosted/';
 const layers={
  address:base+'New_Haven_Addresses_Authoritative_view/FeatureServer/0',
@@ -55,6 +56,7 @@ try{
  if(!zoning.features.length)throw Error('No zoning rows intersected the tested point');
  if(!result.zoning.validLongitudeLatitudePolygons||!result.zoning.requiredFieldsPresent)throw Error('Zoning geometry or expected fields failed validation');
  result.warnings=['One public address was tested. Other address formats, multiple matches, overlays, boundaries, pagination and bulk workflows need separate checks. Zoning meanings, effective dates, reuse rights and source freshness are unconfirmed.'];
+ result.recordFingerprint=createHash('sha256').update(JSON.stringify({point,parcel:parcels.features[0].attributes,zoning:zoning.features.map(f=>f.attributes).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))})).digest('hex');
  result.status='passed';
 }catch(error){result.status='failed';result.error=error.message;process.exitCode=1;}
 console.log(JSON.stringify(result));

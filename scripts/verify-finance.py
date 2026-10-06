@@ -1,3 +1,4 @@
+import hashlib
 import json, re, urllib.request, urllib.parse
 from html.parser import HTMLParser
 class IndexParser(HTMLParser):
@@ -72,7 +73,7 @@ def inspect_pdf(document,kind):
         if 'BUDGET' in upper and ('ACTUAL' in upper or 'EXPENDITURE' in upper or 'REVENUE' in upper):
             table_pages.append({'page':i+1,'excerpt':text[:5000]})
         if len(table_pages)>=3: break
-    return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'checked_revenue_sample':row,'table_pages_identified':[p['page'] for p in table_pages], 'rights_notices_observed':any('All Rights Reserved' in t for t in texts),'kind':kind,'scope':('PDF text and one revenue row with two formulas checked; full report extraction not validated' if kind=='monthly' else 'First 12 PDF pages inspected for text only; annual numeric tables not validated')}
+    return {'label':document['label'],'url':document['url'],'bytes':len(content),'source_sha256':hashlib.sha256(content).hexdigest(),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'checked_revenue_sample':row,'table_pages_identified':[p['page'] for p in table_pages], 'rights_notices_observed':any('All Rights Reserved' in t for t in texts),'kind':kind,'scope':('PDF text and one revenue row with two formulas checked; full report extraction not validated' if kind=='monthly' else 'First 12 PDF pages inspected for text only; annual numeric tables not validated')}
 
 def main():
     failed=False
