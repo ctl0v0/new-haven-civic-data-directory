@@ -31,7 +31,25 @@ indexes=[
 def money(value):
     from decimal import Decimal
     negative=value.startswith('(')
-    number=Decimal(value.replace('
+    number=Decimal(value.replace('$','').replace(',','').strip('()'))
+    return -number if negative else number
+def revenue_sample(texts):
+    from decimal import Decimal, ROUND_HALF_UP
+    amount=r'(\(?\$[\d,]+(?:\.\d+)?\)?)'
+    pattern=re.compile(r'^Real Estate\s+'+amount+r'\s+'+amount+r'\s+'+amount+r'\s+([\d.]+)%\s+'+amount+r'\s+'+amount+r'\s*$',re.MULTILINE)
+    for page,text in enumerate(texts,1):
+        match=pattern.search(text)
+        if not match: continue
+        approved,monthly,cumulative,percent,forecast,variance=match.groups()
+        values=[money(value) for value in [approved,monthly,cumulative,forecast,variance]]
+        if values[0]==0: raise ValueError('Sample row budget is zero')
+        computed=(values[2]/values[0]*100).quantize(Decimal('0.01'),rounding=ROUND_HALF_UP)
+        if computed!=Decimal(percent): raise ValueError('Sample row percentage does not reconcile')
+        if values[3]-values[0]!=values[4]: raise ValueError('Sample row forecast variance does not reconcile')
+        return {'pdf_page':page,'account_description':'Real Estate','approved_budget':str(values[0]),'monthly_collection':str(values[1]),'year_to_date_cumulative_total':str(values[2]),'percent_of_budget_collected':percent,'year_end_forecast':str(values[3]),'forecast_minus_budget':str(values[4]),'checks':{'percent_of_budget':True,'forecast_minus_budget':True},'scope':'One displayed revenue row; not a validated extraction of the report or other months'}
+    raise ValueError('Expected Real Estate revenue row not found in inspected PDF pages')
+
+def inspect_pdf(document,kind):
     from io import BytesIO
     from pypdf import PdfReader
     content,content_type,resolved=request(document['url'],20000000)
@@ -90,144 +108,6 @@ def main():
                 sample=max(candidates,key=lambda doc: max([int(y) for y in re.findall(r'\b20\d{2}\b',doc['label'])] or [0]))
             result['sample']=inspect_pdf(sample,name)
             result['warnings']=['Sample PDF text extraction works, and one monthly revenue row reconciles; other tables, full totals, archive completeness, posting dates and reuse rights need validation.']
-            result['scope']='Official index retrieval plus one selected PDF download and text inspection per series'
-            if not documents: raise ValueError('No expected finance document links found')
-            result['status']='passed'
-        except Exception as error:
-            result.update(status='failed',error=str(error)); failed=True
-        print(json.dumps(result))
-    if failed: raise SystemExit(1)
-    ,'').replace(',','').strip('()'))
-        return -number if negative else number
-    def revenue_sample(texts):
-        from decimal import Decimal, ROUND_HALF_UP
-        amount=r'(\(?\$[\d,]+(?:\.\d+)?\)?)'
-        pattern=re.compile(r'^Real Estate\s+'+amount+r'\s+'+amount+r'\s+'+amount+r'\s+([\d.]+)%\s+'+amount+r'\s+'+amount+r'\s*
-        from io import BytesIO
-        from pypdf import PdfReader
-        content,content_type,resolved=request(document['url'],20000000)
-        if not content.startswith(b'%PDF-'): raise ValueError('Selected document is not a PDF')
-        reader=PdfReader(BytesIO(content))
-        if reader.is_encrypted: raise ValueError('Selected PDF is encrypted')
-        page_count=len(reader.pages)
-        if page_count>700: raise ValueError('Selected PDF exceeds page-count inspection limit')
-        inspected=min(page_count,12)
-        texts=[(reader.pages[i].extract_text() or '') if '/Contents' in reader.pages[i] else '' for i in range(inspected)]
-        if sum(len(t.strip()) for t in texts)<200: raise ValueError('Inspected sample has insufficient extractable text; requires document investigation')
-        table_pages=[]
-        for i,text in enumerate(texts):
-            upper=text.upper()
-            if 'BUDGET' in upper and ('ACTUAL' in upper or 'EXPENDITURE' in upper or 'REVENUE' in upper):
-                table_pages.append({'page':i+1,'excerpt':text[:5000]})
-            if len(table_pages)>=3: break
-        return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'first_page_excerpt':texts[0][:1800] if texts else '', 'table_page_samples':table_pages,'kind':kind,'scope':'PDF download and text extraction inspection only; no financial totals reconciled or reusable table schema validated'}
-    
-    failed=False
-    for name,url in indexes:
-        result={'name':'Finance '+name+' index','url':url}
-        try:
-            content,kind,resolved=request(url)
-            parser=IndexParser(); parser.feed(content.decode('utf-8','replace'))
-            title=' '.join(parser.title)
-            if 'New Haven' not in title or ('report' not in title.lower() and 'budget' not in title.lower()): raise ValueError('Expected finance index page title not found')
-            documents=[]; seen=set()
-            for link in parser.links:
-                target=urllib.parse.urljoin(resolved,link['href'])
-                path=urllib.parse.urlparse(target).path.lower()
-                if not ('showpublisheddocument' in path or path.endswith(('.pdf','.xlsx','.xls','.csv'))): continue
-                if target in seen: continue
-                seen.add(target); documents.append({'url':target,'label':link['label']})
-            result.update(title=title,document_links_found=len(documents))
-            if name=='monthly':
-                dates=[]
-                for doc in documents:
-                    try:
-                        import datetime
-                        date=datetime.datetime.strptime(doc['label'],'%B %Y')
-                        dates.append((date,doc))
-                    except ValueError: pass
-                if not dates: raise ValueError('No dated monthly report links found')
-                sample=max(dates,key=lambda item:item[0])[1]
-                result['latest_monthly_label_found']=sample['label']
-            else:
-                candidates=[doc for doc in documents if 'adopted budget' in doc['label'].lower()]
-                if not candidates: raise ValueError('No adopted budget link found')
-                sample=max(candidates,key=lambda doc: max([int(y) for y in re.findall(r'\b20\d{2}\b',doc['label'])] or [0]))
-            result['sample']=inspect_pdf(sample,name)
-            result['warnings']=['A sample PDF was downloaded and text extracted; tables, totals, archive completeness, posting dates and reuse terms need separate validation.']
-            result['scope']='Official index retrieval plus one selected PDF download and text inspection per series'
-            if not documents: raise ValueError('No expected finance document links found')
-            result['status']='passed'
-        except Exception as error:
-            result.update(status='failed',error=str(error)); failed=True
-        print(json.dumps(result))
-    if failed: raise SystemExit(1)
-    ,re.MULTILINE)
-        for page,text in enumerate(texts,1):
-            match=pattern.search(text)
-            if not match: continue
-            approved,monthly,cumulative,percent,forecast,variance=match.groups()
-            values=[money(value) for value in [approved,monthly,cumulative,forecast,variance]]
-            if values[0]==0: raise ValueError('Sample row budget is zero')
-            computed=(values[2]/values[0]*100).quantize(Decimal('0.01'),rounding=ROUND_HALF_UP)
-            if computed!=Decimal(percent): raise ValueError('Sample row percentage does not reconcile')
-            if values[3]-values[0]!=values[4]: raise ValueError('Sample row forecast variance does not reconcile')
-            return {'pdf_page':page,'account_description':'Real Estate','approved_budget':str(values[0]),'monthly_collection':str(values[1]),'year_to_date_cumulative_total':str(values[2]),'percent_of_budget_collected':percent,'year_end_forecast':str(values[3]),'forecast_minus_budget':str(values[4]),'checks':{'percent_of_budget':True,'forecast_minus_budget':True},'scope':'One displayed revenue row; not a validated extraction of the report or other months'}
-        raise ValueError('Expected Real Estate revenue row not found in inspected PDF pages')
-    
-    def inspect_pdf(document,kind):
-        from io import BytesIO
-        from pypdf import PdfReader
-        content,content_type,resolved=request(document['url'],20000000)
-        if not content.startswith(b'%PDF-'): raise ValueError('Selected document is not a PDF')
-        reader=PdfReader(BytesIO(content))
-        if reader.is_encrypted: raise ValueError('Selected PDF is encrypted')
-        page_count=len(reader.pages)
-        if page_count>700: raise ValueError('Selected PDF exceeds page-count inspection limit')
-        inspected=min(page_count,12)
-        texts=[(reader.pages[i].extract_text() or '') if '/Contents' in reader.pages[i] else '' for i in range(inspected)]
-        if sum(len(t.strip()) for t in texts)<200: raise ValueError('Inspected sample has insufficient extractable text; requires document investigation')
-        table_pages=[]
-        for i,text in enumerate(texts):
-            upper=text.upper()
-            if 'BUDGET' in upper and ('ACTUAL' in upper or 'EXPENDITURE' in upper or 'REVENUE' in upper):
-                table_pages.append({'page':i+1,'excerpt':text[:5000]})
-            if len(table_pages)>=3: break
-        return {'label':document['label'],'url':document['url'],'bytes':len(content),'content_type':content_type,'pages':page_count,'pages_inspected':inspected,'pages_with_substantial_text':sum(len(t.strip())>=100 for t in texts),'nonempty_text_pages':sum(bool(t.strip()) for t in texts),'first_page_excerpt':texts[0][:1800] if texts else '', 'table_page_samples':table_pages,'kind':kind,'scope':'PDF download and text extraction inspection only; no financial totals reconciled or reusable table schema validated'}
-    
-    failed=False
-    for name,url in indexes:
-        result={'name':'Finance '+name+' index','url':url}
-        try:
-            content,kind,resolved=request(url)
-            parser=IndexParser(); parser.feed(content.decode('utf-8','replace'))
-            title=' '.join(parser.title)
-            if 'New Haven' not in title or ('report' not in title.lower() and 'budget' not in title.lower()): raise ValueError('Expected finance index page title not found')
-            documents=[]; seen=set()
-            for link in parser.links:
-                target=urllib.parse.urljoin(resolved,link['href'])
-                path=urllib.parse.urlparse(target).path.lower()
-                if not ('showpublisheddocument' in path or path.endswith(('.pdf','.xlsx','.xls','.csv'))): continue
-                if target in seen: continue
-                seen.add(target); documents.append({'url':target,'label':link['label']})
-            result.update(title=title,document_links_found=len(documents))
-            if name=='monthly':
-                dates=[]
-                for doc in documents:
-                    try:
-                        import datetime
-                        date=datetime.datetime.strptime(doc['label'],'%B %Y')
-                        dates.append((date,doc))
-                    except ValueError: pass
-                if not dates: raise ValueError('No dated monthly report links found')
-                sample=max(dates,key=lambda item:item[0])[1]
-                result['latest_monthly_label_found']=sample['label']
-            else:
-                candidates=[doc for doc in documents if 'adopted budget' in doc['label'].lower()]
-                if not candidates: raise ValueError('No adopted budget link found')
-                sample=max(candidates,key=lambda doc: max([int(y) for y in re.findall(r'\b20\d{2}\b',doc['label'])] or [0]))
-            result['sample']=inspect_pdf(sample,name)
-            result['warnings']=['A sample PDF was downloaded and text extracted; tables, totals, archive completeness, posting dates and reuse terms need separate validation.']
             result['scope']='Official index retrieval plus one selected PDF download and text inspection per series'
             if not documents: raise ValueError('No expected finance document links found')
             result['status']='passed'
