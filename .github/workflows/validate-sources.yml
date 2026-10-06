@@ -11,7 +11,7 @@ on:
     - cron: '0 14 * * 1'
   push:
     branches: [main]
-    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'validation/**', '.github/workflows/validate-sources.yml']
+    paths: ['scripts/validate-sources.mjs', 'scripts/verify-alders.py', 'scripts/verify-property-api.mjs', 'scripts/verify-property-lookup.mjs', 'scripts/verify-gis-workflow.mjs', 'scripts/publish-source-checks.mjs', 'validation/**', '.github/workflows/validate-sources.yml']
 permissions:
   contents: read
 jobs:
@@ -31,3 +31,33 @@ jobs:
           name: source-validation
           path: verification/
           retention-days: 7
+
+  publish:
+    concurrency:
+      group: source-check-publication
+      cancel-in-progress: false
+    needs: validate
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: source-validation
+          path: verification/
+      - run: node scripts/publish-source-checks.mjs
+      - name: Save public check summaries
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/source-checks.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Update latest source validation results"
+          git push origin HEAD:main

@@ -4,6 +4,7 @@ import {render, renderSource} from './render.mjs';
 const root = new URL('../', import.meta.url);
 const repo = 'https://github.com/ctl0v0/new-haven-civic-data-directory';
 const entries = [];
+const sourceChecks = JSON.parse(await readFile(new URL('site/source-checks.json',root),'utf8'));
 for (const file of (await readdir(new URL('sources/', root))).filter(f=>f.endsWith('.json')).sort()) {
   const entry = JSON.parse(await readFile(new URL('sources/'+file,root),'utf8'));
   for (const field of ['id','title','category','publisher','source_type','status','description','url','access','contact','cost','terms','update_frequency','checked_on','entry_maintainer']) {
@@ -33,9 +34,9 @@ await mkdir(new URL('dist/',root),{recursive:true});
 await writeFile(new URL('dist/index.html',root),render(entries,repo));
 await mkdir(new URL('dist/sources/',root),{recursive:true});
 for (const entry of entries) {
-  await writeFile(new URL('dist/sources/'+entry.id+'.html',root),renderSource(entry,repo));
+  await writeFile(new URL('dist/sources/'+entry.id+'.html',root),renderSource(entry,repo,sourceChecks.sources[entry.id]));
   await writeFile(new URL('dist/sources/'+entry.id+'.json',root),JSON.stringify(entry,null,2)+'\n');
 }
 await writeFile(new URL('dist/catalog.json',root),JSON.stringify(entries,null,2)+'\n');
-for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js','readiness.js','build-readiness.html']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
+for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js','readiness.js','build-readiness.html','source-checks.json']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
 console.log('Validated and built '+entries.length+' source entries.');

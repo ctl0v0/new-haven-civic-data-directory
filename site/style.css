@@ -140,3 +140,7 @@ header .site-nav{flex:0 1 auto}
 .readiness-dialog .dialog-close{background:#edf3e9;color:var(--ink);padding:.4rem .75rem}
 .readiness-dialog dl{grid-template-columns:1fr;gap:.3rem}
 .readiness-dialog dd{margin-bottom:1rem;line-height:1.5}
+
+.latest-source-check{margin-top:1rem;padding:.8rem 0;border-top:1px solid var(--line)}
+.source-readiness .latest-source-check h3{font-size:.9rem;margin:0 0 .35rem;color:var(--muted)}
+.latest-source-check>p{font-size:.9rem;line-height:1.5;margin:.3rem 0;overflow-wrap:anywhere}
