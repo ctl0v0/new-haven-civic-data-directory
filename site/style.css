@@ -14,3 +14,7 @@ dl{display:grid;grid-template-columns:160px 1fr;gap:.5rem 1rem}dt{font-weight:65
 .directory-table th,.directory-table td{padding:.85rem .75rem;overflow-wrap:break-word}
 .directory-table th:nth-child(1){width:22%}.directory-table th:nth-child(2){width:10%}.directory-table th:nth-child(3){width:19%}.directory-table th:nth-child(4){width:16%}.directory-table th:nth-child(5){width:12%}.directory-table th:nth-child(6){width:12%}.directory-table th:nth-child(7){width:9%}
 .directory-table time{white-space:nowrap}.directory-table tbody tr:hover{background:#edf3e9}
+
+/* Compact page header and transition into the content. */
+header{padding-top:1.5rem;padding-bottom:1rem}header .eyebrow{margin:0 0 .5rem}header h1{margin:.35rem 0 .65rem;font-size:clamp(2rem,4vw,3rem);line-height:1.12}header p{margin:.5rem 0}header nav{margin-top:.8rem;gap:.5rem 1.2rem}main{padding-top:1rem}#directory>h2{margin-top:0;margin-bottom:.5rem}#directory>p{margin-top:.5rem;margin-bottom:1rem}
+@media(max-width:600px){header{padding-top:1rem;padding-bottom:.75rem}main{padding-top:.75rem}header h1{font-size:2rem}}
