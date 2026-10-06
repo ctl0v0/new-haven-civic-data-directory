@@ -1,0 +1,20 @@
+name: Verify Alders roster
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/verify-alders.py', '.github/workflows/verify-alders.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/verify-alders.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alders-roster-verification
+          path: verification/alders-roster-sample.json
+          retention-days: 7
