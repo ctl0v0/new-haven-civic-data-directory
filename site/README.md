@@ -1,10 +1,10 @@
 # Directory website
 
-A static HTML table and source details are generated from sources/*.json. The page has search, a category filter, anchor links to each entry, official/repository links and request/correction links. Core content works without JavaScript.
+A static HTML directory table and a separate detail page for each source are generated from sources/*.json. The directory has search and a category filter; clicking a source opens its own page with access instructions, fields, limitations and evidence. Each detail page links back to the directory and includes official/repository and correction links. Core content works without JavaScript.
 
 ## Local review
 
-Run npm run build with Node.js 22 or newer, then open dist/index.html in a browser. Review narrow and wide screens, keyboard navigation, no-JavaScript rendering, search/category filtering, empty results and source anchors. This setup does not require a server or dependencies.
+Run npm run build with Node.js 22 or newer, then open dist/index.html in a browser. Review narrow and wide screens, keyboard navigation, no-JavaScript rendering, search/category filtering, empty results, source detail links and return navigation. This setup does not require a server or dependencies.
 
 
 ## Live hosting

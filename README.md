@@ -35,7 +35,7 @@ Requires Node.js 22 or later. No dependency installation is needed.
 npm run build
 ```
 
-This validates sources/*.json and generates dist/index.html and dist/catalog.json, then copies the website styles and search script. Open dist/index.html directly in a browser. All six details are rendered as static HTML, so the directory also works without JavaScript. Search and category filtering enhance browsing when JavaScript is available.
+This validates sources/*.json and generates dist/index.html, an individual HTML page per source under dist/sources/, and dist/catalog.json, then copies the website styles and search script. Open dist/index.html directly in a browser. Each source has its own static HTML detail page linked from the directory table, so the site also works without JavaScript. Search and category filtering enhance browsing when JavaScript is available.
 
 ## Contribute and maintain
 

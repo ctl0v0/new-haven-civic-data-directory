@@ -1,5 +1,5 @@
 import {readFile, readdir, mkdir, writeFile, copyFile} from 'node:fs/promises';
-import {render} from './render.mjs';
+import {render, renderSource} from './render.mjs';
 const root = new URL('../', import.meta.url);
 const repo = 'https://github.com/ctl0v0/new-haven-civic-data-directory';
 const entries = [];
@@ -22,6 +22,8 @@ for (const file of (await readdir(new URL('sources/', root))).filter(f=>f.endsWi
 if (!entries.length || new Set(entries.map(e=>e.id)).size !== entries.length) throw new Error('Missing entries or duplicate IDs');
 await mkdir(new URL('dist/',root),{recursive:true});
 await writeFile(new URL('dist/index.html',root),render(entries,repo));
+await mkdir(new URL('dist/sources/',root),{recursive:true});
+for (const entry of entries) await writeFile(new URL('dist/sources/'+entry.id+'.html',root),renderSource(entry,repo));
 await writeFile(new URL('dist/catalog.json',root),JSON.stringify(entries,null,2)+'\n');
 for (const name of ['style.css','search.js']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
 console.log('Validated and built '+entries.length+' source entries.');
