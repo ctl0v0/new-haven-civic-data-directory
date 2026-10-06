@@ -1,0 +1,70 @@
+{
+  "checked_on": "2026-10-06",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "gis-parcels",
+  "title": "Parcel geometry service",
+  "category": "Geography",
+  "publisher": "Vision Government Solutions — New Haven property map service",
+  "source_type": "official-vendor",
+  "status": "Access tested",
+  "description": "Published parcel polygons and identifiers for mapping property boundaries.",
+  "url": "https://arcgis.vgsi.com/server/rest/services/New_Haven_CT/NewHavenCTPropMap/MapServer/2",
+  "access": "ArcGIS service metadata; query needs testing",
+  "formats": [
+    "JSON",
+    "GeoJSON",
+    "PBF"
+  ],
+  "fields": [
+    [
+      "objectid",
+      "Service object identifier"
+    ],
+    [
+      "parcel_id",
+      "Published parcel identifier"
+    ],
+    [
+      "account_nu",
+      "Published account-number field; join semantics unconfirmed"
+    ],
+    [
+      "globalid",
+      "Global identifier"
+    ],
+    [
+      "shape",
+      "Parcel polygon geometry"
+    ]
+  ],
+  "steps": [
+    "Open the parcel layer's service metadata page.",
+    "Inspect Fields, spatial reference, supported query formats, and Query operation.",
+    "Before integrating it, test a small read-only query and confirm identifiers and freshness."
+  ],
+  "contact": "Assessor's Office for assessment information; GIS gallery lists gisadmin@newhavenct.gov. Service responsibility needs confirmation.",
+  "limitations": [
+    "Metadata opened successfully; no feature query or bulk extraction has been tested.",
+    "Metadata advertises a 3,000-record response limit and pagination. One response must not be treated as the whole dataset.",
+    "Spatial reference is EPSG:2234; request or transform coordinates before treating them as latitude/longitude.",
+    "Technical access does not establish redistribution rights or a refresh schedule.",
+    "Parcel boundaries are distinct from full assessor records."
+  ],
+  "next": [
+    "Test one sample query, including its coordinate output.",
+    "Verify the city's relationship to this service and clarify terms and refresh dates."
+  ],
+  "evidence": [
+    {
+      "url": "https://arcgis.vgsi.com/server/rest/services/New_Haven_CT/NewHavenCTPropMap/MapServer/2",
+      "note": "Field schema, polygon geometry, spatial reference, formats and record limit read directly."
+    },
+    {
+      "url": "https://maps.newhavenct.gov/?appid=03c5c7b828b54fa6a55dd47c7f6906f6&edit=true",
+      "note": "City GIS gallery located through indexed search; full interactive content not inspected."
+    }
+  ]
+}

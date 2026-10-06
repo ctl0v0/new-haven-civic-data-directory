@@ -1,0 +1,45 @@
+{
+  "checked_on": "2026-10-06",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "assessor",
+  "title": "Property assessment lookup",
+  "category": "Property",
+  "publisher": "City of New Haven — Assessor's Office; hosted by Vision Government Solutions",
+  "source_type": "official-vendor",
+  "status": "Access tested",
+  "description": "Look up the city's published property assessment information.",
+  "url": "https://gis.vgsi.com/newhavenct/",
+  "access": "Browser lookup",
+  "formats": [
+    "HTML"
+  ],
+  "fields": [],
+  "steps": [
+    "Open the New Haven assessment database.",
+    "Read the valuation-date and disclaimer information on the landing page.",
+    "Use the available browser lookup; confirm important assessment details with the Assessor's Office."
+  ],
+  "contact": "assessor@newhavenct.gov; contact appears in indexed official city page.",
+  "limitations": [
+    "Only the landing page was inspected; sample property records and their fields have not been verified.",
+    "The landing page describes values as of October 1, 2021. Do not assume these are current tax bills.",
+    "Bulk downloads, an assessment API, update timing, and licensing remain unknown."
+  ],
+  "next": [
+    "Inspect a sample property record and document its actual field labels.",
+    "Ask about an existing bulk export, its valuation date, any fees, and reuse terms."
+  ],
+  "evidence": [
+    {
+      "url": "https://gis.vgsi.com/newhavenct/",
+      "note": "Landing page opened; valuation date and reference-use disclaimer observed."
+    },
+    {
+      "url": "https://www.newhavenct.gov/government/departments-divisions/assessor-s-office",
+      "note": "Official contact identified through search; direct city-page retrieval blocked."
+    }
+  ]
+}

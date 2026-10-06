@@ -1,0 +1,74 @@
+{
+  "checked_on": "2026-10-06",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "finance",
+  "title": "Budgets and monthly finance reports",
+  "category": "Finance",
+  "publisher": "City of New Haven — Office of Policy, Management and Grants",
+  "source_type": "official",
+  "status": "Source located",
+  "description": "Official financial reports and links to the community's separately maintained finance research package.",
+  "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
+  "access": "Official report indexes; community CSV package",
+  "formats": [
+    "PDF",
+    "CSV (community copy)"
+  ],
+  "fields": [
+    [
+      "Fiscal year / reporting period",
+      "Document-specific period"
+    ],
+    [
+      "Department / account",
+      "Labels vary by report"
+    ],
+    [
+      "Budget / actual / encumbrance",
+      "Different financial measures; availability varies"
+    ]
+  ],
+  "steps": [
+    "Start at the official annual budget/audit or monthly-report index.",
+    "Choose the exact document and reporting period; inspect its column definitions.",
+    "For community-extracted CSVs, read the finance package README, dictionary, coverage and issues before analysis."
+  ],
+  "contact": "Office of Policy, Management and Grants; data-maintenance contact unconfirmed. Community package README publishes contact@miscellany.blog for corrections.",
+  "limitations": [
+    "Official indexes are documented by the existing project; current file downloads were not tested in this session.",
+    "Community extracts are a research preview with incomplete review, not city-validated data.",
+    "Missing payment-register coverage means unavailable data, not zero payments.",
+    "Monthly financial measures and aggregation levels must not be summed indiscriminately."
+  ],
+  "next": [
+    "Verify current official download links in a browser.",
+    "Confirm finance source contacts, native spreadsheet availability and refresh practices."
+  ],
+  "related": [
+    {
+      "label": "Official monthly reports",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports"
+    },
+    {
+      "label": "Community finance package",
+      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/README.md"
+    },
+    {
+      "label": "Community data dictionary",
+      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/docs/data-dictionary.md"
+    }
+  ],
+  "evidence": [
+    {
+      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/docs/source-notes.md",
+      "note": "Existing project's documented official source locations reviewed."
+    },
+    {
+      "url": "https://github.com/ctl0v0/civic-data-commons/blob/main/finance/data/metadata.json",
+      "note": "Research-preview scope and review limitations inspected."
+    }
+  ]
+}

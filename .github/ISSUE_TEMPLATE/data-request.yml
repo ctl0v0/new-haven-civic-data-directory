@@ -1,0 +1,39 @@
+name: Data request
+description: Ask the community to help find or document New Haven data.
+title: "[Data request]: "
+body:
+  - type: markdown
+    attributes:
+      value: "This creates a community investigation, not an official city records request. Avoid private personal information."
+  - type: textarea
+    id: need
+    attributes:
+      label: What data do you need?
+      description: Describe the subject and fields you hope to find.
+    validations:
+      required: true
+  - type: textarea
+    id: use
+    attributes:
+      label: What would you build or learn?
+    validations:
+      required: true
+  - type: input
+    id: coverage
+    attributes:
+      label: Geography and time span
+      placeholder: "New Haven citywide; 2020 to present"
+  - type: textarea
+    id: checked
+    attributes:
+      label: Where have you already looked?
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples from other cities
+      description: Optional links to a comparable dataset or useful documentation.
+  - type: textarea
+    id: access
+    attributes:
+      label: Preferred access and other constraints
+      description: "For example: CSV, map layers, API, one-time research, or ongoing refresh."

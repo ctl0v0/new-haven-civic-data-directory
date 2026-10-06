@@ -1,0 +1,59 @@
+{
+  "checked_on": "2026-10-06",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "meetings-legislation",
+  "title": "Meetings, agendas and legislation",
+  "category": "Government",
+  "publisher": "City of New Haven — Board of Alders, through Legistar",
+  "source_type": "official-vendor",
+  "status": "Access tested",
+  "description": "Find meeting dates, committee information, agendas and legislative records.",
+  "url": "https://newhaven-ct.legistar.com/Calendar.aspx",
+  "access": "Calendar and legislation search",
+  "formats": [
+    "HTML",
+    "Linked agenda documents"
+  ],
+  "fields": [
+    [
+      "Name",
+      "Meeting body"
+    ],
+    [
+      "Meeting Date / Time",
+      "Scheduled meeting"
+    ],
+    [
+      "Meeting Location",
+      "Published location"
+    ],
+    [
+      "Agenda / Minutes / Video",
+      "Links where available"
+    ]
+  ],
+  "steps": [
+    "Open the meeting calendar and select a year or committee.",
+    "Open a meeting's details and available agenda links.",
+    "Use the Legislation tab for legislative records and preserve exact record URLs."
+  ],
+  "contact": "Board of Alders / Legislative Services; data/API contact unconfirmed.",
+  "limitations": [
+    "Calendar opened and displayed meeting fields; agenda files and historical completeness were not checked.",
+    "Document availability varies by meeting; absence of minutes does not establish that a meeting did not occur.",
+    "API access, bulk exports, reuse terms and voting-data coverage remain unconfirmed."
+  ],
+  "next": [
+    "Inspect one meeting detail, agenda and legislative record.",
+    "Investigate supported exports or a documented API."
+  ],
+  "evidence": [
+    {
+      "url": "https://newhaven-ct.legistar.com/Calendar.aspx",
+      "note": "Calendar opened and meeting columns inspected directly."
+    }
+  ]
+}

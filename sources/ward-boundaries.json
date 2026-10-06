@@ -1,0 +1,39 @@
+{
+  "checked_on": "2026-10-06",
+  "entry_maintainer": "Unassigned",
+  "cost": "Unknown; no bulk-access price confirmed.",
+  "terms": "Reuse terms not confirmed.",
+  "update_frequency": "Not confirmed.",
+  "id": "ward-boundaries",
+  "title": "Ward boundaries",
+  "category": "Geography",
+  "publisher": "City of New Haven",
+  "source_type": "official",
+  "status": "Needs investigation",
+  "description": "Discovery routes for ward geography that can support finding a representative by location.",
+  "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps",
+  "access": "Map discovery page; data download unverified",
+  "formats": [],
+  "fields": [],
+  "steps": [
+    "Start with the Engineering maps page and the city GIS gallery.",
+    "Find the ward map or layer and confirm which boundary plan it represents.",
+    "Locate a downloadable layer and its metadata before building address-to-ward tools."
+  ],
+  "contact": "GIS gallery lists gisadmin@newhavenct.gov; responsibility for current ward boundaries needs confirmation.",
+  "limitations": [
+    "A city engineering map referencing wards was located through official indexed search.",
+    "No current ward layer, field schema, downloadable file or effective date has been verified.",
+    "A map image alone is not a geographic dataset."
+  ],
+  "next": [
+    "Confirm the current boundary plan and effective date.",
+    "Record a layer/download URL, ward identifier, format and coordinate system."
+  ],
+  "evidence": [
+    {
+      "url": "https://www.newhavenct.gov/government/departments-divisions/engineering/maps",
+      "note": "Official discovery page found in indexed search; ward map referenced."
+    }
+  ]
+}
