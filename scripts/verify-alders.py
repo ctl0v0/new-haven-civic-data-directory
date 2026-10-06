@@ -94,6 +94,16 @@ def main():
         known_headers = {"ward", "name", "alder", "aldername", "representative", "addresszipcode", "addresszip", "telephone", "wardemail", "email", "phonenumber"}
         header_matches = [[value for row in table[:3] for value in row if normalize(value) in known_headers] for table in diagnostic.tables]
         print(json.dumps({"httpStatus": status, "contentType": content_type, "pageBytes": len(raw), "pageTitle": re.sub(r"\\s+", " ", title.group(1)).strip() if title else None, "tableCount": len(diagnostic.tables), "tableRowCounts": [len(table) for table in diagnostic.tables], "recognizedHeaderText": header_matches, "hasWardText": bool(re.search(r"\\bward\\b", html, re.I)), "challengeIndicators": [marker for marker in ["access denied", "captcha", "enable javascript", "request blocked", "verifying your browser"] if marker in html.lower()]}))
+        for table in diagnostic.tables:
+            for row_index, row in enumerate(table[:3]):
+                headers = [normalize(value) for value in row]
+                if "ward" in headers and "name" in headers:
+                    wi = headers.index("ward")
+                    examples = []
+                    for data in table[row_index + 1:row_index + 6]:
+                        value = data[wi] if wi < len(data) else ""
+                        examples.append({"cellCount": len(data), "wardCell": value if len(value) <= 24 and re.fullmatch(r"[\\w\\s.()#-]*", value) else "[format not displayed]"})
+                    print(json.dumps({"wardColumn": wi, "nameColumn": headers.index("name"), "headerCellCount": len(row), "wardCellExamples": examples}))
         headings, records = extract(html)
         wards = [record["ward"] for record in records]
         if len(set(wards)) != len(wards):
