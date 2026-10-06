@@ -88,6 +88,12 @@ def main():
             if len(raw) > 3000000:
                 raise ValueError("Page exceeds the verification size limit")
             html = raw.decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+        diagnostic = Tables()
+        diagnostic.feed(html)
+        title = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        known_headers = {"ward", "name", "alder", "aldername", "representative", "addresszipcode", "addresszip", "telephone", "wardemail", "email", "phonenumber"}
+        header_matches = [[value for row in table[:3] for value in row if normalize(value) in known_headers] for table in diagnostic.tables]
+        print(json.dumps({"httpStatus": status, "contentType": content_type, "pageBytes": len(raw), "pageTitle": re.sub(r"\\s+", " ", title.group(1)).strip() if title else None, "tableCount": len(diagnostic.tables), "tableRowCounts": [len(table) for table in diagnostic.tables], "recognizedHeaderText": header_matches, "hasWardText": bool(re.search(r"\\bward\\b", html, re.I)), "challengeIndicators": [marker for marker in ["access denied", "captcha", "enable javascript", "request blocked", "verifying your browser"] if marker in html.lower()]}))
         headings, records = extract(html)
         wards = [record["ward"] for record in records]
         if len(set(wards)) != len(wards):
