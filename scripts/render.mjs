@@ -39,7 +39,6 @@ ${entries.map(entry=>`<tr data-source="${escapeHTML(entry.id)}" data-category="$
 }
 
 const sourceSections = [
-  ['original-heading','Original source'],
   ['description-heading','Description'],
   ['overview-heading','At a glance'],
   ['agent-heading','Use with your agent'],
