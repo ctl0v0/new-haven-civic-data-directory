@@ -13,6 +13,7 @@ The static website, JSON catalog, source template and GitHub request/correction 
 | 1 | Official roster and contacts | Source located | Inspect the city page in a browser and identify the correction route |
 | 1 | Assessment schema and bulk access | City API metadata and one-record query verified; browser landing page inspected | Compare a known property across sources; clarify valuation dates, exports, fees and terms |
 | 1 | Parcels, addresses and zoning | Three city API metadata/one-record JSON checks passed | Test geometry, spatial matching, pagination, terms and freshness |
+| 1 | Building permits, applications and licenses | Municity PrintKey and point lookups resolved one commercial parcel; four related-record groups inspected on November 16, 2026 | Test additional properties; confirm supported access, history, bulk exports, costs and reuse terms |
 | 1 | Ward boundaries | Needs investigation | Locate a current downloadable layer and confirm effective date |
 | 1 | Finance access | Official reports located; file-level access and coverage checks in progress | Check current city downloads and published maintenance contact |
 | 1 | Legistar | Calendar inspected | Inspect one agenda and record; investigate supported exports |
@@ -32,7 +33,7 @@ A request should specify its intended use, geography, time span, fields, already
 
 | Candidate | What it could enable | Why investigate | Gate before inclusion as a usable source |
 | --- | --- | --- | --- |
-| Building permits and inspections | Development tracking and property research | Hartford and Cambridge publish useful precedents | Confirm New Haven source, fields, coverage, bulk access, fees and terms |
+| Permit inspections and documents | Detailed development and property research | The [permit source entry](sources/building-permits.json) now documents a tested parcel-record workflow; inspection details and documents remain untested | Verify inspection and document access, coverage, costs and terms separately |
 | Service requests | Neighborhood maintenance analysis | Somerville and Hartford publish service-request data; New Haven has SeeClickFix discovery routes | Verify supported read access, geographic scope, historic coverage and permitted reuse |
 | Zoning and land use | Site-selection and planning tools | City zoning map discovery pages already exist | City layer and small JSON query verified; confirm classifications, effective dates and spatial access |
 
