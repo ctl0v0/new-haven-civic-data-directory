@@ -28,6 +28,8 @@ Open `/parcel`, enter the pilot passcode, and search by address, parcel ID, MBLU
 
 The resolver checks the city's parcel-address field and matching city address points for every street-address search. It intersects address-point coordinates with parcel polygons, so a building address can surface a parcel whose listed address differs from the search. That difference is labeled on the candidate; the resolver does not silently choose between parcels. Address-point association is spatial evidence, not proof of a legal address. It preserves every zoning polygon returned for a parcel. Parcel geometry is returned in longitude and latitude for intersections. A documented alias for 50 Fitch Street is included only for a reviewed planning case.
 
+The parcel-address route requires the searched house number and an exact normalized returned address. This prevents a search for `3 Edwards St` from listing `30`, `34` or `360 Edwards St` ahead of the address-point parcel. In the live source, the `3 Edwards St` address point intersects parcel 10386, whose official parcel address is `990 State St`. That relationship is shown as a spatial candidate; it is not an assertion that every business using 3 Edwards occupied the parcel.
+
 ## REST API
 
 Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed browser session cookie also works for REST. Responses use `Cache-Control: private, no-store` even though upstream lookups are cached inside the server. Failed sources are reported per source so a missing result is distinguishable from an unavailable source.
@@ -57,12 +59,14 @@ The machine-readable catalog is published in `dist/parcel-source-catalog.json` a
 | Geography | Zoning, wards, neighborhoods | Boundary currency and zoning interpretation remain source limitations |
 | Representation | Board of Alders roster through an unambiguous ward; city GIS CMT district intersections and provisional GIS contact fields | CMT contact details can differ from the city CMT page and require confirmation. |
 | Activity | Municity children, LCI Case HQ case metadata, LCI managed lots, selected planning case | LCI licensing and other inspection or enforcement feeds remain unverified. |
-| Business | CT Business Registry Master and State Licenses address candidates | Registry principals require a reviewed entity join |
+| Business | Named municipal license records linked by the parcel MBLU; CT Business Registry Master and State Licenses address candidates | Registry principals require a reviewed entity join |
 | Nearby | Complete Streets projects within 250 feet | Service requests; area context is paused |
 
 Meetings, agendas and legislation, and budgets and monthly finance reports are outside this pilot's scope. CMT meeting schedules are not collected. State address matches are candidate links and do not prove occupancy, ownership or current use. Managed lots do not prove vacancy. Nearby records are kept in their own group. The Complete Streets source appears stale, so its event status needs original-source review.
 
 CMT districts are resolved at request time by intersecting the official parcel geometry with the city's CMT district FeatureServer. Every intersecting district is returned; overlapping districts are marked partial rather than selecting one. The same city GIS layer provides manager, neighborhood specialist and chair contact fields. Those contacts are marked provisional because the city's CMT webpage can differ from the GIS layer. No district shapes or contact roster is stored in this project.
+
+Named municipal business licenses are a compact view of the same live Municity parcel children shown in Activity. The verified MBLU links them to the parcel, and the business group preserves the vendor's license status and recorded address. For parcel 10386, this includes a historical `Weary Hobo LLC aka Bar August` food-service license whose vendor status is `Void`. The municipal record lists `990 State St`; it does not independently establish the historical `3 Edwards St` business address. No business roster or address alias is stored locally.
 
 LCI is queried at request time by the assessor PID. The adapter requires matching PID and address on the public property page and returns only case number, type, status, filed date, listed case fine, and link. It does not fetch case-detail pages, complaint narratives, or attachments. A listed fine is source-reported and should be confirmed before use. The real-estate tax and land-record sources expose links and honest `unavailable` statuses until a permitted live lookup and parcel join are verified. SearchIQS is not scraped. The API stores no parcel dataset, snapshots, or change history; successful lookups use the existing five-minute runtime cache.
 

@@ -530,6 +530,47 @@ async function municityRecords(parcel) {
   });
 }
 
+async function municipalBusinessRecords(parcel) {
+  const vendor = await getSourceRecords("municity", parcel);
+  if (vendor.status === "unavailable")
+    return unavailable(
+      "municipal-business-licenses",
+      `Municipal license lookup unavailable: ${vendor.warning}`,
+    );
+  const items = vendor.items
+    .filter(
+      (item) =>
+        item.source_record_id.startsWith("license:") &&
+        text(item.attributes?.BusinessName),
+    )
+    .map((item) => {
+      const a = item.attributes;
+      return record(
+        item.source_record_id,
+        "municipal-business-licenses",
+        {
+          business_name: text(a.BusinessName),
+          license_number: text(a.LicenseNumber),
+          license_type: text(a.LicenseType),
+          status: text(a.Status),
+          recorded_address: text(a.LegalAddress ?? a.Addr1),
+          expiration_date: date(a.ExpirationDate),
+        },
+        {
+          eventDate: item.event_date,
+          match: "exact",
+          sourceUrl: item.source_url,
+          note: "Municipal license linked by verified parcel MBLU. Its recorded address and status do not prove where or whether the business currently operates.",
+        },
+      );
+    });
+  return result("municipal-business-licenses", items, {
+    partial: vendor.status === "partial",
+    warning:
+      "Named municipal licenses may be historical, expired or void. Confirm status with the city.",
+  });
+}
+
 async function managedLotRecords(parcel) {
   const mblu = text(parcel.attributes.mblu);
   if (!mblu)
@@ -716,6 +757,7 @@ const ADAPTERS = Object.freeze({
   cmt: cmtDistrictRecords,
   "cmt-contacts": cmtContactRecords,
   municity: municityRecords,
+  "municipal-business-licenses": municipalBusinessRecords,
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
   planning: planningRecords,

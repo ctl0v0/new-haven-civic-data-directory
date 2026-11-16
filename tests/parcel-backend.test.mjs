@@ -269,6 +269,43 @@ test("street search shows a second parcel found by its address point", async () 
   assert.equal(point.match.confidence, "medium");
 });
 
+test("3 Edwards-style search drops neighboring house numbers and keeps the point parcel", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_") && !u.pathname.endsWith("/query"))
+      return response({ fields: [{ name: "house_number", type: "esriFieldTypeString" }] });
+    if (u.pathname.includes("Addresses_"))
+      return response({
+        features: [{
+          attributes: { house_number: "3", full_street_name: "EDWARDS ST" },
+          geometry: { x: -72.9096569, y: 41.3159061 },
+        }],
+      });
+    if (u.pathname.includes("Parcel_Viewer")) {
+      if (u.searchParams.get("geometryType") === "esriGeometryPoint")
+        return response({
+          features: [{
+            ...parcel(10386),
+            attributes: { ...parcel(10386).attributes, property_address: "990 STATE ST" },
+          }],
+        });
+      if (u.searchParams.get("where")?.includes("property_address"))
+        return response({
+          features: [30, 34, 360].map((house) => ({
+            ...parcel(house),
+            attributes: { ...parcel(house).attributes, property_address: `${house} EDWARDS ST` },
+          })),
+        });
+      return response({ features: [] });
+    }
+    throw Error("Unexpected source");
+  };
+  const out = await resolveParcel("3 Edwards St");
+  assert.equal(out.status, "resolved");
+  assert.deepEqual(out.candidates.map((x) => x.parcel_id), [10386]);
+  assert.match(out.candidates[0].match.note, /different address/);
+});
+
 test("MBLU search does not trigger street-address point lookups", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
@@ -279,6 +316,38 @@ test("MBLU search does not trigger street-address point lookups", async () => {
   const out = await resolveParcel("12/34");
   assert.equal(out.status, "resolved");
   assert.equal(out.candidates[0].parcel_id, 999013);
+});
+
+test("named municipal license appears in business records with historical status", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (u.pathname.endsWith("/Children"))
+      return response({
+        Permit: [],
+        Application: [],
+        Certificate: [],
+        License: [{
+          License_ID: 99873,
+          BusinessName: "Weary Hobo LLC aka Bar August",
+          LicenseNumber: "FSE-21-1199",
+          LicenseType: "Health - Food Service Establishment",
+          Status: "Void",
+          LegalAddress: "990 STATE ST",
+          CreatedDate: "2021-07-02T13:30:15",
+          Notes: "Unrelated vendor detail should stay out of the business summary",
+        }],
+      });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("municipal-business-licenses", parcel(999014));
+  assert.equal(out.status, "ok");
+  assert.equal(out.items.length, 1);
+  assert.equal(out.items[0].attributes.business_name, "Weary Hobo LLC aka Bar August");
+  assert.equal(out.items[0].attributes.status, "Void");
+  assert.equal(out.items[0].attributes.recorded_address, "990 STATE ST");
+  assert.doesNotMatch(JSON.stringify(out), /Unrelated vendor detail/);
 });
 
 test("parcel geography preserves all intersecting zoning records", async () => {

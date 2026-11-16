@@ -39,9 +39,17 @@ function status(message) {
 }
 function appendRecord(parent, item) {
   const details = el("details", null, "record");
+  const label =
+    item.attributes?.business_name ??
+    item.attributes?.BusinessName ??
+    item.attributes?.title ??
+    item.attributes?.property_address ??
+    item.attributes?.LegalAddress ??
+    item.source_record_id;
+  const recordedStatus = item.attributes?.status ?? item.attributes?.Status;
   const summary = el(
     "summary",
-    `${item.event_date ? item.event_date + " · " : ""}${item.source_id} · ${item.attributes?.title ?? item.attributes?.property_address ?? item.attributes?.LegalAddress ?? item.source_record_id}`,
+    `${item.event_date ? item.event_date + " · " : ""}${item.source_id} · ${label}${recordedStatus ? ` · ${recordedStatus}` : ""}`,
   );
   details.append(summary);
   const p = el(
@@ -67,7 +75,7 @@ function sourceLine(parent, source) {
     row.append(link(source.verification_url, "Confirm contacts with city"));
   parent.append(row);
 }
-async function choose(item) {
+async function choose(item, searchedQuery = null) {
   selected = item;
   $("candidates").hidden = true;
   history.replaceState(
@@ -89,6 +97,10 @@ async function choose(item) {
       summary.parcel.address ?? `Parcel ${summary.parcel.parcel_id}`;
     $("parcel-identifiers").textContent =
       `Parcel ID ${summary.parcel.parcel_id} · MBLU ${summary.parcel.mblu ?? "unavailable"} · Assessor account ${summary.parcel.account_number ?? "unavailable"}`;
+    $("parcel-match").textContent =
+      searchedQuery && item.match?.method === "address-point-intersection"
+        ? `${searchedQuery} is a city address point on this parcel. The parcel lists ${summary.parcel.address ?? "a different address"}; confirm the building before relying on the match.`
+        : "";
     status("Records are loading by source.");
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
@@ -185,11 +197,11 @@ $("search-form").addEventListener("submit", async (event) => {
         `${item.address ?? "No address"} · Parcel ${item.parcel_id} · ${item.match.method}${item.match.note ? ` · ${item.match.note}` : ""}`,
       );
       button.type = "button";
-      button.onclick = () => choose(item);
+      button.onclick = () => choose(item, $("query").value);
       $("candidate-list").append(button);
     }
     if (data.candidates.length === 1 && !data.truncated) {
-      void choose(data.candidates[0]);
+      void choose(data.candidates[0], $("query").value);
       return;
     }
     $("candidates").hidden = false;

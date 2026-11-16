@@ -157,6 +157,15 @@ export const SOURCES = Object.freeze([
       "Selected documented cases only; no complete case feed or meeting records.",
   },
   {
+    id: "municipal-business-licenses",
+    group: "business",
+    title: "Named municipal business licenses",
+    url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
+    mode: "live",
+    coverage:
+      "Named licenses linked to the verified municipal parcel MBLU. Historical, expired or void records may appear; a license does not prove current occupancy or operation.",
+  },
+  {
     id: "business-master",
     group: "business",
     title: "Connecticut Business Registry Master",

@@ -75,7 +75,7 @@ export async function resolveParcel(query) {
       });
       if (parts)
         queries.push({
-          where: `UPPER(property_address) LIKE '${sqlString(parts[1] + "%" + parts[2].replaceAll(" ", "%"))}%'`,
+          where: `UPPER(property_address) LIKE '${sqlString(parts[1] + " " + parts[2].replaceAll(" ", "%"))}%'`,
           method: "parcel-address",
         });
     }
@@ -87,9 +87,15 @@ export async function resolveParcel(query) {
           resultRecordCount: "25",
         });
         return {
-          items: (data.features ?? []).map((f) =>
-            candidate(f, method, method === "parcel-address" ? normalized : null),
-          ),
+          items: (data.features ?? [])
+            .filter(
+              (f) =>
+                method !== "parcel-address" ||
+                normalizeAddress(f.attributes?.property_address) === normalized,
+            )
+            .map((f) =>
+              candidate(f, method, method === "parcel-address" ? normalized : null),
+            ),
           truncated: Boolean(data.exceededTransferLimit),
         };
       }),
