@@ -1,9 +1,9 @@
 {
   "sources": {
     "alders": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "passed",
       "checks": [
         {
@@ -11,9 +11,9 @@
           "title": "Alders roster extraction",
           "scope": "Retrieve the official HTML table, parse 30 representative rows and report missing ward identifiers.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders"
           ],
@@ -49,9 +49,9 @@
       ]
     },
     "assessor": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "passed",
       "checks": [
         {
@@ -59,9 +59,9 @@
           "title": "Property API samples",
           "scope": "Inspect parcel, address and zoning field definitions and request one selected-field record from each layer.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
@@ -251,9 +251,9 @@
           "title": "City Hall property lookup",
           "scope": "Filter a known public address and verify that parcel and account queries reproduce its selected fields.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/query?f=json&where=UPPER%28property_address%29+LIKE+%27165%25CHURCH%25%27&outFields=objectid%2Cparcel_id%2Caccount_number%2Cproperty_address%2Ctotal_assessed_parcel_value_x%2Ctotal_assessed_land_value%2Ctotal_assessed_bldg_value&returnGeometry=false&resultRecordCount=10"
@@ -287,9 +287,9 @@
       ]
     },
     "gis-parcels": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "passed",
       "checks": [
         {
@@ -297,9 +297,9 @@
           "title": "Property API samples",
           "scope": "Inspect parcel, address and zoning field definitions and request one selected-field record from each layer.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
@@ -489,9 +489,9 @@
           "title": "City Hall parcel and zoning lookup",
           "scope": "Check matching address rows, their shared point, parcel identity, zoning intersections and longitude/latitude geometry.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Addresses_Authoritative_view/FeatureServer/0?f=pjson",
             "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0?f=pjson",
@@ -528,9 +528,9 @@
       ]
     },
     "finance": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "passed",
       "checks": [
         {
@@ -538,9 +538,9 @@
           "title": "Finance PDF extraction",
           "scope": "Discover official reports, download one monthly and one adopted-budget PDF, inspect up to 12 pages each, and check one monthly revenue row and two formulas.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/monthly-reports",
             "https://www.newhavenct.gov/government/departments-divisions/office-of-policy-management-and-grants/annual-city-budgets-audits",
@@ -583,9 +583,9 @@
       ]
     },
     "meetings-legislation": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "not-configured",
       "checks": [
         {
@@ -593,9 +593,9 @@
           "title": "Meetings and legislation",
           "scope": "No automated calendar or document check is configured.",
           "status": "not-configured",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://newhaven-ct.legistar.com/Calendar.aspx"
           ],
@@ -606,9 +606,9 @@
       ]
     },
     "ward-boundaries": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "passed",
       "checks": [
         {
@@ -616,9 +616,9 @@
           "title": "Ward polygons and City Hall lookup",
           "scope": "Retrieve the city-hosted Wards_2022 layer; check ward identifiers 1–30, polygon coordinates, and a City Hall point query against the downloaded polygons. Boundary currency is not established.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://gis.newhavenct.gov/server/rest/services/Hosted/Wards_2022_(View)/FeatureServer/0?f=pjson"
           ],
@@ -699,9 +699,9 @@
       ]
     },
     "building-permits": {
-      "checked_at": "2026-11-16T15:42:53.903Z",
-      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-      "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+      "checked_at": "2026-11-16T23:11:41.760Z",
+      "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+      "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
       "status": "passed",
       "checks": [
         {
@@ -709,9 +709,9 @@
           "title": "Municity permit parcel and record groups",
           "scope": "Resolve one commercial parcel by PrintKey and confirmed point, compare its identity, and check four related-record groups and selected fields. Publish counts, schema and a fingerprint only; no raw records or contact details.",
           "status": "passed",
-          "checked_at": "2026-11-16T15:42:53.903Z",
-          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43899326079",
-          "revision": "c4cd96c16dfb9bd950f07c07e534765483320e19",
+          "checked_at": "2026-11-16T23:11:41.760Z",
+          "run_url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/43977097443",
+          "revision": "d87358cfc36018cd108a78c8482fd3ec61f3b114",
           "source_urls": [
             "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
             "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data?Customer=NewHavenCityCT&entity=Parcel&entity_id=&fieldtype=text&mapid=&mapobject=&module=&numrecs=5&operator=%3D&pid=&searchfield=PrintKey&section=&value=241+0234+00200",
