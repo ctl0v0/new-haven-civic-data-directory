@@ -10,17 +10,25 @@
   "publisher": "City of New Haven; hosted by Municity / CitySquared",
   "source_type": "official-vendor",
   "status": "Access tested",
-  "description": "Find property-linked permit, application, license and certificate records in New Haven's Municity / CitySquared system. A commercial-property lookup by parcel identifier and map location was tested using the same public source behind Civic Fit's reviewed permit lookup.",
+  "description": "Find permit, application, license and certificate records associated with a New Haven address or parcel. Resolve the property to a Municity parcel using its parcel key or confirmed map location, then retrieve the records linked to that parcel and compare their addresses with your starting property record.",
   "url": "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
-  "access": "JavaScript portal and public JSON parcel queries; one property workflow tested",
+  "access": "Address and parcel matching through public JSON queries; JavaScript portal also available",
   "formats": [
     "JSON (parcel and related-record queries tested)",
     "JavaScript web portal (landing page located; interactive search not independently tested)"
   ],
   "fields": [
     [
-      "Parcel: Parcel_ID, PrintKey, LegalAddress",
-      "Municity parcel identifier, parcel lookup key and legal address. The sample PrintKey matched a normalized assessor MBLU; a general join has not been established."
+      "Parcel: Parcel_ID",
+      "Municity's internal parcel identifier, used to request the parcel's related records. It is distinct from the city GIS parcel_id and the assessor's account_number."
+    ],
+    [
+      "Parcel: PrintKey",
+      "Parcel lookup key. In the tested example, removing slash separators from the assessor MBLU produced the matching PrintKey; a general join has not been established. Preserve leading zeros."
+    ],
+    [
+      "Parcel: LegalAddress",
+      "The parcel's published legal address. Compare it with the starting address and individual record addresses; a parcel may have a different legal address from a storefront."
     ],
     [
       "Parcel: Latitude, Longitude",
@@ -48,12 +56,12 @@
     ]
   ],
   "steps": [
-    "Open the New Haven Municity portal for the browser route. It requires JavaScript; the noninteractive landing page alone does not verify its search flow.",
+    "Start with a property address or parcel record. Use the property assessment lookup or parcel and address layers to identify its assessor MBLU and confirm its location. The New Haven Municity portal provides a separate browser route; it requires JavaScript and its interactive search has not been independently tested here.",
     "Follow the reproducible parcel lookup recipe for read-only JSON requests. Use Accept: application/json and SourceId: 2 headers; no credential or provider key was needed for the tested requests.",
     "Try the tested PrintKey query for 155 Temple Street: 241 0234 00200. Check that exactly one rows entry has Parcel_ID 13397 and the expected LegalAddress. For an assessor MBLU such as 241/ 0234/ 00200/ /, remove the slash separators, trim segments and preserve leading zeros before checking the match.",
-    "If a reviewed MBLU is missing or has no match, try the tested point query as an example, substituting a separately confirmed property pin for other addresses. The sample point resolved the same parcel. Reject ambiguous matches and review corner parcels or address differences rather than choosing the first result.",
-    "Open the tested parcel-record query using the verified Parcel_ID. Inspect Permit, Application, License and Certificate arrays separately. If combining them, review applications sharing a permit number before counting them as separate projects; retain each record's kind and identifier.",
-    "Use the related parcel and assessment sources to independently confirm property identity. Keep matches at building or parcel scope unless separate evidence identifies the exact unit. Select only needed fields, redact personal details and review source statuses before sharing results."
+    "If the MBLU is missing or has no match, try the tested point query as an example, substituting coordinates confirmed to lie on the intended property. Compare the returned Parcel_ID, PrintKey and LegalAddress with the starting property record. Investigate multiple results or differing addresses rather than choosing the first match.",
+    "Open the tested parcel-record query using the verified Municity Parcel_ID. Inspect Permit, Application, License and Certificate arrays separately. Carry the parent Parcel_ID, PrintKey and LegalAddress alongside each record's kind, identifier, number, type, status and date to preserve the property association.",
+    "Compare each record's LegalAddress, where present, with the parcel and starting address. Investigate corner addresses, address ranges and multiple units; keep unmatched or ambiguous records separate. A parcel match alone does not identify a particular suite. When combining groups, check applications sharing a permit number before counting them as separate projects. Select only needed fields and review descriptions for personal details before sharing."
   ],
   "contact": "City of New Haven Building Department for building-permit questions; a current public contact and responsibility for other record kinds have not been independently confirmed.",
   "limitations": [
@@ -64,7 +72,6 @@
     "Responses may include nested contacts, owner and mailing details, and personal information within descriptions. Do not redistribute whole responses; use a field allowlist and review free text. No raw vendor records are included in this directory.",
     "Record kinds use different type, status and date fields. An application is not an issued permit, a historical license may have expired, and a certificate is not automatically an occupancy approval. A missing result does not prove that no permit or municipal record exists.",
     "A parcel or building match does not establish an exact storefront or suite, current use, completed work, legal compliance, availability or permission to operate. Confirm consequential interpretations with the responsible city office.",
-    "Civic Fit is a related community implementation, not the publisher of these records. Its current per-space lookup keeps candidates private until an admin reviews individual records; this directory does not provide that review service.",
     "Historical coverage, refresh responsibility, reuse rights and bulk-access costs remain unknown. The weekly and on-demand source checker covers only the documented parcel sample, selected fields and related-record groups; a passing run does not renew this readiness assessment or certify wider coverage."
   ],
   "next": [
@@ -75,7 +82,7 @@
   ],
   "evidence": [
     {
-      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-building-permits.mjs",
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/c4cd96c16dfb9bd950f07c07e534765483320e19/scripts/verify-building-permits.mjs",
       "note": "Automates the documented PrintKey-to-parcel and point-to-parcel comparison plus four related-record groups and selected-field checks. Regression tests use synthetic records and exercise ambiguous identity, schema changes, blocked access, malformed responses, limits and summary privacy."
     },
     {
@@ -84,7 +91,7 @@
     },
     {
       "url": "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
-      "note": "New Haven portal URL used by the current Civic Fit integration. The landing page was inspected on November 16, 2026; it requires a compatible JavaScript browser and did not establish interactive search access."
+      "note": "New Haven's Municity / CitySquared landing page was inspected on November 16, 2026. It requires a compatible JavaScript browser; the landing-page check did not establish interactive search access."
     },
     {
       "url": "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data?Customer=NewHavenCityCT&entity=Parcel&entity_id=&fieldtype=text&mapid=&mapobject=&module=&numrecs=5&operator=%3D&pid=&searchfield=PrintKey&section=&value=241+0234+00200",
@@ -97,17 +104,19 @@
     {
       "url": "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Parcel/13397/Children",
       "note": "Live read-only request on November 16, 2026 returned HTTP 200. Inspected group counts and field names: 98 permits, 38 applications, 17 licenses and one certificate. No raw response, contact details, inspection details or documents are redistributed."
-    },
-    {
-      "url": "https://github.com/ctl0v0/civic-fit/blob/aaaccfdda4dda300e27fa7ea58dc77af7a764d50/src/lib/civic-data/municity-permits.ts",
-      "note": "Immutable community implementation inspected on November 16, 2026: New Haven customer identifier, request headers, MBLU normalization, point fallback, related-record groups and duplicate application handling. Implementation evidence does not establish citywide completeness or vendor support."
-    },
-    {
-      "url": "https://github.com/ctl0v0/civic-fit/blob/aaaccfdda4dda300e27fa7ea58dc77af7a764d50/README.md",
-      "note": "Current community feature documentation inspected on November 16, 2026: admin-triggered per-space source lookup, private candidates and separate record review before publication. No live Civic Fit account or production publication state was tested for this directory entry."
     }
   ],
   "step_links": [
+    {
+      "step": 0,
+      "label": "property assessment lookup",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/assessor.html"
+    },
+    {
+      "step": 0,
+      "label": "parcel and address layers",
+      "url": "https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html"
+    },
     {
       "step": 0,
       "label": "New Haven Municity portal",
@@ -132,16 +141,6 @@
       "step": 4,
       "label": "tested parcel-record query",
       "url": "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Parcel/13397/Children"
-    },
-    {
-      "step": 5,
-      "label": "parcel",
-      "url": "https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html"
-    },
-    {
-      "step": 5,
-      "label": "assessment sources",
-      "url": "https://new-haven-civic-data-directory.vercel.app/sources/assessor.html"
     }
   ],
   "related": [
@@ -152,10 +151,6 @@
     {
       "label": "Property assessment lookup and identifier limits",
       "url": "https://new-haven-civic-data-directory.vercel.app/sources/assessor.html"
-    },
-    {
-      "label": "Civic Fit community implementation and review workflow",
-      "url": "https://github.com/ctl0v0/civic-fit/blob/aaaccfdda4dda300e27fa7ea58dc77af7a764d50/README.md"
     }
   ],
   "listing": {
@@ -178,7 +173,7 @@
       "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data?Customer=NewHavenCityCT&entity=Parcel&entity_id=&fieldtype=text&mapid=&mapobject=&module=&numrecs=5&operator=%3D&pid=&searchfield=PrintKey&section=&value=241+0234+00200",
       "https://services5.municity5.com/M5Services/M5Service.svc/Mobile/SelectParcel?customer=NewHavenCityCT&latitude=41.30570527&longitude=-72.92722431",
       "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Parcel/13397/Children",
-      "https://github.com/ctl0v0/civic-fit/blob/aaaccfdda4dda300e27fa7ea58dc77af7a764d50/src/lib/civic-data/municity-permits.ts"
+      "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/c4cd96c16dfb9bd950f07c07e534765483320e19/scripts/verify-building-permits.mjs"
     ]
   }
 }
