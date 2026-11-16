@@ -335,7 +335,7 @@ async function choose(item, searchedQuery = null) {
   $("context-records").replaceChildren();
   $("context-sources").replaceChildren();
   $("context-status").textContent = "";
-  $("context-load").hidden = false;
+  $("context-load").hidden = true;
   $("context-more").hidden = true;
   status("Loading parcel records…");
   try {
@@ -367,6 +367,7 @@ async function choose(item, searchedQuery = null) {
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
     $("context-section").hidden = false;
+    void loadContext();
     const contextLink = el("a", "Around this parcel");
     contextLink.href = "#context-section";
     $("group-nav").append(contextLink);
@@ -414,7 +415,10 @@ async function loadContext(cursor = null) {
     $("context-more").hidden = !data.next_cursor;
     $("context-more").onclick = data.next_cursor ? () => void loadContext(data.next_cursor) : null;
   } catch (error) {
-    if (version === viewVersion) $("context-status").textContent = `Could not load neighborhood context: ${error.message}`;
+    if (version === viewVersion) {
+      $("context-status").textContent = `Could not load neighborhood context: ${error.message}`;
+      if (!cursor) $("context-load").hidden = false;
+    }
   } finally {
     button.disabled = false;
   }
