@@ -12,6 +12,14 @@ export function missingPilotKeys() {
     (key) => typeof process.env[key] !== "string" || process.env[key].length < 24,
   );
 }
+export function pilotConfigurationIssues() {
+  return REQUIRED_KEYS.flatMap((key) => {
+    const value = process.env[key];
+    if (typeof value !== "string") return [`${key} (absent)`];
+    if (value.length < 24) return [`${key} (too short)`];
+    return [];
+  });
+}
 function configured() {
   return missingPilotKeys().length === 0;
 }

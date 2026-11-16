@@ -139,7 +139,7 @@ test("unconfigured pilot identifies missing variable names without exposing valu
   try {
     const page = await pilotPage.fetch(new Request("https://example.com/parcel"));
     const html = await page.text();
-    assert.match(html, /Missing: PILOT_API_TOKEN/);
+    assert.match(html, /PILOT_API_TOKEN \(absent\)/);
     assert.doesNotMatch(html, /a-long-test/);
   } finally {
     process.env.PILOT_API_TOKEN = token;
