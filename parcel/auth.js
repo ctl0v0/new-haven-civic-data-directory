@@ -2,11 +2,18 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { json } from "./http.js";
 
 const COOKIE = "nh_parcel_pilot";
-function configured() {
-  return ["PILOT_PASSPHRASE", "PILOT_COOKIE_SECRET", "PILOT_API_TOKEN"].every(
-    (key) =>
-      typeof process.env[key] === "string" && process.env[key].length >= 24,
+const REQUIRED_KEYS = [
+  "PILOT_PASSPHRASE",
+  "PILOT_COOKIE_SECRET",
+  "PILOT_API_TOKEN",
+];
+export function missingPilotKeys() {
+  return REQUIRED_KEYS.filter(
+    (key) => typeof process.env[key] !== "string" || process.env[key].length < 24,
   );
+}
+function configured() {
+  return missingPilotKeys().length === 0;
 }
 function equal(left, right) {
   const a = Buffer.from(left ?? ""),

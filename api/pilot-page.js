@@ -1,4 +1,4 @@
-import { authorized, pilotConfigured } from "../parcel/auth.js";
+import { authorized, missingPilotKeys, pilotConfigured } from "../parcel/auth.js";
 
 const header =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Parcel pilot · New Haven Civic Data</title><link rel="stylesheet" href="/parcel.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a href="/index.html">New Haven Civic Data Directory</a><span>Private parcel pilot</span></header><main id="main">';
@@ -19,7 +19,9 @@ export default {
     const body = authorized(request) ? app : login + denied + "</section>";
     return new Response(
       header +
-        (!pilotConfigured() ? "<p>Pilot access is not configured.</p>" : body) +
+        (!pilotConfigured()
+          ? `<p>Pilot access is not configured. Missing: ${missingPilotKeys().join(", ")}.</p>`
+          : body) +
         footer,
       {
         headers: {
