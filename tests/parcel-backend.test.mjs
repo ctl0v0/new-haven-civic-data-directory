@@ -469,6 +469,21 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
   assert.doesNotMatch(JSON.stringify(out), /Private notes|Private complaint narrative|private@example.org|555-0100/);
 });
 
+test("missing municipal License category is reported as partial", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (u.pathname.endsWith("/Children"))
+      return response({ Document: [], Application: [], Complaint: [], Contact: [], Permit: [] });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("municipal-business-licenses", parcel(999018));
+  assert.equal(out.status, "partial");
+  assert.equal(out.items.length, 0);
+  assert.match(out.warning, /omitted its License category/);
+});
+
 test("state business registry matches a city address point on the parcel", async () => {
   let stateQuery = "";
   globalThis.fetch = async (input) => {

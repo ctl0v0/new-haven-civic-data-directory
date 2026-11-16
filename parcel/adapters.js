@@ -663,7 +663,11 @@ async function municipalBusinessRecords(parcel) {
       vendor.missing_categories?.includes("License") ||
       vendor.truncated_categories?.includes("License"),
     warning:
-      "Named municipal licenses may be historical, expired or void. Confirm status with the city.",
+      vendor.missing_categories?.includes("License")
+        ? "The vendor omitted its License category for this parcel, so absence of municipal licenses cannot be confirmed."
+        : vendor.truncated_categories?.includes("License")
+          ? "The vendor License category exceeded the 500-record limit; results are incomplete."
+          : "Named municipal licenses may be historical, expired or void. Confirm status with the city.",
   });
 }
 

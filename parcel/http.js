@@ -1,7 +1,7 @@
 import { getCache } from "@vercel/functions";
 
 const memory = new Map();
-const CACHE_VERSION = "parcel-v7";
+const CACHE_VERSION = "parcel-v8";
 
 export class SourceError extends Error {
   constructor(message, status = 502) {
