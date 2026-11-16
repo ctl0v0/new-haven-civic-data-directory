@@ -9,6 +9,7 @@ A community guide to finding and using New Haven civic data. People and their ag
 | [Alders](sources/alders.json) | Elected representatives and published ward contacts |
 | [Assessor](sources/assessor.json) | Property assessment lookup |
 | [Parcels](sources/gis-parcels.json) | Parcel geometry and identifiers |
+| [Building permits](sources/building-permits.json) | Property-linked permits, applications, licenses and certificates; one parcel lookup workflow tested |
 | [Finance](sources/finance.json) | Official reports located; file-level access and coverage checks in progress |
 | [Ward boundaries](sources/ward-boundaries.json) | Discovery routes; usable boundary data still needs verification |
 | [Meetings and legislation](sources/meetings-legislation.json) | Meeting calendars, agendas and legislative records |
