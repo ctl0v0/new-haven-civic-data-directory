@@ -401,4 +401,16 @@ test("MCP requires pilot auth and lists bounded read tools", async () => {
   );
   assert.equal(response.status, 200);
   assert.match(await response.text(), /new-haven-parcel-data/);
+  const listed = await mcpRoute.fetch(
+    new Request("https://example.com/mcp", {
+      method: "POST",
+      headers: {
+        ...headers,
+        authorization: "Bearer " + process.env.PILOT_API_TOKEN,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    }),
+  );
+  assert.equal(listed.status, 200);
+  assert.match(await listed.text(), /get_parcel_overview/);
 });

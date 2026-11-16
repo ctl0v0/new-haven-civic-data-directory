@@ -187,7 +187,10 @@ async function assessorRecord(parcel) {
 async function lciCaseRecords(parcel) {
   const id = Number(parcel.attributes.parcel_id);
   if (!Number.isSafeInteger(id) || id <= 0)
-    return unavailable("lci-cases", "Parcel has no valid assessor PID for LCI lookup.");
+    return unavailable(
+      "lci-cases",
+      "Parcel has no valid assessor PID for LCI lookup.",
+    );
   const url = `https://lci.city/public/property/${id}`;
   const html = await fetchBounded(url, {
     accept: "text/html,application/xhtml+xml",
@@ -195,28 +198,36 @@ async function lciCaseRecords(parcel) {
     maxBytes: 3_000_000,
   });
   const parsed = parseLciProperty(html, parcel, url);
-  return result(
-    "lci-cases",
-    parsed.cases.map((item) =>
-      record(item.case_number, "lci-cases", {
-        case_number: item.case_number,
-        case_type: item.case_type,
-        status: item.status,
-        filed_date: item.filed_date,
-        listed_fine_usd: item.listed_fine_usd,
-      }, {
-        eventDate: item.filed_date,
-        sourceUrl: item.source_url,
-        note: "Public LCI case metadata. Listed fines and case status require confirmation at the source; complaint details are omitted.",
-      }),
+  return {
+    ...result(
+      "lci-cases",
+      parsed.cases.map((item) =>
+        record(
+          item.case_number,
+          "lci-cases",
+          {
+            case_number: item.case_number,
+            case_type: item.case_type,
+            status: item.status,
+            filed_date: item.filed_date,
+            listed_fine_usd: item.listed_fine_usd,
+          },
+          {
+            eventDate: item.filed_date,
+            sourceUrl: item.source_url,
+            note: "Public LCI case metadata. Listed fines and case status require confirmation at the source; complaint details are omitted.",
+          },
+        ),
+      ),
+      {
+        partial: parsed.truncated,
+        warning: parsed.truncated
+          ? "LCI case list was truncated at 200 records."
+          : "Only case metadata and listed case fines are returned; licensing status is not checked.",
+      },
     ),
-    {
-      partial: parsed.truncated,
-      warning: parsed.truncated
-        ? "LCI case list was truncated at 200 records."
-        : "Only case metadata and listed case fines are returned; licensing status is not checked.",
-    },
-  );
+    source_url: url,
+  };
 }
 
 async function boundaryRecords(sourceId, layer, parcel) {
