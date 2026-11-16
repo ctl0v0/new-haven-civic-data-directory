@@ -240,7 +240,8 @@ function assessorBuildingFacts($, attributes) {
     $(row).children("td").toArray().map((cell) => text($(cell).text())),
   ).filter((cells) => cells.length === 2 && cells.every(Boolean));
   const field = (keys, label) => {
-    const direct = keys.map((key) => attributes[key]).filter(Boolean);
+    const direct = keys.map((key) => attributes[key])
+      .filter((value) => value && value.replace(/:$/, "").trim().toLowerCase() !== label.toLowerCase());
     if (direct.length === 1) return direct[0];
     if (direct.length > 1) return null;
     const found = rows.filter(([name]) => name.replace(/:$/, "").trim().toLowerCase() === label.toLowerCase());
@@ -251,15 +252,16 @@ function assessorBuildingFacts($, attributes) {
   const count = integer(field(["lblBldgCount", "lblBuildingCount"], "Building Count"));
   const year = integer(field(["lblYearBuilt"], "Year Built"));
   const livingArea = integer(field(["lblLivingArea"], "Living Area"));
+  const oneBuilding = count == null || count <= 1;
   const facts = {
     building_count: count,
-    year_built: year && year >= 1600 && year <= 2100 ? year : null,
-    living_area_sq_ft: livingArea,
+    year_built: oneBuilding && year && year >= 1600 && year <= 2100 ? year : null,
+    living_area_sq_ft: oneBuilding ? livingArea : null,
     land_size_acres: decimal(field(["lblLandSize", "lblLandAcres"], "Size (Acres)")),
     land_use_code: field(["lblLandUseCode"], "Use Code"),
-    style: field(["lblStyle"], "Style"),
-    model: field(["lblModel"], "Model"),
-    stories: decimal(field(["lblStories"], "Stories")),
+    style: oneBuilding ? field(["lblStyle"], "Style") : null,
+    model: oneBuilding ? field(["lblModel"], "Model") : null,
+    stories: oneBuilding ? decimal(field(["lblStories"], "Stories")) : null,
   };
   return Object.fromEntries(Object.entries(facts).filter(([, value]) => value !== null));
 }

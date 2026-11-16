@@ -630,6 +630,19 @@ test("address-only state and manually selected planning sources do not create pa
   }
 });
 
+test("assessor card does not merge facts from multiple buildings", async () => {
+  globalThis.fetch = async () => new Response(`
+    <span id="MainContent_lblPid">999031</span>
+    <table><tr><td>Building Count</td><td>2</td></tr>
+    <tr><td>Year Built</td><td>1910</td></tr>
+    <tr><td>Living Area</td><td>1,000</td></tr>
+    <tr><td>Year Built</td><td>1930</td></tr>
+    <tr><td>Living Area</td><td>2,000</td></tr></table>
+  `, { headers: { "content-type": "text/html" } });
+  const out = await getSourceRecords("assessor", parcel(999031));
+  assert.deepEqual(out.items[0].attributes.building_facts, { building_count: 2 });
+});
+
 test("parcel geography preserves all intersecting zoning records", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
