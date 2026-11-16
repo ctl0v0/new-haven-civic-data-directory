@@ -103,6 +103,32 @@ differ from a storefront address; independently review that association.
   interactive portal search, supported service guarantees or reuse terms.
   A missing record is not proof of absence.
 
-No recurring check is configured for this entry. Civic Fit's related feature
+## Automated checks
+
+Run the same sample through the shared validation runner:
+
+```sh
+node scripts/validate-sources.mjs permits
+```
+
+The [weekly and on-demand workflow](https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml)
+includes permits in its `all` selection and offers a separate `permits`
+selection. The checker compares PrintKey and point results, requires the four
+documented record groups and selected fields, and detects missing or duplicate
+identifiers. Requests have time and response-size limits. Group counts are
+not frozen at the original sample values.
+
+Published summaries include group counts, selected field names, matching
+checks, a fingerprint of selected non-contact fields, and the exact run and
+code revision. Raw records, descriptions, contact details and documents are
+not saved. Changed results and access failures use the existing source-review
+workflow; routine checks do not advance readiness assessment dates.
+
+`npm test` runs the synthetic-fixture regression tests without contacting
+Municity. They cover identity mismatches and ambiguity, missing groups and
+fields, duplicate identifiers, HTTP blocks, malformed responses, network
+failures, size limits, ordering, source changes and publication privacy.
+
+Civic Fit's related feature
 uses manually requested per-space lookups and separate admin review; this
 recipe does not invoke Civic Fit, ingest records or publish candidates.

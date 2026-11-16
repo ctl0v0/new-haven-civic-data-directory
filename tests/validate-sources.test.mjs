@@ -7,4 +7,7 @@ test('source availability, schema changes and extraction warnings stay distinct'
  assert.equal(interpret(result({status:'passed',metadata:{missingRequestedFields:['parcel_id']}})).status,'changed');
  assert.equal(interpret({status:1,stdout:''}).status,'changed');
  assert.equal(interpret({error:Error('timeout')}).status,'unavailable');
+ assert.equal(interpret(result({status:'failed',failureType:'unavailable',error:'Request for field data timed out.'})).status,'unavailable');
+ assert.equal(interpret(result({status:'failed',failureType:'changed',error:'Parcel identity differs.'})).status,'changed');
+ assert.equal(interpret(result({status:'failed',failureType:'unexpected',error:'Missing schema'})).status,'changed');
 });

@@ -71,6 +71,20 @@
     ]
   },
   {
+    "id": "building-permits",
+    "source_ids": ["building-permits"],
+    "validator": "building-permits",
+    "group": "permits",
+    "title": "Municity permit parcel and record groups",
+    "scope": "Resolve one commercial parcel by PrintKey and confirmed point, compare its identity, and check four related-record groups and selected fields. Publish counts, schema and a fingerprint only; no raw records or contact details.",
+    "source_urls": [
+      "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
+      "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data?Customer=NewHavenCityCT&entity=Parcel&entity_id=&fieldtype=text&mapid=&mapobject=&module=&numrecs=5&operator=%3D&pid=&searchfield=PrintKey&section=&value=241+0234+00200",
+      "https://services5.municity5.com/M5Services/M5Service.svc/Mobile/SelectParcel?customer=NewHavenCityCT&latitude=41.30570527&longitude=-72.92722431",
+      "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Parcel/13397/Children"
+    ]
+  },
+  {
     "id": "meetings-legislation",
     "source_ids": [
       "meetings-legislation"

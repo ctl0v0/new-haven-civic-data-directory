@@ -39,3 +39,13 @@ test('findings preserve coverage and document hashes without raw attributes',()=
  assert.equal(findings[0].document.sha256,'def');
  assert.equal(JSON.stringify(findings).includes('PRIVATE'),false);
 });
+
+test('Municity evidence keeps exact approved hosts and group summaries without raw records',()=>{
+ const urls=['https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Parcel/13397/Children','https://www.municityconnect.com/#/app/NewHavenCityCT/landing'];
+ const report={checked_at:'2026-11-16T12:00:00Z',checks:[{id:'building-permits',source_ids:['building-permits'],status:'passed',observations:[{recordGroups:[{kind:'Permit',rowsReturned:1,returnedFields:['Permit_ID'],records:[{Owner:'PRIVATE'}],contacts:'PRIVATE'}]}]}]};
+ const registry=[{id:'building-permits',source_urls:[...urls,'https://services5.municity5.com.evil.example/','https://evil.services5.municity5.com/','https://user:PRIVATE@services5.municity5.com/','http://services5.municity5.com/']}];
+ const result=updateResults({},report,url,sha,registry).sources['building-permits'].checks[0];
+ assert.deepEqual(result.source_urls,urls);
+ assert.deepEqual(result.findings[0].recordGroups,[{kind:'Permit',rowsReturned:1,returnedFields:['Permit_ID']}]);
+ assert.doesNotMatch(JSON.stringify(result),/PRIVATE|Owner|contacts/);
+});
