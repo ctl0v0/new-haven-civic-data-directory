@@ -10,8 +10,38 @@ const footer =
   "</main><footer>Independent research preview. Confirm consequential facts with the original source.</footer></body></html>";
 const login =
   '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>';
-const app =
-  '<h1>New Haven parcel records</h1><p>Search by street address, parcel ID, MBLU or assessor account number. Results are source records, not an official property determination.</p><form id="search-form"><label for="query">Parcel search</label><div class="search-row"><input id="query" name="query" type="search" placeholder="165 Church Street" maxlength="160" required><button>Search</button></div></form><p id="status" role="status" aria-live="polite"></p><section id="candidates" hidden><h2>Choose a parcel</h2><div id="candidate-list"></div></section><section id="parcel-summary" hidden><h2 id="parcel-title"></h2><p id="parcel-identifiers"></p><p id="parcel-match" class="meta"></p><p class="small">Retrieved records may be incomplete or out of date. Each group shows its source and coverage.</p></section><nav id="group-nav" aria-label="Parcel data groups"></nav><div id="groups"></div><section id="feed-section" hidden><h2>Activity timeline</h2><p>Dated source records only. This is not a change-tracking feed.</p><div id="feed"></div><button id="feed-more" type="button" hidden>Load more events</button></section><script src="/parcel.js" defer></script>';
+const app = `
+  <section class="search-panel" aria-labelledby="page-title">
+    <p class="eyebrow">New Haven parcel explorer</p>
+    <h1 id="page-title">What do city records say about this building?</h1>
+    <p>Search an address or parcel ID to review building facts, business records, permits, and a dated history. Each result links back to its source.</p>
+    <form id="search-form">
+      <label for="query">Address, parcel ID, MBLU, or assessor account</label>
+      <div class="search-row"><input id="query" name="query" type="search" placeholder="869 Whalley Ave" maxlength="160" required><button>Explore parcel</button></div>
+    </form>
+    <p class="search-examples">Try <button type="button" data-example="3 Edwards St">3 Edwards St</button> or <button type="button" data-example="869 Whalley Ave">869 Whalley Ave</button></p>
+    <p id="status" role="status" aria-live="polite"></p>
+  </section>
+  <section id="candidates" class="panel" hidden><h2>Choose a parcel</h2><p>More than one city parcel may match an address. Review the listed address before choosing.</p><div id="candidate-list"></div></section>
+  <section id="parcel-summary" class="parcel-hero" hidden>
+    <p class="eyebrow">City parcel record</p>
+    <h2 id="parcel-title"></h2>
+    <p id="parcel-identifiers" class="meta"></p>
+    <p id="parcel-match" class="match-note" hidden></p>
+    <p class="small">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
+  </section>
+  <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
+    <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="snapshot-title">At a glance</h2></div><p>Plain-language facts from the records below.</p></div>
+    <div id="snapshot-grid" class="snapshot-grid"></div>
+  </section>
+  <nav id="group-nav" aria-label="Jump to parcel sections" hidden></nav>
+  <section id="feed-section" class="timeline-section" aria-labelledby="timeline-title" hidden>
+    <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. A document or contact date may only mark an update to that record.</p></div>
+    <ol id="feed" class="timeline"></ol>
+    <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
+  </section>
+  <div id="groups" class="record-groups"></div>
+  <script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
   String(value).replace(
     /[&<>"']/g,
