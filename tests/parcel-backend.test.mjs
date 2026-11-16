@@ -329,6 +329,33 @@ test("listed parcel address takes precedence when its city address point also ma
   assert.equal(out.candidates[0].match.method, "parcel-address");
 });
 
+test("address point agrees with the parcel listing even if the direct query returns no rows", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_") && !u.pathname.endsWith("/query"))
+      return response({ fields: [{ name: "house_number", type: "esriFieldTypeString" }] });
+    if (u.pathname.includes("Addresses_"))
+      return response({ features: [{
+        attributes: { house_number: "991", full_street_name: "STATE ST" },
+        geometry: { x: -72.91, y: 41.31 },
+      }] });
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({
+        features: u.searchParams.get("geometryType") === "esriGeometryPoint"
+          ? [{
+              ...parcel(10386),
+              attributes: { ...parcel(10386).attributes, property_address: "991 STATE ST" },
+            }]
+          : [],
+      });
+    throw Error("Unexpected source");
+  };
+  const out = await resolveParcel("991 STATE ST");
+  assert.equal(out.status, "resolved");
+  assert.equal(out.candidates[0].match.method, "address-point-intersection");
+  assert.equal(out.candidates[0].match.confidence, "high");
+});
+
 test("MBLU search does not trigger street-address point lookups", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
@@ -352,7 +379,6 @@ test("named municipal license appears in business records with historical status
         Application: [],
         Certificate: [],
         Document: [],
-        Complaint: [],
         Contact: [],
         License: [{
           License_ID: 99873,

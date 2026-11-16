@@ -659,7 +659,9 @@ async function municipalBusinessRecords(parcel) {
       );
     });
   return result("municipal-business-licenses", items, {
-    partial: vendor.status === "partial",
+    partial:
+      vendor.missing_categories?.includes("License") ||
+      vendor.truncated_categories?.includes("License"),
     warning:
       "Named municipal licenses may be historical, expired or void. Confirm status with the city.",
   });

@@ -28,9 +28,13 @@ function candidate(feature, method, searchedAddress = null) {
       confidence:
         method === "documented-alias"
           ? "high"
-          : method === "address-point-intersection" || differentAddress
-            ? "medium"
-            : "high",
+          : method === "address-point-intersection"
+            ? listedAddress && listedAddress === searchedAddress
+              ? "high"
+              : "medium"
+            : differentAddress
+              ? "medium"
+              : "high",
       ...(differentAddress
         ? {
             note:
