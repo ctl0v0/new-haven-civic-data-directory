@@ -166,13 +166,22 @@ export const SOURCES = Object.freeze([
       "Named licenses linked to the verified municipal parcel MBLU. Historical, expired or void records may appear; a license does not prove current occupancy or operation.",
   },
   {
+    id: "municipal-business-mentions",
+    group: "business",
+    title: "Named places in municipal work descriptions",
+    url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
+    mode: "live",
+    coverage:
+      "Explicit named-place mentions in live parcel permit and application descriptions. Text parsing is limited and may miss or misread names; these are historical mentions, not business licenses or current occupants.",
+  },
+  {
     id: "business-master",
     group: "business",
     title: "Connecticut Business Registry Master",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Business-Master/n7gp-d28j",
     mode: "live",
     coverage:
-      "Registry billing addresses are matched to the parcel-listed address and city address points. They are candidates, not evidence of occupancy or ownership.",
+      "Registry billing addresses are matched to the parcel-listed address, city address points and reviewed historical aliases. They are candidates, not evidence of occupancy or ownership.",
   },
   {
     id: "business-principals",
@@ -190,7 +199,7 @@ export const SOURCES = Object.freeze([
     url: "https://data.ct.gov/Business/State-Licenses-and-Credentials/ngch-56tr",
     mode: "live",
     coverage:
-      "Credential addresses are matched to the parcel-listed address and city address points. They are candidates, not proof of current use or business location.",
+      "Credential addresses are matched to the parcel-listed address, city address points and reviewed historical aliases. They are candidates, not proof of current use or business location.",
   },
   {
     id: "complete-streets",

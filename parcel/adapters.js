@@ -1,5 +1,6 @@
 import { load } from "cheerio";
 import curated from "./curated.json" with { type: "json" };
+import { ADDRESS_ALIASES } from "./aliases.js";
 import { LAYERS, source, SOURCES } from "./config.js";
 import {
   arcgis,
@@ -671,6 +672,71 @@ async function municipalBusinessRecords(parcel) {
   });
 }
 
+function namedPlaceInWork(description) {
+  const sentences = text(description)?.split(/[.!?]/).map((part) => part.trim()) ?? [];
+  for (const sentence of sentences) {
+    if (!/restaurant|bar|pub|store|business|tenant|retail/i.test(sentence))
+      continue;
+    const match = sentence.match(
+      /\bat\s+((?:[A-Z][A-Za-z'’&-]+\s+){1,3}[A-Z][A-Za-z'’&-]+)/,
+    );
+    if (match) return { name: match[1], context: sentence.slice(0, 240) };
+  }
+  return null;
+}
+
+async function municipalBusinessMentions(parcel) {
+  const vendor = await getSourceRecords("municity", parcel);
+  if (vendor.status === "unavailable")
+    return unavailable(
+      "municipal-business-mentions",
+      `Municipal work lookup unavailable: ${vendor.warning}`,
+    );
+  const seen = new Set();
+  const items = [];
+  for (const item of vendor.items) {
+    if (!["Permit", "Application"].includes(item.category)) continue;
+    const a = item.attributes ?? {};
+    const mention = namedPlaceInWork(a.Description);
+    if (!mention) continue;
+    const number = text(a.PermitNo ?? a.ApplicationNumber);
+    const key = `${mention.name.toUpperCase()}:${number ?? item.source_record_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(
+      record(
+        item.source_record_id,
+        "municipal-business-mentions",
+        {
+          business_name: mention.name,
+          record_type: item.category,
+          record_number: number,
+          record_status: text(a.PermStatus ?? a.Status),
+          recorded_address: text(a.LegalAddress ?? a.Addr1),
+          description_excerpt: mention.context,
+        },
+        {
+          eventDate: item.event_date,
+          match: "text-mention",
+          sourceUrl: item.source_url,
+          note: "The name appears in a municipal work description attached to this parcel. This is a historical text mention, not a business license or proof of current occupancy.",
+        },
+      ),
+    );
+  }
+  const incomplete = ["Permit", "Application"].filter(
+    (kind) =>
+      vendor.missing_categories?.includes(kind) ||
+      vendor.truncated_categories?.includes(kind),
+  );
+  return result("municipal-business-mentions", items, {
+    partial: incomplete.length > 0,
+    warning: incomplete.length
+      ? `Municipal ${incomplete.join(" and ")} coverage is incomplete; named work mentions may be missing.`
+      : "Only clear 'at [name]' phrases in restaurant, bar, store, tenant, business or retail work descriptions are included. Verify the mention at the source.",
+  });
+}
+
 async function managedLotRecords(parcel) {
   const mblu = text(parcel.attributes.mblu);
   if (!mblu)
@@ -725,7 +791,10 @@ async function socrataRecords(sourceId, parcel) {
       a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`;
     return normalizeAddress(`${a.house_number ?? ""} ${street}`);
   });
-  const addresses = [...new Set([listedAddress, ...pointAddresses])].filter(
+  const reviewedAliases = ADDRESS_ALIASES
+    .filter((alias) => alias.parcelId === Number(parcel.attributes.parcel_id))
+    .map((alias) => alias.address);
+  const addresses = [...new Set([listedAddress, ...pointAddresses, ...reviewedAliases])].filter(
     (address) => /^\d{1,6}\s+.+$/.test(address),
   );
   if (!addresses.length)
@@ -763,15 +832,21 @@ async function socrataRecords(sourceId, parcel) {
           ...row,
           matched_address: address,
           address_basis:
-            address === listedAddress ? "parcel-listed" : "city-address-point",
+            address === listedAddress
+              ? "parcel-listed"
+              : pointAddresses.includes(address)
+                ? "city-address-point"
+                : "reviewed-alias",
         },
         {
           match:
             address === listedAddress
               ? "address-candidate"
-              : "address-point-candidate",
+              : pointAddresses.includes(address)
+                ? "address-point-candidate"
+                : "reviewed-alias-candidate",
           eventDate: date(row.date_registration ?? row.issuedate),
-          note: `${sourceId === "business-master" ? "Registry billing address" : "State credential address"} matches ${address === listedAddress ? "the listed parcel address" : "a city address point on this parcel"}. This is a candidate connection; it does not establish occupancy, ownership or current use.`,
+          note: `${sourceId === "business-master" ? "Registry billing address" : "State credential address"} matches ${address === listedAddress ? "the listed parcel address" : pointAddresses.includes(address) ? "a city address point on this parcel" : "a reviewed historical address alias"}. This is a candidate connection; it does not establish occupancy, ownership or current use.`,
         },
       ),
     ),
@@ -884,6 +959,7 @@ const ADAPTERS = Object.freeze({
   "cmt-contacts": cmtContactRecords,
   municity: municityRecords,
   "municipal-business-licenses": municipalBusinessRecords,
+  "municipal-business-mentions": municipalBusinessMentions,
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
   planning: planningRecords,

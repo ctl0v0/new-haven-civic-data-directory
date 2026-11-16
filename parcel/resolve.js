@@ -1,4 +1,5 @@
 import { LAYERS } from "./config.js";
+import { ADDRESS_ALIASES } from "./aliases.js";
 import { arcgis, cached, fetchJson, sqlString, SourceError } from "./http.js";
 
 export function normalizeAddress(value) {
@@ -11,8 +12,8 @@ export function normalizeAddress(value) {
     .replace(/\s+/g, " ")
     .trim();
 }
-const aliases = new Map([["50 FITCH ST", 23699]]); // Reviewed official planning document, see curated evidence.
-function candidate(feature, method, searchedAddress = null) {
+const aliases = new Map(ADDRESS_ALIASES.map((alias) => [alias.address, alias]));
+function candidate(feature, method, searchedAddress = null, evidence = null) {
   const a = feature.attributes ?? {};
   const listedAddress = normalizeAddress(a.property_address);
   const differentAddress =
@@ -26,16 +27,18 @@ function candidate(feature, method, searchedAddress = null) {
     match: {
       method,
       confidence:
-        method === "documented-alias"
-          ? "high"
+        evidence?.confidence ?? (method === "documented-alias"
+          ? "medium"
           : method === "address-point-intersection"
             ? listedAddress && listedAddress === searchedAddress
               ? "high"
               : "medium"
             : differentAddress
               ? "medium"
-              : "high",
-      ...(differentAddress
+              : "high"),
+      ...(evidence?.note
+        ? { note: evidence.note, evidence_urls: evidence.evidenceUrls }
+        : differentAddress
         ? {
             note:
               method === "address-point-intersection"
@@ -181,15 +184,15 @@ export async function resolveParcel(query) {
       }
     }
     if (aliases.has(normalized)) {
-      const id = aliases.get(normalized);
+      const alias = aliases.get(normalized);
       const result = await arcgis(LAYERS.parcels, {
-        where: `parcel_id = ${id}`,
+        where: `parcel_id = ${alias.parcelId}`,
         outFields: "objectid,parcel_id,property_address,mblu,account_number",
         resultRecordCount: "10",
       }).catch(() => null);
       matches.push(
         ...(result?.features ?? []).map((f) =>
-          candidate(f, "documented-alias"),
+          candidate(f, "documented-alias", normalized, alias),
         ),
       );
     }

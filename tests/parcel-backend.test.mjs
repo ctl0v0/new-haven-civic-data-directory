@@ -356,6 +356,32 @@ test("address point agrees with the parcel listing even if the direct query retu
   assert.equal(out.candidates[0].match.confidence, "high");
 });
 
+test("179 Crown resolves through reviewed historical evidence when city address rows are absent", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_") && !u.pathname.endsWith("/query"))
+      return response({ fields: [{ name: "house_number", type: "esriFieldTypeString" }] });
+    if (u.pathname.includes("Addresses_")) return response({ features: [] });
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({
+        features: u.searchParams.get("where") === "parcel_id = 13791"
+          ? [{
+              ...parcel(13791),
+              attributes: { ...parcel(13791).attributes, property_address: "181 CROWN ST" },
+            }]
+          : [],
+      });
+    throw Error("Unexpected source");
+  };
+  const out = await resolveParcel("179 Crown St");
+  assert.equal(out.status, "resolved");
+  assert.equal(out.candidates[0].parcel_id, 13791);
+  assert.equal(out.candidates[0].match.method, "documented-alias");
+  assert.equal(out.candidates[0].match.confidence, "medium");
+  assert.match(out.candidates[0].match.note, /Cask Republic/);
+  assert.equal(out.candidates[0].match.evidence_urls.length, 2);
+});
+
 test("MBLU search does not trigger street-address point lookups", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
@@ -484,6 +510,31 @@ test("missing municipal License category is reported as partial", async () => {
   assert.match(out.warning, /omitted its License category/);
 });
 
+test("Cask Republic appears as one historical business mention from matching permit and application", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (u.pathname.endsWith("/Children")) {
+      const description = "Exploratory demo for restaurant kitchen remodel at Cask Republic. Other work needs permits.";
+      return response({
+        Permit: [{ Permit_ID: 564534, PermitNo: "B-21-02020", PermStatus: "Issued",
+          Description: description, LegalAddress: "181 CROWN ST", PermitDate: "2021-11-15" }],
+        Application: [{ Application_ID: 15765, ApplicationNumber: "B-21-02020",
+          Description: description, LegalAddress: "181 CROWN ST", ApplicationDate: "2021-11-12" }],
+      });
+    }
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("municipal-business-mentions", parcel(999019));
+  assert.equal(out.status, "ok");
+  assert.equal(out.items.length, 1);
+  assert.equal(out.items[0].attributes.business_name, "Cask Republic");
+  assert.equal(out.items[0].attributes.record_number, "B-21-02020");
+  assert.equal(out.items[0].match.method, "text-mention");
+  assert.match(out.items[0].note, /historical text mention/);
+});
+
 test("state business registry matches a city address point on the parcel", async () => {
   let stateQuery = "";
   globalThis.fetch = async (input) => {
@@ -515,6 +566,24 @@ test("state business registry matches a city address point on the parcel", async
   assert.equal(out.items[0].attributes.address_basis, "city-address-point");
   assert.equal(out.items[0].match.method, "address-point-candidate");
   assert.match(out.items[0].note, /billing address.*city address point/i);
+});
+
+test("state registry can use a reviewed historical address alias", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_")) return response({ features: [] });
+    if (u.hostname === "data.ct.gov")
+      return response([{ id: "novaract", name: "Novaract LLC",
+        billingstreet: "179 Crown St", billingcity: "New Haven", status: "Active" }]);
+    throw Error("Unexpected source");
+  };
+  const p = parcel(13791);
+  p.attributes.property_address = "181 CROWN ST";
+  const out = await getSourceRecords("business-master", p);
+  assert.equal(out.items.length, 1);
+  assert.equal(out.items[0].attributes.matched_address, "179 CROWN ST");
+  assert.equal(out.items[0].attributes.address_basis, "reviewed-alias");
+  assert.equal(out.items[0].match.method, "reviewed-alias-candidate");
 });
 
 test("parcel geography preserves all intersecting zoning records", async () => {
