@@ -1,0 +1,60 @@
+# Parcel data pilot
+
+This pilot starts from an official New Haven parcel record. It queries public sources at request time and caches successful lookups for five minutes using Vercel Runtime Cache, with an in-process fallback for local development. It does not store a parcel dataset or source history. The static directory remains public; the pilot page, REST routes and MCP endpoint require private access.
+
+## Run and configure
+
+Use Node.js 24 or later. Run `npm ci`, `npm test`, and `npm run build`. For a local Vercel preview, set the variables below in `.env.local` and run `npx vercel dev` in a linked Vercel project. Do not commit the env file.
+
+| Variable | Use |
+| --- | --- |
+| `PILOT_PASSPHRASE` | Shared passcode for the `/parcel` browser login. |
+| `PILOT_COOKIE_SECRET` | Signs seven-day, secure, HTTP-only pilot cookies. |
+| `PILOT_API_TOKEN` | Bearer token for API clients and MCP clients. |
+
+Each value must contain at least 24 characters. Configure all three as sensitive Vercel environment variables before testing a deployed preview. The endpoints fail closed when any value is missing. Rotate the passcode and token after the pilot; changing the cookie secret invalidates active browser sessions. The browser and API use the same private access policy, while MCP requires the bearer token. Do not put the bearer token in the browser page or a public client configuration.
+
+For any wider rollout, add rate limits at the deployment edge and review the access terms and request budgets of each upstream source. This pilot uses bounded request sizes, timeouts, fixed upstream hosts, and a short cache; it is not a bulk downloader.
+
+## Review flow
+
+Open `/parcel`, enter the pilot passcode, and search by address, parcel ID, MBLU or assessor account number. If a query yields multiple parcel records, choose an official parcel ID and object ID. The page shows six groups, source status and coverage, raw public record fields, original links, and a dated activity timeline. No map is needed for this review flow. The URL can preserve a selected parcel ID and object ID for another authenticated reviewer.
+
+The resolver uses the city's parcel layer first. Address-point intersections are a fallback. It does not silently choose one of several candidate parcels, and it preserves every zoning polygon returned for a parcel. Spatial and address matches are labeled as candidates where appropriate. Parcel geometry is returned in longitude and latitude for intersections. A documented alias for 50 Fitch Street is included only for a reviewed planning case.
+
+## REST API
+
+Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed browser session cookie also works for REST. Responses use `Cache-Control: private, no-store` even though upstream lookups are cached inside the server. Failed sources are reported per source so a missing result is distinguishable from an unavailable source.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/v1/resolve` with JSON `{"query":"165 Church Street"}` | Resolve to zero, one, or multiple official parcel candidates. |
+| `GET /api/v1/parcel?parcel_id=...&objectid=...` | Selected parcel identity and available groups. |
+| `GET /api/v1/records?parcel_id=...&objectid=...&group=property&limit=25&cursor=...` | One grouped, paginated page of source records and source statuses. |
+| `GET /api/v1/feed?parcel_id=...&objectid=...&limit=25&cursor=...` | Dated source records, newest first. |
+| `GET /api/v1/sources` | Source catalog, modes, limitations and deliberate exclusions. |
+
+`objectid` is required when an official `parcel_id` maps to more than one source feature. Page size is capped at 50. Each record carries its source ID, source record ID, fields, match method, source URL, source event date where known, and retrieval time. The feed contains dated source records; it does not detect changes between requests. The API does not claim that an empty source response proves that no event exists.
+
+## MCP
+
+`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers `resolve_parcel`, `get_parcel`, `get_parcel_records`, `get_parcel_feed`, and `list_sources`, plus source-coverage and matching-method resources. The MCP tools call the same service as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <PILOT_API_TOKEN>` on each request. Keep this token in the client's private secret store.
+
+## Source coverage
+
+The machine-readable catalog is published in `dist/parcel-source-catalog.json` and returned by `/api/v1/sources`. `live` means the adapter makes a source request when queried; it does not certify source completeness or currentness. `curated` means selected, reviewed evidence only. `gap` means no safe parcel association has been verified. `paused` means deliberately excluded from collection for now. Runtime source errors appear as `unavailable`, and truncated responses as `partial`.
+
+| Group | Live or curated | Visible gaps |
+| --- | --- | --- |
+| Property | City parcels and address points; Vision assessor card | Commercial vacancy |
+| Geography | Zoning, wards, neighborhoods | Boundary currency and zoning interpretation remain source limitations |
+| Representation | Board of Alders roster through an unambiguous ward | CMT geometry and contacts |
+| Activity | Municity children, LCI managed lots, selected planning case | Inspections and enforcement |
+| Business | CT Business Registry Master and State Licenses address candidates | Registry principals require a reviewed entity join |
+| Nearby | Complete Streets projects within 250 feet | Service requests; area context is paused |
+
+Meetings, agendas and legislation, and budgets and monthly finance reports are outside this pilot's scope. Civic Fit community or administrator data is not ingested. State address matches are candidate links and do not prove occupancy, ownership or current use. Managed lots do not prove vacancy. Nearby records are kept in their own group. The Complete Streets source appears stale, so its event status needs original-source review.
+
+## Verification and limits
+
+`npm test` covers private access, ambiguous parcel IDs, multiple intersecting zoning records, partial feed behavior when an upstream fails, and MCP initialization. `npm run build` validates the original directory and emits the pilot source catalog. Live upstream smoke tests should use at least one known parcel, one ambiguous or missing address, and each live adapter from the deployed preview before inviting reviewers. Network requests from the implementation workspace to New Haven GIS were blocked by the workspace proxy during development, so those live checks remain a deployment gate. Public source terms, historical coverage, and field freshness still need source-level review.

@@ -7,6 +7,13 @@
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@vercel/functions": "3.11.3",
+    "cheerio": "1.2.0",
+    "zod": "4.5.4"
   }
 }
