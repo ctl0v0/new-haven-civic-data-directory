@@ -65,15 +65,23 @@
     "Record kinds use different type, status and date fields. An application is not an issued permit, a historical license may have expired, and a certificate is not automatically an occupancy approval. A missing result does not prove that no permit or municipal record exists.",
     "A parcel or building match does not establish an exact storefront or suite, current use, completed work, legal compliance, availability or permission to operate. Confirm consequential interpretations with the responsible city office.",
     "Civic Fit is a related community implementation, not the publisher of these records. Its current per-space lookup keeps candidates private until an admin reviews individual records; this directory does not provide that review service.",
-    "Historical coverage, refresh responsibility, reuse rights and bulk-access costs remain unknown. No recurring automated source check has been configured for this entry."
+    "Historical coverage, refresh responsibility, reuse rights and bulk-access costs remain unknown. The weekly and on-demand source checker covers only the documented parcel sample, selected fields and related-record groups; a passing run does not renew this readiness assessment or certify wider coverage."
   ],
   "next": [
     "Test more properties, alternate legal addresses, ambiguous parcels, empty results and MBLU mismatches before generalizing the sample lookup.",
     "Confirm supported API access, request limits, pagination, historical coverage, bulk exports, costs and reuse terms with the city or vendor.",
     "Verify browser search, inspection and document access, record-type definitions, date semantics and the departmental correction route.",
-    "Assign an entry maintainer and consider a bounded recurring check once the supported access path is confirmed."
+    "Assign an entry maintainer and review changes or failures reported by the shared source-check workflow before updating documented claims."
   ],
   "evidence": [
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/blob/main/scripts/verify-building-permits.mjs",
+      "note": "Automates the documented PrintKey-to-parcel and point-to-parcel comparison plus four related-record groups and selected-field checks. Regression tests use synthetic records and exercise ambiguous identity, schema changes, blocked access, malformed responses, limits and summary privacy."
+    },
+    {
+      "url": "https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml",
+      "note": "The shared weekly and on-demand validation workflow includes the permits selection. The generated source page links each published result to its exact run and checked code revision. Only summaries are published; readiness dates remain separately maintained."
+    },
     {
       "url": "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
       "note": "New Haven portal URL used by the current Civic Fit integration. The landing page was inspected on November 16, 2026; it requires a compatible JavaScript browser and did not establish interactive search access."

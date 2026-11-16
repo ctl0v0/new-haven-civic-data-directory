@@ -12,6 +12,7 @@ export function summarizeFindings(observations){
   if(item.query)result.sample={rowsReturned:item.query.rowsReturned,returnedFields:[...(item.query.returnedFields||[])].sort()};
   for(const key of ['address','parcel','zoning','identifiers'])if(item[key])result[key]=Object.fromEntries(Object.entries(item[key]).filter(([name])=>['rowsReturned','distinctLocations','normalizedAddressesMatchInput','validLongitudeLatitudePolygons','matchesIndependentAddressLookup','requiredFieldsPresent','parcelPresent','accountPresent'].includes(name)));
   if(item.repeatLookups)result.repeatLookups=item.repeatLookups.map(({field,rowsReturned,sameRecordAndSelectedValues})=>({field,rowsReturned,sameRecordAndSelectedValues}));
+  if(item.recordGroups)result.recordGroups=item.recordGroups.map(({kind,rowsReturned,returnedFields})=>({kind,rowsReturned,returnedFields}));
   if(item.sample)result.document={label:item.sample.label,url:item.sample.url,sha256:item.sample.source_sha256,pages:item.sample.pages,pagesInspected:item.sample.pages_inspected,textPages:item.sample.pages_with_substantial_text,revenueRowPage:item.sample.checked_revenue_sample?.pdf_page,revenueRowChecks:item.sample.checked_revenue_sample?.checks};
   return result;
  });
@@ -31,7 +32,7 @@ export function updateResults(previous,report,runUrl,revision,registry=[]){
    const urls=[...(definition.source_urls||[]),...(check.observations||[]).flatMap(item=>[item.url,item.sample?.url,item.addressQuery?.url,item.address?.url,item.parcel?.url,item.zoning?.url])];
    const source_urls=[...new Set(urls.filter(url=>{
     if(typeof url!=='string')return false;
-    try{const parsed=new URL(url);return parsed.protocol==='https:'&&!parsed.username&&!parsed.password&&(parsed.hostname==='newhavenct.gov'||parsed.hostname.endsWith('.newhavenct.gov')||parsed.hostname==='newhaven-ct.legistar.com'||parsed.hostname==='gis.vgsi.com');}catch{return false;}
+    try{const parsed=new URL(url);return parsed.protocol==='https:'&&!parsed.username&&!parsed.password&&(parsed.hostname==='newhavenct.gov'||parsed.hostname.endsWith('.newhavenct.gov')||parsed.hostname==='newhaven-ct.legistar.com'||parsed.hostname==='gis.vgsi.com'||parsed.hostname==='services5.municity5.com'||parsed.hostname==='www.municityconnect.com');}catch{return false;}
    }))];
    (grouped[id]||=[]).push({id:check.id,title:definition.title||'Source validation',scope:definition.scope||'See the exact run for the tested scope.',status:check.status,checked_at:report.checked_at,run_url:runUrl,revision,source_urls,findings:summarizeFindings(check.observations),reason:typeof check.reason==='string'?check.reason.slice(0,500):null,warnings:(check.observations||[]).flatMap(x=>x.warnings||[]).filter(x=>typeof x==='string').map(x=>x.slice(0,500))});
   }

@@ -1,13 +1,14 @@
 # Source validation
 
-Use one shared [Validate civic sources workflow](https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml). Run all configured checks or select Alders/property. It also runs weekly. Reports and temporary verification exports are saved as seven-day workflow artifacts.
+Use one shared [Validate civic sources workflow](https://github.com/ctl0v0/new-haven-civic-data-directory/actions/workflows/validate-sources.yml). Run all configured checks or select alders, property, finance, wards or permits. It also runs weekly. Reports and temporary verification exports are saved as seven-day workflow artifacts.
 
-For local use, run `node scripts/validate-sources.mjs`, or append `alders` or `property`. Node.js 22 and Python 3 are required. No credentials or dependencies are needed for these public read-only source checks.
+For local use, run `node scripts/validate-sources.mjs`, or append a selection such as `permits`. Node.js 22 and Python 3 are required. The finance check needs the workflow's pinned pypdf dependency; the permit checker uses only Node.js built-ins. No credentials are needed for these public read-only source checks.
 
 ## Current checks
 - Alders: fetch one official HTML page, find expected headings, preserve all representative rows, validate unique numbered wards, and report missing identifiers without guessing. The current city table has one empty WARD cell; the export preserves null.
 - City property APIs: read parcel/address/zoning metadata and one JSON record per layer. Report missing expected fields and request failures. Attribute values are not logged.
-- Finance, meetings/legislation and ward downloads: not configured yet. The report says so explicitly; an overall successful run does not mean every source is verified.
+- Permits: resolve the documented commercial parcel by PrintKey and point, compare identity, and check Permit, Application, License and Certificate arrays and selected fields. Report counts, field names and a fingerprint without raw records or contact details. See [the sample and regression-test scope](permit-lookup.md).
+- Finance and ward boundaries have source-specific adapters. Meetings/legislation remains unconfigured; an overall successful run does not mean every source is verified.
 
 The registry is validation/sources.json. Small source-specific adapters share one runner and reporting format; a universal parser cannot correctly handle every API, HTML table and document.
 
