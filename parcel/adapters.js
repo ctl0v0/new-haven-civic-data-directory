@@ -432,6 +432,66 @@ function printKey(value) {
       .toUpperCase() ?? null
   );
 }
+
+const MUNICIPAL_CATEGORIES = [
+  "Document",
+  "Application",
+  "Complaint",
+  "Contact",
+  "License",
+  "Permit",
+  "Certificate",
+];
+
+function publicDocumentUrl(row) {
+  if (
+    ![true, 1, "true", "1"].includes(row?.Public) ||
+    [true, 1, "true", "1"].includes(row?.Deleted) ||
+    ![true, 1, "true", "1"].includes(row?.UrlExists)
+  )
+    return null;
+  try {
+    const url = new URL(row.Url);
+    return url.protocol === "https:" &&
+      (url.hostname === "municitymedia.com" ||
+        url.hostname.endsWith(".municitymedia.com"))
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function municipalChildAttributes(kind, row) {
+  if (kind === "Document")
+    return {
+      document_name: text(row.Name ?? row.FilenameWeb),
+      document_type: text(row.Type),
+      section: text(row.Section),
+      modified_date: date(row.Modified),
+      public_document_url: publicDocumentUrl(row),
+    };
+  if (kind === "Complaint")
+    return {
+      complaint_number: text(row.ComplaintNo),
+      complaint_type: text(row.CompType),
+      status: text(row.CompStatus),
+      filed_date: date(row.Date),
+      recorded_address: text(row.LegalAddress ?? row.Address),
+    };
+  if (kind === "Contact")
+    return {
+      contact_name: text(
+        row.Fullname ??
+          [row.ContactFirstName, row.ContactLastName].filter(Boolean).join(" "),
+      ),
+      contact_role: text(row.ContactRole),
+      contact_type: text(row.ContactType),
+      primary_owner: [true, 1, "true", "1"].includes(row.PrimaryOwner),
+    };
+  return row;
+}
+
 async function municityRecords(parcel) {
   const key = printKey(parcel.attributes.mblu);
   if (!key)
@@ -484,12 +544,17 @@ async function municityRecords(parcel) {
     opts,
   );
   const items = [];
-  const permitNumbers = new Set(
-    (Array.isArray(children.Permit) ? children.Permit : [])
-      .map((row) => text(row?.PermitNo ?? row?.PermitNumber)?.toUpperCase())
-      .filter(Boolean),
+  const categoryCounts = Object.fromEntries(
+    MUNICIPAL_CATEGORIES.map((kind) => [kind, 0]),
   );
+  const missingCategories = MUNICIPAL_CATEGORIES.slice(0, 6).filter(
+    (kind) => children[kind] == null,
+  );
+  const truncatedCategories = [];
   for (const [kind, idKey, dateKeys] of [
+    ["Document", "Document_ID", ["Modified", "CreatedDate"]],
+    ["Complaint", "Complaint_ID", ["Date", "CreatedDate"]],
+    ["Contact", "Contact_ID", ["Modified", "CreatedDate"]],
     ["Permit", "Permit_ID", ["PermitDate", "CreatedDate"]],
     ["Application", "Application_ID", ["ApplicationDate", "CreatedDate"]],
     ["License", "License_ID", ["IssueDate", "CreatedDate"]],
@@ -499,35 +564,64 @@ async function municityRecords(parcel) {
     if (rows == null) continue;
     if (!Array.isArray(rows))
       throw new SourceError(`Vendor ${kind} records are malformed`);
+    if (rows.length > 500) truncatedCategories.push(kind);
     for (const [index, row] of rows.slice(0, 500).entries()) {
       if (
-        kind === "Application" &&
-        permitNumbers.has(text(row?.ApplicationNumber)?.toUpperCase())
+        kind === "Document" &&
+        (![true, 1, "true", "1"].includes(row?.Public) ||
+          [true, 1, "true", "1"].includes(row?.Deleted))
       )
         continue;
       const eventDate =
         dateKeys.map((key) => date(row?.[key])).find(Boolean) ?? null;
+      const sourceUrl =
+        kind === "Document"
+          ? publicDocumentUrl(row) ?? source("municity").url
+          : source("municity").url;
       items.push(
-        record(
-          `${kind.toLowerCase()}:${row?.[idKey] ?? index}`,
-          "municity",
-          row,
-          {
-            eventDate,
-            sourceUrl: source("municity").url,
-            note: `Vendor ${kind.toLowerCase()} record; recorded status does not prove completion.`,
-          },
-        ),
+        {
+          ...record(
+            `${kind.toLowerCase()}:${row?.[idKey] ?? index}`,
+            "municity",
+            municipalChildAttributes(kind, row),
+            {
+              eventDate,
+              sourceUrl,
+              note:
+                kind === "Complaint"
+                  ? "Municipal complaint case metadata; narrative and personal contact fields are omitted."
+                  : kind === "Contact"
+                    ? "Municipal parcel-linked contact summary; verify the role and whether it is current."
+                    : kind === "Document"
+                      ? "Public municipal document metadata; the linked file is hosted by the source."
+                      : `Vendor ${kind.toLowerCase()} record; recorded status does not prove completion.`,
+            },
+          ),
+          category: kind,
+        },
       );
+      categoryCounts[kind] += 1;
     }
   }
-  return result("municity", items, {
-    partial: ["Permit", "Application", "License", "Certificate"].some(
-      (kind) => children[kind]?.length > 500,
-    ),
-    warning:
-      "Permit, application, license and certificate stages remain distinct.",
-  });
+  return {
+    ...result("municity", items, {
+      partial: Boolean(missingCategories.length || truncatedCategories.length),
+      warning: [
+        "Category counts reflect returned public records. Private or deleted documents are omitted.",
+        missingCategories.length
+          ? `Missing vendor categories: ${missingCategories.join(", ")}.`
+          : null,
+        truncatedCategories.length
+          ? `Vendor categories exceeded the 500-record limit: ${truncatedCategories.join(", ")}.`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }),
+    category_counts: categoryCounts,
+    missing_categories: missingCategories,
+    truncated_categories: truncatedCategories,
+  };
 }
 
 async function municipalBusinessRecords(parcel) {
@@ -617,45 +711,71 @@ async function planningRecords(parcel) {
 }
 
 async function socrataRecords(sourceId, parcel) {
-  const address = normalizeAddress(parcel.attributes.property_address);
-  if (!address)
-    return unavailable(
-      sourceId,
-      "Parcel has no address for an exact source lookup.",
-    );
+  const listedAddress = normalizeAddress(parcel.attributes.property_address);
+  const addressPoints = await getSourceRecords("addresses", parcel);
+  const pointAddresses = addressPoints.items.map((item) => {
+    const a = item.attributes ?? {};
+    const street =
+      a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`;
+    return normalizeAddress(`${a.house_number ?? ""} ${street}`);
+  });
+  const addresses = [...new Set([listedAddress, ...pointAddresses])].filter(
+    (address) => /^\d{1,6}\s+.+$/.test(address),
+  );
+  if (!addresses.length)
+    return unavailable(sourceId, "Parcel has no comparable city address.");
+  const selectedAddresses = addresses.slice(0, 15);
   const id = sourceId === "business-master" ? "n7gp-d28j" : "ngch-56tr";
   const field = sourceId === "business-master" ? "billingstreet" : "address";
   const url = new URL(`https://data.ct.gov/resource/${id}.json`);
-  const parts = address.match(/^(\d+)\s+(.+)$/);
-  if (!parts)
-    return unavailable(
-      sourceId,
-      "Parcel address cannot be safely compared with state addresses.",
-    );
-  const street = parts[2].replace(/\s+(ST|AVE|RD)$/, "").replaceAll(" ", "%");
+  const clauses = selectedAddresses.map((address) => {
+    const parts = address.match(/^(\d+)\s+(.+)$/);
+    const street = parts[2]
+      .replace(/\s+(ST|AVE|RD)$/, "")
+      .replaceAll(" ", "%");
+    return `upper(${field}) like '${sqlString(parts[1] + "%" + street)}%'`;
+  });
   url.searchParams.set(
     "$where",
-    `upper(${field}) like '${sqlString(parts[1] + "%" + street)}%' AND upper(${sourceId === "business-master" ? "billingcity" : "city"}) = 'NEW HAVEN'`,
+    `(${clauses.join(" OR ")}) AND upper(${sourceId === "business-master" ? "billingcity" : "city"}) = 'NEW HAVEN'`,
   );
-  url.searchParams.set("$limit", "100");
+  url.searchParams.set("$limit", "200");
   const rows = await fetchJson(url, { timeout: 9000, maxBytes: 4_000_000 });
   if (!Array.isArray(rows))
     throw new SourceError("State source returned malformed rows");
-  const matching = rows.filter(
-    (row) => normalizeAddress(row[field]) === address,
-  );
+  const selected = new Set(selectedAddresses);
+  const matching = rows
+    .map((row) => ({ row, address: normalizeAddress(row[field]) }))
+    .filter(({ address }) => selected.has(address));
   return result(
     sourceId,
-    matching.map((row, index) =>
-      record(row.id ?? row.credentialid ?? index, sourceId, row, {
-        match: "address-candidate",
-        eventDate: date(row.date_registration ?? row.issuedate),
-        note: "Address is a candidate connection only; it does not establish occupancy, ownership or current use.",
-      }),
+    matching.map(({ row, address }, index) =>
+      record(
+        row.id ?? row.credentialid ?? index,
+        sourceId,
+        {
+          ...row,
+          matched_address: address,
+          address_basis:
+            address === listedAddress ? "parcel-listed" : "city-address-point",
+        },
+        {
+          match:
+            address === listedAddress
+              ? "address-candidate"
+              : "address-point-candidate",
+          eventDate: date(row.date_registration ?? row.issuedate),
+          note: `${sourceId === "business-master" ? "Registry billing address" : "State credential address"} matches ${address === listedAddress ? "the listed parcel address" : "a city address point on this parcel"}. This is a candidate connection; it does not establish occupancy, ownership or current use.`,
+        },
+      ),
     ),
     {
-      partial: rows.length === 100,
-      warning: "Candidates are shown separately from confirmed parcel records.",
+      partial:
+        rows.length === 200 ||
+        addresses.length > selectedAddresses.length ||
+        ["partial", "unavailable"].includes(addressPoints.status),
+      warning:
+        "Candidates use the parcel-listed address and city address points. Registry billing and credential addresses do not prove business location. Address-point or state result limits may omit candidates.",
     },
   );
 }

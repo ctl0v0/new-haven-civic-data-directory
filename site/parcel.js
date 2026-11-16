@@ -42,6 +42,10 @@ function appendRecord(parent, item) {
   const label =
     item.attributes?.business_name ??
     item.attributes?.BusinessName ??
+    item.attributes?.document_name ??
+    item.attributes?.complaint_number ??
+    item.attributes?.contact_name ??
+    item.attributes?.name ??
     item.attributes?.title ??
     item.attributes?.property_address ??
     item.attributes?.LegalAddress ??
@@ -49,7 +53,7 @@ function appendRecord(parent, item) {
   const recordedStatus = item.attributes?.status ?? item.attributes?.Status;
   const summary = el(
     "summary",
-    `${item.event_date ? item.event_date + " · " : ""}${item.source_id} · ${label}${recordedStatus ? ` · ${recordedStatus}` : ""}`,
+    `${item.event_date ? item.event_date + " · " : ""}${item.source_id}${item.category ? ` · ${item.category}` : ""} · ${label}${recordedStatus ? ` · ${recordedStatus}` : ""}`,
   );
   details.append(summary);
   const p = el(
@@ -70,6 +74,16 @@ function sourceLine(parent, source) {
     document.createTextNode(` ${source.source_id} · ${source.count} records`),
   );
   row.append(el("p", source.warning ?? source.coverage, "meta"));
+  if (source.category_counts)
+    row.append(
+      el(
+        "p",
+        Object.entries(source.category_counts)
+          .map(([category, count]) => `${category} ${count}`)
+          .join(" · "),
+        "meta",
+      ),
+    );
   if (source.source_url) row.append(link(source.source_url, "Open source"));
   if (source.verification_url)
     row.append(link(source.verification_url, "Confirm contacts with city"));

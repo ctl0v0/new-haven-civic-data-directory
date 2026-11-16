@@ -306,6 +306,29 @@ test("3 Edwards-style search drops neighboring house numbers and keeps the point
   assert.match(out.candidates[0].match.note, /different address/);
 });
 
+test("listed parcel address takes precedence when its city address point also matches", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_") && !u.pathname.endsWith("/query"))
+      return response({ fields: [{ name: "house_number", type: "esriFieldTypeString" }] });
+    if (u.pathname.includes("Addresses_")) return response({ features: [] });
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({
+        features: u.searchParams.get("where")?.includes("property_address")
+          ? [{
+              ...parcel(10386),
+              attributes: { ...parcel(10386).attributes, property_address: "990 STATE ST" },
+            }]
+          : [],
+      });
+    throw Error("Unexpected source");
+  };
+  const out = await resolveParcel("990 State St");
+  assert.equal(out.status, "resolved");
+  assert.equal(out.candidates[0].parcel_id, 10386);
+  assert.equal(out.candidates[0].match.method, "parcel-address");
+});
+
 test("MBLU search does not trigger street-address point lookups", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
@@ -328,6 +351,9 @@ test("named municipal license appears in business records with historical status
         Permit: [],
         Application: [],
         Certificate: [],
+        Document: [],
+        Complaint: [],
+        Contact: [],
         License: [{
           License_ID: 99873,
           BusinessName: "Weary Hobo LLC aka Bar August",
@@ -348,6 +374,106 @@ test("named municipal license appears in business records with historical status
   assert.equal(out.items[0].attributes.status, "Void");
   assert.equal(out.items[0].attributes.recorded_address, "990 STATE ST");
   assert.doesNotMatch(JSON.stringify(out), /Unrelated vendor detail/);
+});
+
+test("municipal parcel lookup includes public documents, complaint metadata and contact roles", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (u.pathname.endsWith("/Children"))
+      return response({
+        Document: [
+          {
+            Document_ID: 11,
+            Name: "Permit plan.pdf",
+            Public: true,
+            Deleted: 0,
+            UrlExists: true,
+            Url: "https://www.municitymedia.com/public/plan.pdf",
+            Modified: "2022-08-10T12:00:00",
+          },
+          {
+            Document_ID: 12,
+            Name: "Private notes.pdf",
+            Public: false,
+            Deleted: 0,
+            UrlExists: true,
+            Url: "https://www.municitymedia.com/private/notes.pdf",
+          },
+        ],
+        Application: [],
+        Complaint: [{
+          Complaint_ID: 21,
+          ComplaintNo: "C-22-02774",
+          CompType: "Interior Maintenance",
+          CompStatus: "Case Assigned",
+          Date: "2022-08-09T20:53:21",
+          Description: "Private complaint narrative",
+        }],
+        Contact: [{
+          Contact_ID: 31,
+          Fullname: "Example Owner",
+          ContactRole: "Owner",
+          ContactType: "OWNER",
+          Email: "private@example.org",
+          Phone: "555-0100",
+        }],
+        License: [],
+        Permit: [],
+        Certificate: [],
+      });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("municity", parcel(999015));
+  assert.equal(out.status, "ok");
+  assert.equal(out.items.length, 3);
+  assert.equal(out.category_counts.Document, 1);
+  assert.equal(out.category_counts.Application, 0);
+  assert.equal(out.category_counts.Complaint, 1);
+  assert.equal(out.category_counts.Contact, 1);
+  assert.equal(out.category_counts.License, 0);
+  assert.equal(out.category_counts.Permit, 0);
+  assert.equal(out.items.find((x) => x.category === "Document").source_url,
+    "https://www.municitymedia.com/public/plan.pdf");
+  assert.equal(out.items.find((x) => x.category === "Complaint").attributes.complaint_number,
+    "C-22-02774");
+  assert.equal(out.items.find((x) => x.category === "Contact").attributes.contact_role,
+    "Owner");
+  assert.doesNotMatch(JSON.stringify(out), /Private notes|Private complaint narrative|private@example.org|555-0100/);
+});
+
+test("state business registry matches a city address point on the parcel", async () => {
+  let stateQuery = "";
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_"))
+      return response({
+        features: [
+          { attributes: { house_number: "867", full_street_name: "WHALLEY AVE" } },
+          { attributes: { house_number: "869", full_street_name: "WHALLEY AVE" } },
+        ],
+      });
+    if (u.hostname === "data.ct.gov") {
+      stateQuery = u.searchParams.get("$where");
+      return response([{ id: "keys-on-kites", name: "KEYS ON KITES, LLC",
+        billingstreet: "869 WHALLEY AVENUE", billingcity: "New Haven",
+        status: "Dissolved" }]);
+    }
+    throw Error("Unexpected source");
+  };
+  const p = parcel(999017);
+  p.attributes.property_address = "867 WHALLEY AV ";
+  const out = await getSourceRecords("business-master", p);
+  assert.equal(out.status, "ok");
+  assert.match(stateQuery, /867%WHALLEY/);
+  assert.match(stateQuery, /869%WHALLEY/);
+  assert.equal(out.items.length, 1);
+  assert.equal(out.items[0].attributes.name, "KEYS ON KITES, LLC");
+  assert.equal(out.items[0].attributes.matched_address, "869 WHALLEY AVE");
+  assert.equal(out.items[0].attributes.address_basis, "city-address-point");
+  assert.equal(out.items[0].match.method, "address-point-candidate");
+  assert.match(out.items[0].note, /billing address.*city address point/i);
 });
 
 test("parcel geography preserves all intersecting zoning records", async () => {

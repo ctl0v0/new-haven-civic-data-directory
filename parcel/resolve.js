@@ -5,7 +5,7 @@ export function normalizeAddress(value) {
   return String(value ?? "")
     .toUpperCase()
     .replace(/\b(STREET|ST)\b/g, "ST")
-    .replace(/\b(AVENUE|AVE)\b/g, "AVE")
+    .replace(/\b(AVENUE|AVE|AV)\b/g, "AVE")
     .replace(/\b(ROAD|RD)\b/g, "RD")
     .replace(/[^A-Z0-9 ]/g, " ")
     .replace(/\s+/g, " ")
@@ -75,7 +75,7 @@ export async function resolveParcel(query) {
       });
       if (parts)
         queries.push({
-          where: `UPPER(property_address) LIKE '${sqlString(parts[1] + " " + parts[2].replaceAll(" ", "%"))}%'`,
+          where: `UPPER(property_address) = '${sqlString(normalized)}'`,
           method: "parcel-address",
         });
     }

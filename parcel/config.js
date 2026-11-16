@@ -105,11 +105,11 @@ export const SOURCES = Object.freeze([
   {
     id: "municity",
     group: "activity",
-    title: "Municity applications, permits, licenses and certificates",
+    title: "City parcel applications, complaints, contacts, documents, licenses and permits",
     url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
     mode: "live",
     coverage:
-      "Public parcel children returned by the vendor; no inspections or complete historical coverage is claimed.",
+      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses and permits. Certificates are also returned. Documents link to the vendor; complaint narratives and contact phone, email and address fields are omitted. No complete historical coverage is claimed.",
   },
   {
     id: "lci-cases",
@@ -172,7 +172,7 @@ export const SOURCES = Object.freeze([
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Business-Master/n7gp-d28j",
     mode: "live",
     coverage:
-      "Address or owner-name candidates do not establish occupancy or ownership.",
+      "Registry billing addresses are matched to the parcel-listed address and city address points. They are candidates, not evidence of occupancy or ownership.",
   },
   {
     id: "business-principals",
@@ -189,7 +189,8 @@ export const SOURCES = Object.freeze([
     title: "Connecticut State Licenses and Credentials",
     url: "https://data.ct.gov/Business/State-Licenses-and-Credentials/ngch-56tr",
     mode: "live",
-    coverage: "Exact address matches are candidates, not proof of current use.",
+    coverage:
+      "Credential addresses are matched to the parcel-listed address and city address points. They are candidates, not proof of current use or business location.",
   },
   {
     id: "complete-streets",
