@@ -269,6 +269,18 @@ test("street search shows a second parcel found by its address point", async () 
   assert.equal(point.match.confidence, "medium");
 });
 
+test("MBLU search does not trigger street-address point lookups", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    assert.ok(u.pathname.includes("Parcel_Viewer"));
+    assert.match(u.searchParams.get("where"), /^UPPER\(mblu\)/);
+    return response({ features: [parcel(999013)] });
+  };
+  const out = await resolveParcel("12/34");
+  assert.equal(out.status, "resolved");
+  assert.equal(out.candidates[0].parcel_id, 999013);
+});
+
 test("parcel geography preserves all intersecting zoning records", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);

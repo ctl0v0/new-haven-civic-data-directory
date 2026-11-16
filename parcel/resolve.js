@@ -57,7 +57,10 @@ export async function resolveParcel(query) {
   return cached("resolve:" + normalizeAddress(q), async () => {
     const normalized = normalizeAddress(q);
     const numeric = /^\d{1,12}$/.test(q) ? Number(q) : null;
-    const parts = normalized.match(/^(\d{1,6})\s+(.+)$/);
+    const parts =
+      !q.includes("/") && /[A-Z]{2}/.test(normalized)
+        ? normalized.match(/^(\d{1,6})\s+(.+)$/)
+        : null;
     const queries = [];
     if (numeric !== null && Number.isSafeInteger(numeric)) {
       queries.push({ where: `parcel_id = ${numeric}`, method: "parcel-id" });
