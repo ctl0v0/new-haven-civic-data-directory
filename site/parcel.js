@@ -16,6 +16,10 @@ const sourceNames = {
   municity: "Municipal parcel service",
   "municipal-business-licenses": "Municipal licenses",
   "municipal-occupants": "Municipal occupants",
+  "census-block-2020": "City 2020 census block",
+  "ct-tract-2020-acs": "CT 2020 ACS tract measures",
+  "ct-transit-stops": "City hosted CT Transit stops",
+  "nearby-municipal-business": "Nearby municipal business records",
   "business-master": "CT business registry",
   "state-licenses": "CT credentials",
   "lci-cases": "LCI cases",
@@ -83,6 +87,10 @@ function recordStatus(item) {
 }
 function recordTitle(item) {
   const a = item.attributes ?? {};
+  if (item.source_id === "census-block-2020") return `Census block ${item.source_record_id}`;
+  if (item.source_id === "ct-tract-2020-acs") return `Census tract ${item.source_record_id}`;
+  if (item.source_id === "ct-transit-stops") return a.stop_name ?? `Transit stop ${item.source_record_id}`;
+  if (item.source_id === "nearby-municipal-business") return a.business_name ?? a.occupant_name ?? item.source_record_id;
   if (item.source_id === "addresses")
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
   if (item.source_id === "assessor-valuations")
@@ -98,6 +106,14 @@ function recordTitle(item) {
 }
 function recordDescription(item) {
   const a = item.attributes ?? {};
+  if (item.source_id === "census-block-2020")
+    return [`Population ${a.total_population ?? "not reported"}`, `Adults ${a.adult_population ?? "not reported"}`, `Housing units ${a.total_housing_units ?? "not reported"}`].join(" · ");
+  if (item.source_id === "ct-tract-2020-acs")
+    return [a.median_household_income_usd != null ? `Median household income $${Number(a.median_household_income_usd).toLocaleString()}` : null, a.census_population != null ? `Population ${Number(a.census_population).toLocaleString()}` : null, a.poverty_rate_source_value != null ? `Poverty rate field ${a.poverty_rate_source_value}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "ct-transit-stops")
+    return [a.distance_m != null ? `${a.distance_m} m away` : null, a.on_street, a.at_street ? `at ${a.at_street}` : null, a.in_service != null ? `InService flag: ${a.in_service}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "nearby-municipal-business")
+    return [a.municipal_record_type, a.nearby_parcel_address ?? `Parcel ${a.nearby_parcel_id}`, a.distance_m != null ? `${a.distance_m} m from this parcel` : null, a.status ?? a.occupancy_type ?? null].filter(Boolean).join(" · ");
   if (item.source_id === "parcels") {
     const facts = [
       a.year_building_built ? `Built ${a.year_building_built}` : null,
@@ -123,7 +139,7 @@ function appendRecord(parent, item) {
   const state = recordStatus(item);
   if (state) head.append(el("span", brief(state, 45), "status-pill"));
   card.append(head);
-  card.append(el("p", [item.category, sourceName(item.source_id), item.event_date ? shortDate(item.event_date) : null].filter(Boolean).join(" · "), "record-meta"));
+  card.append(el("p", [item.category, sourceName(item.source_id), item.attributes?.period, item.event_date ? shortDate(item.event_date) : null].filter(Boolean).join(" · "), "record-meta"));
   const description = recordDescription(item);
   if (description) card.append(el("p", description, "record-description"));
   if (item.note) card.append(el("p", item.note, "record-note"));
@@ -315,6 +331,12 @@ async function choose(item, searchedQuery = null) {
   $("parcel-summary").hidden = true;
   $("snapshot").hidden = true;
   $("feed-section").hidden = false;
+  $("context-section").hidden = true;
+  $("context-records").replaceChildren();
+  $("context-sources").replaceChildren();
+  $("context-status").textContent = "";
+  $("context-load").hidden = false;
+  $("context-more").hidden = true;
   status("Loading parcel records…");
   try {
     const qs = new URLSearchParams({ parcel_id: item.parcel_id });
@@ -344,6 +366,10 @@ async function choose(item, searchedQuery = null) {
     const timelineLink = el("a", "Timeline");
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
+    $("context-section").hidden = false;
+    const contextLink = el("a", "Around this parcel");
+    contextLink.href = "#context-section";
+    $("group-nav").append(contextLink);
     const tasks = [];
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
@@ -363,6 +389,37 @@ async function choose(item, searchedQuery = null) {
     status(error.message);
   }
 }
+async function loadContext(cursor = null) {
+  if (!selected) return;
+  const version = viewVersion;
+  const button = cursor ? $("context-more") : $("context-load");
+  button.disabled = true;
+  $("context-status").textContent = cursor ? "Checking more nearby parcels…" : "Checking official neighborhood sources…";
+  try {
+    const p = new URLSearchParams({ parcel_id: selected.parcel_id });
+    if (selected.objectid) p.set("objectid", selected.objectid);
+    if (cursor) p.set("cursor", cursor);
+    const data = await api(`/api/v1/context?${p}`);
+    if (version !== viewVersion) return;
+    if (!cursor) {
+      $("context-load").hidden = true;
+      $("context-sources").replaceChildren();
+      $("context-records").replaceChildren();
+    }
+    for (const source of data.sources) sourceLine($("context-sources"), source);
+    for (const item of data.items) appendRecord($("context-records"), item);
+    if (!data.items.length && !cursor)
+      $("context-records").append(el("p", "No area or nearby records returned by the checked sources. Review the source statuses above.", "empty-state"));
+    $("context-status").textContent = `Checked ${data.parcels_checked} nearby parcels on this page${data.parcels_available == null ? "" : ` of ${data.parcels_available} returned by the City query`}. Distances are straight-line measurements from a point inside the selected parcel.`;
+    $("context-more").hidden = !data.next_cursor;
+    $("context-more").onclick = data.next_cursor ? () => void loadContext(data.next_cursor) : null;
+  } catch (error) {
+    if (version === viewVersion) $("context-status").textContent = `Could not load neighborhood context: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+$("context-load").addEventListener("click", () => void loadContext());
 async function loadGroup(id, section, qs, version, cursor = null) {
   try {
     const p = new URLSearchParams(qs);

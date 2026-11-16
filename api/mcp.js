@@ -8,6 +8,7 @@ import {
   parcelOverview,
   parcelRecords,
   parcelFeed,
+  parcelContext,
   sourceCoverage,
 } from "../parcel/service.js";
 
@@ -109,6 +110,18 @@ export function createServer() {
     }),
     ({ parcel_id, objectid, cursor, limit }) =>
       parcelFeed(parcel_id, { objectid, cursor, limit }),
+  );
+  tool(
+    server,
+    "get_parcel_context",
+    "Get neighborhood context",
+    "Return official census geography, State tract measures, nearby transit stops, and municipal business records on nearby parcels. Context is separate from records attached to the selected parcel.",
+    z.object({
+      ...common,
+      cursor: z.string().regex(/^\d+$/).optional(),
+    }),
+    ({ parcel_id, objectid, cursor }) =>
+      parcelContext(parcel_id, { objectid, cursor }),
   );
   tool(
     server,

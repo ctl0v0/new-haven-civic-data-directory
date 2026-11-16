@@ -1,9 +1,11 @@
-import { GROUPS, SOURCES } from "./config.js";
+import { CONTEXT_SOURCES, GROUPS, SOURCES } from "./config.js";
 import { cached, SourceError } from "./http.js";
 import { loadParcel, resolveParcel } from "./resolve.js";
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
+import { parcelContext } from "./context.js";
 
 export { resolveParcel };
+export { parcelContext };
 
 export async function parcelSummary(id, objectid = null) {
   const feature = await loadParcel(id, objectid);
@@ -109,6 +111,7 @@ export async function parcelFeed(
 export function sourceCoverage() {
   return {
     sources: SOURCES,
+    context_sources: CONTEXT_SOURCES,
     groups: GROUPS,
     excluded: [
       "meetings, agendas and legislation",

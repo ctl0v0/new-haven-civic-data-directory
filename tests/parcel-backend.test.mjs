@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelFeed, parcelOverview } from "../parcel/service.js";
+import { parcelRecords, parcelFeed, parcelOverview, parcelContext } from "../parcel/service.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
+import contextRoute from "../api/v1/context.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -795,6 +796,56 @@ test("ArcGIS uses a form body for long spatial queries and source dates accept e
   assert.equal(out.items[0].event_date, "2020-01-02");
 });
 
+test("neighborhood context keeps area counts and nearby businesses separate from the selected parcel", async () => {
+  const selected = parcel(999088);
+  const neighbor = {
+    ...parcel(999089),
+    attributes: { ...parcel(999089).attributes, mblu: "56/78", property_address: "167 CHURCH ST" },
+  };
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: u.searchParams.has("distance") ? [selected, neighbor] : [selected], spatialReference: { wkid: 4326 } });
+    if (u.pathname.includes("NH_2020_Census_pop_by_Block"))
+      return response({ features: [{ attributes: { GEOID: "090091404001001", P0010001: 64, P0030001: 49, H0010001: 20 } }] });
+    if (u.pathname.includes("2020_USA_Tracts"))
+      return response({ features: [{ attributes: { FIPS: "09009140400" } }] });
+    if (u.pathname.includes("3p9s-pdza.json"))
+      return response([{ geoid: "9009140400", medianhouseholdincome: "55000", povertyrate: "17.5", censuspopulation: "3100" }]);
+    if (u.pathname.includes("CT_Transit_New_Haven_Bus_Stops"))
+      return response({ features: [{ attributes: { OBJECTID: 3, StopId: 101, StopName: "Church Street", InService: 1 }, geometry: { x: -72.925, y: 41.305 } }] });
+    if (u.pathname.endsWith("/GetM5Data")) {
+      assert.equal(u.searchParams.get("value"), "56 78");
+      return response({ rows: [{ PrintKey: "56 78", Parcel_ID: 444 }] });
+    }
+    if (u.pathname.endsWith("/Children"))
+      return response({
+        Document: [], Application: [], Complaint: [], Contact: [], Permit: [], Certificate: [],
+        License: [{ License_ID: 1, BusinessName: "Neighbor Cafe", Status: "Expired", Email: "private@example.org" }],
+        Occupant: [],
+      });
+    throw Error(`Unexpected source ${u.pathname}`);
+  };
+  const out = await parcelContext("999088");
+  assert.equal(out.parcel_id, 999088);
+  assert.equal(out.radius_m, 400);
+  assert.equal(out.items.find((x) => x.source_id === "census-block-2020").attributes.total_population, 64);
+  assert.equal(out.items.find((x) => x.source_id === "ct-tract-2020-acs").attributes.median_household_income_usd, 55000);
+  assert.equal(out.items.find((x) => x.source_id === "ct-transit-stops").attributes.in_service, 1);
+  const business = out.items.find((x) => x.source_id === "nearby-municipal-business");
+  assert.equal(business.attributes.business_name, "Neighbor Cafe");
+  assert.equal(business.attributes.nearby_parcel_id, 999089);
+  assert.equal(business.match.method, "nearby-parcel-exact-mblu");
+  assert.equal(out.parcels_checked, 1);
+  assert.doesNotMatch(JSON.stringify(out), /private@example.org|foot.traffic estimate/i);
+  const api = await contextRoute.fetch(new Request("https://example.com/api/v1/context?parcel_id=999088", {
+    headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` },
+  }));
+  assert.equal(api.status, 200);
+  assert.equal((await api.json()).parcel_id, 999088);
+  await assert.rejects(() => parcelContext("999088", { cursor: "7" }), /Invalid context cursor/);
+});
+
 test("MCP requires pilot auth and lists bounded read tools", async () => {
   const body = JSON.stringify({
     jsonrpc: "2.0",
@@ -857,5 +908,7 @@ test("MCP requires pilot auth and lists bounded read tools", async () => {
     }),
   );
   assert.equal(listed.status, 200);
-  assert.match(await listed.text(), /get_parcel_overview/);
+  const toolsList = await listed.text();
+  assert.match(toolsList, /get_parcel_overview/);
+  assert.match(toolsList, /get_parcel_context/);
 });

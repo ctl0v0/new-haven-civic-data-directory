@@ -41,6 +41,16 @@ const app = `
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
   </section>
   <div id="groups" class="record-groups"></div>
+  <section id="context-section" class="panel" aria-labelledby="context-title" hidden>
+    <h2 id="context-title">Around this parcel</h2>
+    <p>Official area counts and nearby records. A census area or nearby business record is not a fact about this building.</p>
+    <p class="small">The City’s <a href="https://storymaps.arcgis.com/stories/18b7a2ab8ea9492a89f95456d3879883" target="_blank" rel="noopener noreferrer">2024 downtown pedestrian study</a> counted selected intersections during short observation windows. A parcel foot-traffic feed is not available here.</p>
+    <button id="context-load" type="button" class="secondary">Check neighborhood context</button>
+    <p id="context-status" role="status" aria-live="polite"></p>
+    <div id="context-sources" class="source-list"></div>
+    <div id="context-records" class="record-list"></div>
+    <button id="context-more" type="button" class="secondary" hidden>Check more nearby parcels</button>
+  </section>
   <script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
   String(value).replace(

@@ -258,11 +258,11 @@ export const SOURCES = Object.freeze([
   {
     id: "area-context",
     group: "nearby",
-    title: "Census, transit, places and walkability",
-    url: "https://www.census.gov/data.html",
+    title: "Additional places and walkability context",
+    url: "https://www.newhavenct.gov/government/departments-divisions/city-plan/data-and-resources",
     mode: "paused",
     coverage:
-      "Area context is paused and is not collected by this parcel pilot.",
+      "No City or State published place roster or measured walkability source with a verified local join is collected. Official census and transit context use the separate context endpoint.",
   },
 ]);
 
@@ -273,6 +273,46 @@ export const GROUPS = Object.freeze([
   { id: "activity", title: "Parcel activity" },
   { id: "business", title: "Business records" },
   { id: "nearby", title: "Nearby activity" },
+]);
+
+// Area context is requested separately from parcel records and the parcel timeline.
+export const CONTEXT_SOURCES = Object.freeze([
+  {
+    id: "census-block-2020",
+    title: "City hosted 2020 census blocks",
+    url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/NH_2020_Census_pop_by_Block/FeatureServer/0",
+    mode: "live",
+    coverage: "2020 population, adults, and housing units for the census block containing the parcel point; these are area counts, not parcel occupants or commercial vacancy.",
+  },
+  {
+    id: "ct-tract-2020-acs",
+    title: "Connecticut 2023 tract dataset (2020 ACS measures)",
+    url: "https://data.ct.gov/Government/2023-Disproportionately-Impacted-Areas/3p9s-pdza",
+    geometry_url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/2020_USA_Tracts/FeatureServer/0",
+    mode: "live",
+    coverage: "2020 ACS income, poverty, and population only where the State dataset has an exact row for the City hosted 2020 census tract FIPS.",
+  },
+  {
+    id: "ct-transit-stops",
+    title: "City hosted CT Transit bus stops",
+    url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0",
+    mode: "live",
+    coverage: "Recorded stop points within 400 meters. The source InService flag is shown; current schedules are not established by this layer.",
+  },
+  {
+    id: "nearby-municipal-business",
+    title: "Municipal licenses and occupants on nearby parcels",
+    url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
+    mode: "live",
+    coverage: "Public License and Occupant rows on nearby City parcels matched by each parcel's verified MBLU. Rows can be historical and do not establish current operation.",
+  },
+  {
+    id: "pedestrian-counts",
+    title: "Downtown pedestrian observation counts",
+    url: "https://storymaps.arcgis.com/stories/18b7a2ab8ea9492a89f95456d3879883",
+    mode: "gap",
+    coverage: "The City published counts for 29 downtown intersections during specified October 2024 observation windows; no reusable official record feed has been verified. No parcel foot-traffic estimate is returned.",
+  },
 ]);
 
 export function source(id) {
