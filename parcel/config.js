@@ -109,6 +109,33 @@ export const SOURCES = Object.freeze([
       "Public parcel children returned by the vendor; no inspections or complete historical coverage is claimed.",
   },
   {
+    id: "lci-cases",
+    group: "activity",
+    title: "LCI Case HQ housing code and anti-blight cases",
+    url: "https://lci.city/",
+    mode: "live",
+    coverage:
+      "Public case number, status, filed date and listed fine only. Complaint narratives, attachments and licensing status are not collected; property PID and address must both match.",
+  },
+  {
+    id: "tax-bills",
+    group: "property",
+    title: "New Haven real estate tax bills",
+    url: "https://www.mytaxbill.org/inet/bill/home.do?town=newhaven",
+    mode: "gap",
+    coverage:
+      "Official search portal only. No approved automated parcel-to-account lookup or current balance is available in this API.",
+  },
+  {
+    id: "land-records",
+    group: "property",
+    title: "City Clerk land records",
+    url: "https://www.newhavenct.gov/government/departments-divisions/city-clerk",
+    mode: "gap",
+    coverage:
+      "Official City Clerk entry point only. No approved machine feed or verified parcel join; deeds, mortgages and liens are not returned here.",
+  },
+  {
     id: "managed-lots",
     group: "activity",
     title: "LCI Managed Lots",

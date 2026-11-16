@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { json } from "./http.js";
 
 const COOKIE = "nh_parcel_pilot";
@@ -13,12 +13,15 @@ export function missingPilotKeys() {
   );
 }
 export function pilotConfigurationIssues() {
-  return REQUIRED_KEYS.flatMap((key) => {
+  const issues = REQUIRED_KEYS.flatMap((key) => {
     const value = process.env[key];
     if (typeof value !== "string") return [`${key} (absent)`];
     if (value.length < 24) return [`${key} (too short)`];
     return [];
   });
+  if (process.env.PILOT_API_KEYS && !parseApiKeys())
+    issues.push("PILOT_API_KEYS (invalid JSON or entries)");
+  return issues;
 }
 function configured() {
   return missingPilotKeys().length === 0;
@@ -32,6 +35,27 @@ function mac(text) {
   return createHmac("sha256", process.env.PILOT_COOKIE_SECRET)
     .update(text)
     .digest("base64url");
+}
+function parseApiKeys() {
+  if (!process.env.PILOT_API_KEYS) return [];
+  try {
+    const keys = JSON.parse(process.env.PILOT_API_KEYS);
+    if (
+      !Array.isArray(keys) ||
+      keys.length > 50 ||
+      new Set(keys.map((item) => item.id)).size !== keys.length ||
+      !keys.every(
+        (item) =>
+          item &&
+          /^[a-z0-9][a-z0-9_-]{0,39}$/i.test(item.id) &&
+          /^[a-f0-9]{64}$/i.test(item.sha256) &&
+          typeof item.active === "boolean",
+      )
+    ) return null;
+    return keys;
+  } catch {
+    return null;
+  }
 }
 export function issueCookie() {
   if (!configured()) throw Error("Pilot access is not configured");
@@ -57,11 +81,23 @@ export function authorized(request) {
   );
 }
 export function authorizedBearer(request) {
-  if (!configured()) return false;
+  return bearerIdentity(request) !== null;
+}
+export function bearerIdentity(request) {
+  if (!configured()) return null;
   const bearer = request.headers
     .get("authorization")
     ?.match(/^Bearer (.+)$/i)?.[1];
-  return Boolean(bearer && equal(bearer, process.env.PILOT_API_TOKEN));
+  if (!bearer || bearer.length < 24 || bearer.length > 256) return null;
+  const digest = createHash("sha256").update(bearer).digest("hex");
+  const keys = parseApiKeys() ?? [];
+  const invited = keys.find((item) => item.active && equal(item.sha256.toLowerCase(), digest));
+  if (invited) return invited.id;
+  if (
+    process.env.PILOT_DISABLE_SHARED_TOKEN !== "1" &&
+    equal(bearer, process.env.PILOT_API_TOKEN)
+  ) return "legacy-shared";
+  return null;
 }
 export function requirePilot(request) {
   return authorized(request)

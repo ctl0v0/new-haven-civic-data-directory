@@ -1,10 +1,11 @@
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { authorizedBearer, sameOrigin } from "../parcel/auth.js";
+import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
 import {
   resolveParcel,
   parcelSummary,
+  parcelOverview,
   parcelRecords,
   parcelFeed,
   sourceCoverage,
@@ -66,6 +67,14 @@ export function createServer() {
     "Return the selected parcel identity and available groups.",
     z.object(common),
     ({ parcel_id, objectid }) => parcelSummary(parcel_id, objectid),
+  );
+  tool(
+    server,
+    "get_parcel_overview",
+    "Get parcel overview",
+    "Return compact group counts, source statuses and five dated record references; use get_parcel_records for details.",
+    z.object(common),
+    ({ parcel_id, objectid }) => parcelOverview(parcel_id, objectid),
   );
   tool(
     server,
@@ -158,7 +167,8 @@ export function createServer() {
 const handler = createMcpHandler(() => createServer(), { legacy: "stateless" });
 export default {
   fetch: async (request) => {
-    if (!authorizedBearer(request))
+    const client = bearerIdentity(request);
+    if (!client)
       return json({ error: "Pilot bearer token required" }, 401);
     if (!sameOrigin(request)) return json({ error: "Origin not allowed" }, 403);
     let inbound = request;
@@ -177,6 +187,12 @@ export default {
       inbound = new Request(request.url, { method: "POST", headers, body });
     }
     const response = await handler.fetch(inbound);
+    console.info(JSON.stringify({
+      event: "parcel_mcp_request",
+      method: request.method,
+      status: response.status,
+      client,
+    }));
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "private, no-store");
     return new Response(response.body, { status: response.status, headers });

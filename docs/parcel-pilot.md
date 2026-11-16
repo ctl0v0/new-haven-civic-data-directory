@@ -11,8 +11,12 @@ Use Node.js 24 or later. Run `npm ci`, `npm test`, and `npm run build`. For a lo
 | `PILOT_PASSPHRASE` | Shared passcode for the `/parcel` browser login. |
 | `PILOT_COOKIE_SECRET` | Signs seven-day, secure, HTTP-only pilot cookies. |
 | `PILOT_API_TOKEN` | Bearer token for API clients and MCP clients. |
+| `PILOT_API_KEYS` | Optional JSON array of invited client IDs and SHA-256 token hashes. |
+| `PILOT_DISABLE_SHARED_TOKEN` | Set to `1` after individual keys work to revoke the shared API token. |
 
 Each value must contain at least 24 characters. Configure all three as sensitive Vercel environment variables before testing a deployed preview. The endpoints fail closed when any value is missing. Rotate the passcode and token after the pilot; changing the cookie secret invalidates active browser sessions. The browser and API use the same private access policy, while MCP requires the bearer token. Do not put the bearer token in the browser page or a public client configuration.
+
+For the invited pilot, generate one random token per person and store only its SHA-256 hash in `PILOT_API_KEYS`. Example entry: `[{"id":"reviewer_1","sha256":"<64 lowercase hex characters>","active":true}]`. Generate a token with `node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'` and calculate its hash locally with `node -e 'console.log(require("node:crypto").createHash("sha256").update(process.argv[1]).digest("hex"))' '<token>'`. Share the raw token privately with that reviewer and never commit it. Set `active` to `false` or remove the entry, then redeploy, to revoke access. Once clients have moved to their own keys, set `PILOT_DISABLE_SHARED_TOKEN=1` and redeploy. The shared token remains required as an existing configuration value for now, even while disabled. Runtime logs include route, status and client ID, without parcel queries or tokens.
 
 After adding or changing Vercel variables, create a new deployment for the selected environment; an existing deployment keeps its original environment snapshot. For a branch-specific Preview pilot, scope all three values to the same Git branch.
 
@@ -32,6 +36,7 @@ Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed b
 | --- | --- |
 | `POST /api/v1/resolve` with JSON `{"query":"165 Church Street"}` | Resolve to zero, one, or multiple official parcel candidates. |
 | `GET /api/v1/parcel?parcel_id=...&objectid=...` | Selected parcel identity and available groups. |
+| `GET /api/v1/overview?parcel_id=...&objectid=...` | Compact counts, source statuses and five recent dated record references. |
 | `GET /api/v1/records?parcel_id=...&objectid=...&group=property&limit=25&cursor=...` | One grouped, paginated page of source records and source statuses. |
 | `GET /api/v1/feed?parcel_id=...&objectid=...&limit=25&cursor=...` | Dated source records, newest first. |
 | `GET /api/v1/sources` | Source catalog, modes, limitations and deliberate exclusions. |
@@ -40,7 +45,7 @@ Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed b
 
 ## MCP
 
-`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers `resolve_parcel`, `get_parcel`, `get_parcel_records`, `get_parcel_feed`, and `list_sources`, plus source-coverage and matching-method resources. The MCP tools call the same service as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <PILOT_API_TOKEN>` on each request. Keep this token in the client's private secret store.
+`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers `resolve_parcel`, `get_parcel`, `get_parcel_overview`, `get_parcel_records`, `get_parcel_feed`, and `list_sources`, plus source-coverage and matching-method resources. Start with `resolve_parcel`, then `get_parcel_overview`; request one group with `get_parcel_records` only when details are needed. The MCP tools call the same service as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <individual pilot token>` on each request. Keep this token in the client's private secret store.
 
 ## Source coverage
 
@@ -48,14 +53,16 @@ The machine-readable catalog is published in `dist/parcel-source-catalog.json` a
 
 | Group | Live or curated | Visible gaps |
 | --- | --- | --- |
-| Property | City parcels and address points; Vision assessor card | Commercial vacancy |
+| Property | City parcels and address points; Vision assessor card | Tax bill and City Clerk land-record search links only; no automated parcel joins or balances. Commercial vacancy is also a gap. |
 | Geography | Zoning, wards, neighborhoods | Boundary currency and zoning interpretation remain source limitations |
 | Representation | Board of Alders roster through an unambiguous ward | CMT geometry and contacts |
-| Activity | Municity children, LCI managed lots, selected planning case | Inspections and enforcement |
+| Activity | Municity children, LCI Case HQ case metadata, LCI managed lots, selected planning case | LCI licensing and other inspection or enforcement feeds remain unverified. |
 | Business | CT Business Registry Master and State Licenses address candidates | Registry principals require a reviewed entity join |
 | Nearby | Complete Streets projects within 250 feet | Service requests; area context is paused |
 
 Meetings, agendas and legislation, and budgets and monthly finance reports are outside this pilot's scope. Civic Fit community or administrator data is not ingested. State address matches are candidate links and do not prove occupancy, ownership or current use. Managed lots do not prove vacancy. Nearby records are kept in their own group. The Complete Streets source appears stale, so its event status needs original-source review.
+
+LCI is queried at request time by the assessor PID. The adapter requires matching PID and address on the public property page and returns only case number, type, status, filed date, listed case fine, and link. It does not fetch case-detail pages, complaint narratives, or attachments. A listed fine is source-reported and should be confirmed before use. The real-estate tax and land-record sources expose links and honest `unavailable` statuses until a permitted live lookup and parcel join are verified. SearchIQS is not scraped. The API stores no parcel dataset, snapshots, or change history; successful lookups use the existing five-minute runtime cache.
 
 ## Verification and limits
 

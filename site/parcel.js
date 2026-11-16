@@ -62,6 +62,7 @@ function sourceLine(parent, source) {
     document.createTextNode(` ${source.source_id} · ${source.count} records`),
   );
   row.append(el("p", source.warning ?? source.coverage, "meta"));
+  if (source.source_url) row.append(link(source.source_url, "Open source"));
   parent.append(row);
 }
 async function choose(item) {

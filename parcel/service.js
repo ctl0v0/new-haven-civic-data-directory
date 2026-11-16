@@ -26,6 +26,41 @@ export async function parcelSummary(id, objectid = null) {
   };
 }
 
+export async function parcelOverview(id, objectid = null) {
+  const feature = await loadParcel(id, objectid);
+  const groups = await Promise.all(
+    GROUPS.map(async (group) => getGroup(group.id, feature)),
+  );
+  const events = groups
+    .flatMap((group) => group.items)
+    .filter((item) => item.event_date)
+    .sort((a, b) =>
+      b.event_date.localeCompare(a.event_date) || a.id.localeCompare(b.id),
+    )
+    .slice(0, 5)
+    .map((item) => ({
+      source_id: item.source_id,
+      source_record_id: item.source_record_id,
+      event_date: item.event_date,
+      source_url: item.source_url,
+    }));
+  return {
+    parcel: {
+      parcel_id: feature.attributes.parcel_id,
+      objectid: feature.attributes.objectid,
+      address: feature.attributes.property_address ?? null,
+    },
+    groups: groups.map((group) => ({
+      id: group.group,
+      record_count: group.items.length,
+      sources: group.sources,
+    })),
+    recent_events: events,
+    partial: groups.some((group) => group.partial),
+    note: "Source counts and dates describe the current response, not a complete property history. Use get_parcel_records for fields and provenance.",
+  };
+}
+
 export async function parcelRecords(
   id,
   group,
@@ -44,7 +79,7 @@ export async function parcelFeed(
   const key = `feed:${feature.attributes.parcel_id}:${feature.attributes.objectid}`;
   const data = await cached(key, async () => {
     const sources = await Promise.all(
-      ["parcels", "assessor", "municity", "planning", "managed-lots"].map(
+      ["parcels", "assessor", "municity", "lci-cases", "planning", "managed-lots"].map(
         (name) => getSourceRecords(name, feature),
       ),
     );

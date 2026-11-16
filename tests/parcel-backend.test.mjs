@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { issueCookie, authorized, sameOrigin } from "../parcel/auth.js";
+import { createHash } from "node:crypto";
+import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelFeed } from "../parcel/service.js";
+import { parcelRecords, parcelFeed, parcelOverview } from "../parcel/service.js";
+import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
@@ -14,6 +16,8 @@ const oldEnv = {
   PILOT_PASSPHRASE: process.env.PILOT_PASSPHRASE,
   PILOT_COOKIE_SECRET: process.env.PILOT_COOKIE_SECRET,
   PILOT_API_TOKEN: process.env.PILOT_API_TOKEN,
+  PILOT_API_KEYS: process.env.PILOT_API_KEYS,
+  PILOT_DISABLE_SHARED_TOKEN: process.env.PILOT_DISABLE_SHARED_TOKEN,
 };
 process.env.PILOT_PASSPHRASE = "a-long-test-passphrase-123456";
 process.env.PILOT_COOKIE_SECRET = "a-long-test-cookie-secret-123456";
@@ -91,6 +95,57 @@ test("private access fails closed and signed cookies cannot be forged", async ()
   );
   assert.equal(allowed.status, 200);
   assert.ok((await allowed.json()).sources.some((x) => x.id === "municity"));
+});
+
+test("invited keys can be revoked without a parcel database", () => {
+  const token = "individual-test-token-with-adequate-entropy-123";
+  const hash = createHash("sha256").update(token).digest("hex");
+  const request = new Request("https://example.com/mcp", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  process.env.PILOT_API_KEYS = JSON.stringify([
+    { id: "reviewer_1", sha256: hash, active: true },
+  ]);
+  process.env.PILOT_DISABLE_SHARED_TOKEN = "1";
+  try {
+    assert.equal(authorizedBearer(request), true);
+    assert.equal(authorizedBearer(new Request("https://example.com/mcp", {
+      headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` },
+    })), false);
+    process.env.PILOT_API_KEYS = JSON.stringify([
+      { id: "reviewer_1", sha256: hash, active: false },
+    ]);
+    assert.equal(authorizedBearer(request), false);
+  } finally {
+    delete process.env.PILOT_API_KEYS;
+    delete process.env.PILOT_DISABLE_SHARED_TOKEN;
+  }
+});
+
+test("LCI parser returns case metadata and listed fines, never complaint details", () => {
+  const html = `<!doctype html><body><h1>165 CHURCH ST</h1><p>PID 999006</p>
+    <h2>Money Owed to the City</h2><table><tr><th>Source</th><th>Case</th><th>Amount</th></tr>
+    <tr><td>Housing Code fine</td><td>HC-2026-123</td><td>$1,250.00</td></tr></table>
+    <h2>Housing Code Cases · 1 on file</h2><table><tr><th>Case #</th><th>Status</th><th>Date Filed</th></tr>
+    <tr><td><a href="/public/case/HC-2026-123">HC-2026-123</a></td><td>open</td><td>November 9, 2026</td></tr></table>
+    <div>Complaint narrative with a tenant name that must never leave the source</div></body>`;
+  const out = parseLciProperty(html, parcel(999006), "https://lci.city/public/property/999006");
+  assert.equal(out.cases.length, 1);
+  assert.deepEqual(out.cases[0], {
+    case_number: "HC-2026-123",
+    case_type: "housing_code",
+    status: "open",
+    filed_date: "2026-11-09",
+    source_url: "https://lci.city/public/case/HC-2026-123",
+    listed_fine_usd: 1250,
+  });
+  assert.doesNotMatch(JSON.stringify(out), /tenant name|complaint narrative/i);
+  assert.throws(() =>
+    parseLciProperty(html.replace("PID 999006", "PID 999007"), parcel(999006), "https://lci.city/public/property/999006"),
+  );
+  assert.throws(() =>
+    parseLciProperty(html.replace("165 CHURCH ST", "311 BLAKE ST"), parcel(999006), "https://lci.city/public/property/999006"),
+  );
 });
 
 test("pilot login creates a private page session", async () => {
@@ -243,6 +298,8 @@ test("upstream permit failure is labeled partial while dated parcel facts remain
       );
     if (u.hostname === "services5.municity5.com")
       throw Error("Source unavailable");
+    if (u.hostname === "lci.city")
+      return new Response("", { status: 503 });
     if (u.pathname.includes("LCI_Managed_Lots"))
       return response({ features: [] });
     throw Error("Unexpected source");
@@ -255,6 +312,25 @@ test("upstream permit failure is labeled partial while dated parcel facts remain
   );
   assert.equal(out.items[0].event_date, "2020-01-02");
   assert.equal(out.items[0].source_id, "parcels");
+});
+
+test("overview keeps source gaps and links visible without raw source fields", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(999007)] });
+    if (u.pathname.includes("LCI_Managed_Lots"))
+      return response({ features: [] });
+    if (u.hostname === "lci.city") return new Response("", { status: 404 });
+    throw Error("Upstream unavailable");
+  };
+  const out = await parcelOverview("999007");
+  assert.equal(out.groups.length, 6);
+  const property = out.groups.find((group) => group.id === "property");
+  assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "unavailable");
+  assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);
+  assert.equal(out.recent_events[0].source_id, "parcels");
+  assert.doesNotMatch(JSON.stringify(out), /sale_date|property_address/);
 });
 
 test("ArcGIS uses a form body for long spatial queries and source dates accept epoch milliseconds", async () => {
