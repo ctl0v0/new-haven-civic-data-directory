@@ -1,11 +1,34 @@
-# New Haven permit lookup sample
+# Match New Haven permits to an address or parcel
 
 The [canonical source entry](../sources/building-permits.json) documents New
-Haven's Municity / CitySquared portal and the public JSON service used by
-[Civic Fit's permit lookup](https://github.com/ctl0v0/civic-fit/blob/aaaccfdda4dda300e27fa7ea58dc77af7a764d50/src/lib/civic-data/municity-permits.ts).
-This recipe repeats one commercial-property example without credentials,
-dependencies or changes to city records. These vendor endpoints are not a
-confirmed supported open-data API.
+Haven's Municity / CitySquared portal and its public JSON parcel queries.
+This recipe starts with a property address or existing parcel record,
+resolves its Municity parcel, and retrieves the permit and other records
+associated with that parcel. It repeats one commercial-property example
+without credentials, dependencies or changes to city records. These vendor
+endpoints are not a confirmed supported open-data API.
+
+## Choose the property to match
+
+Use the [property assessment lookup](https://new-haven-civic-data-directory.vercel.app/sources/assessor.html)
+or [parcel and address layers](https://new-haven-civic-data-directory.vercel.app/sources/gis-parcels.html)
+to identify the property from its address and confirm its parcel and location.
+An address can refer to multiple units or parcels. Resolve that ambiguity
+before associating permits with it.
+
+For a property with an assessor MBLU, split the identifier on `/`, trim and
+remove empty segments, then join with spaces, retaining leading zeros. In the
+tested example, `241/ 0234/ 00200/ /` becomes the Municity PrintKey
+`241 0234 00200`. Compare the returned legal address with the original property;
+this one example does not establish a universal identifier join.
+
+If an MBLU is missing or has no match, coordinates independently confirmed to
+lie on the property provide another lookup route. Check the returned parcel
+identity and investigate multiple matches or differing addresses.
+
+Keep identifier systems separate: Municity `Parcel_ID` identifies the parcel
+used by its related-record endpoint. It is not the city GIS `parcel_id` or the
+assessor's `account_number`. Retain each source identifier in its own field.
 
 ## Reproduce the sample
 
@@ -78,12 +101,18 @@ On November 16, 2026, both searches resolved parcel `13397`, PrintKey
 precede de-duplication and may change. The recipe checks identity, structure
 and selected fields rather than freezing those counts.
 
-For other reviewed assessor MBLUs, split on `/`, trim and remove empty
-segments, then join with spaces, retaining leading zeros. The sample
-`241/ 0234/ 00200/ /` becomes `241 0234 00200`. Reject ambiguous matches.
-When an MBLU is missing or does not match, a separately confirmed map pin can
-provide another lookup route. A corner property's legal parcel address may
-differ from a storefront address; independently review that association.
+## Preserve the permit-to-property association
+
+For each selected record, retain its parent Municity `Parcel_ID`, `PrintKey`
+and `LegalAddress` alongside the record's kind, identifier, number, type,
+status and date. This records which parcel query produced the result without
+assuming that the permit identifier itself is a parcel identifier.
+
+Compare the record's `LegalAddress`, when present, with the parent parcel and
+the starting property address. A corner parcel, address range or building with
+multiple units can have a different legal address from the address you started
+with. Investigate the relationship and retain unresolved or ambiguous matches
+separately. A parcel-level association alone does not identify an exact suite.
 
 ## Interpretation and remaining work
 
@@ -128,7 +157,3 @@ workflow; routine checks do not advance readiness assessment dates.
 Municity. They cover identity mismatches and ambiguity, missing groups and
 fields, duplicate identifiers, HTTP blocks, malformed responses, network
 failures, size limits, ordering, source changes and publication privacy.
-
-Civic Fit's related feature
-uses manually requested per-space lookups and separate admin review; this
-recipe does not invoke Civic Fit, ingest records or publish candidates.
