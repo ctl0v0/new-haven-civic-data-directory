@@ -1,5 +1,4 @@
 import { LAYERS } from "./config.js";
-import { ADDRESS_ALIASES } from "./aliases.js";
 import { arcgis, cached, fetchJson, sqlString, SourceError } from "./http.js";
 
 export function normalizeAddress(value) {
@@ -12,8 +11,7 @@ export function normalizeAddress(value) {
     .replace(/\s+/g, " ")
     .trim();
 }
-const aliases = new Map(ADDRESS_ALIASES.map((alias) => [alias.address, alias]));
-function candidate(feature, method, searchedAddress = null, evidence = null) {
+function candidate(feature, method, searchedAddress = null) {
   const a = feature.attributes ?? {};
   const listedAddress = normalizeAddress(a.property_address);
   const differentAddress =
@@ -26,19 +24,7 @@ function candidate(feature, method, searchedAddress = null, evidence = null) {
     account_number: a.account_number ?? null,
     match: {
       method,
-      confidence:
-        evidence?.confidence ?? (method === "documented-alias"
-          ? "medium"
-          : method === "address-point-intersection"
-            ? listedAddress && listedAddress === searchedAddress
-              ? "high"
-              : "medium"
-            : differentAddress
-              ? "medium"
-              : "high"),
-      ...(evidence?.note
-        ? { note: evidence.note, evidence_urls: evidence.evidenceUrls }
-        : differentAddress
+      ...(differentAddress
         ? {
             note:
               method === "address-point-intersection"
@@ -182,19 +168,6 @@ export async function resolveParcel(query) {
         );
         if (item.value.exceededTransferLimit) truncated = true;
       }
-    }
-    if (aliases.has(normalized)) {
-      const alias = aliases.get(normalized);
-      const result = await arcgis(LAYERS.parcels, {
-        where: `parcel_id = ${alias.parcelId}`,
-        outFields: "objectid,parcel_id,property_address,mblu,account_number",
-        resultRecordCount: "10",
-      }).catch(() => null);
-      matches.push(
-        ...(result?.features ?? []).map((f) =>
-          candidate(f, "documented-alias", normalized, alias),
-        ),
-      );
     }
     const candidates = unique(matches).filter((item) =>
       Number.isSafeInteger(Number(item.parcel_id)),

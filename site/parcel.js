@@ -13,7 +13,6 @@ const sourceNames = {
   assessor: "Assessor card",
   municity: "Municipal parcel service",
   "municipal-business-licenses": "Municipal licenses",
-  "municipal-business-mentions": "Municipal work mentions",
   "business-master": "CT business registry",
   "state-licenses": "CT credentials",
   "lci-cases": "LCI cases",
@@ -104,8 +103,6 @@ function recordDescription(item) {
     return `Registry billing address: ${a.matched_address ?? a.billingstreet ?? "not shown"}${a.address_basis === "city-address-point" ? " · matched to a city address point" : ""}`;
   if (item.source_id === "municipal-business-licenses")
     return [a.license_type, a.recorded_address, a.expiration_date ? `Expiration listed: ${shortDate(a.expiration_date)}` : null].filter(Boolean).join(" · ");
-  if (item.source_id === "municipal-business-mentions")
-    return [a.description_excerpt, a.record_number ? `Work record ${a.record_number}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "state-licenses")
     return `Credential address: ${a.matched_address ?? a.address ?? "not shown"}`;
   return brief(a.Description ?? a.description ?? a.complaint_type ?? a.document_type ?? a.PermitType ?? a.ApplicationType ?? a.section ?? "", 190);
@@ -219,11 +216,11 @@ function renderSnapshot() {
   if (!business) businesses.append(el("p", "Loading business records…", "meta"));
   else {
     const named = business.items
-      .filter((item) => ["municipal-business-licenses", "municipal-business-mentions", "business-master"].includes(item.source_id))
+      .filter((item) => ["municipal-business-licenses", "business-master"].includes(item.source_id))
       .filter((item) => item.attributes?.business_name || item.attributes?.name)
       .sort((a, b) =>
-        Number(["municipal-business-licenses", "municipal-business-mentions"].includes(b.source_id)) -
-        Number(["municipal-business-licenses", "municipal-business-mentions"].includes(a.source_id)) ||
+        Number(b.source_id === "municipal-business-licenses") -
+        Number(a.source_id === "municipal-business-licenses") ||
         String(b.attributes?.dissolution_date ?? b.attributes?.expiration_date ?? b.event_date ?? "").localeCompare(
           String(a.attributes?.dissolution_date ?? a.attributes?.expiration_date ?? a.event_date ?? ""),
         ));
@@ -305,20 +302,14 @@ async function choose(item, searchedQuery = null) {
       `Parcel ID ${summary.parcel.parcel_id} · MBLU ${summary.parcel.mblu ?? "unavailable"} · Assessor account ${summary.parcel.account_number ?? "unavailable"}`;
     const alternateMatch =
       searchedQuery &&
-      ["address-point-intersection", "documented-alias"].includes(item.match?.method) &&
+      item.match?.method === "address-point-intersection" &&
       normalizedAddress(searchedQuery) !== normalizedAddress(summary.parcel.address);
     $("parcel-match").hidden = !alternateMatch;
     $("parcel-match").replaceChildren();
     if (alternateMatch) {
       $("parcel-match").append(document.createTextNode(
-        item.match.method === "documented-alias"
-          ? item.match.note
-          : `${searchedQuery} is a city address point on this parcel. The parcel lists ${summary.parcel.address ?? "another address"}. Check the building before relying on the match.`,
+        `${searchedQuery} is a city address point on this parcel. The parcel lists ${summary.parcel.address ?? "another address"}. Check the building before relying on the match.`,
       ));
-      for (const [index, url] of (item.match.evidence_urls ?? []).entries()) {
-        $("parcel-match").append(document.createTextNode(" "));
-        $("parcel-match").append(link(url, `Evidence ${index + 1}`));
-      }
     }
     renderSnapshot();
     status("Records are loading by source.");
@@ -482,7 +473,7 @@ $("search-form").addEventListener("submit", async (event) => {
     for (const item of data.candidates) {
       const button = el("button", null, "candidate-button");
       button.append(el("strong", item.address ?? `Parcel ${item.parcel_id}`));
-      button.append(el("span", `Parcel ${item.parcel_id} · ${item.match.method === "address-point-intersection" ? "City address point" : item.match.method === "documented-alias" ? "Reviewed address link" : "Parcel record"}`, "candidate-meta"));
+      button.append(el("span", `Parcel ${item.parcel_id} · ${item.match.method === "address-point-intersection" ? "City address point" : "Parcel record"}`, "candidate-meta"));
       if (item.match.note) button.append(el("span", item.match.note, "candidate-note"));
       button.type = "button";
       button.onclick = () => choose(item, $("query").value);
