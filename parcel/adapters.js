@@ -223,7 +223,7 @@ async function assessorData(parcel) {
       current,
       rows: assessorTableRows($, tableId, ["Valuation Year", "Improvements", "Land", "Total"]),
     }));
-    return { attributes, sales, valuationTables, url };
+    return { attributes, buildingFacts: assessorBuildingFacts($, attributes), sales, valuationTables, url };
   });
   assessorPending.set(id, pending);
   try {
@@ -233,11 +233,42 @@ async function assessorData(parcel) {
   }
 }
 
+// Read only uniquely labeled facts from the verified card. Repeated labels on
+// multi-building cards are deliberately omitted rather than merged together.
+function assessorBuildingFacts($, attributes) {
+  const rows = $("tr").toArray().map((row) =>
+    $(row).children("td").toArray().map((cell) => text($(cell).text())),
+  ).filter((cells) => cells.length === 2 && cells.every(Boolean));
+  const field = (keys, label) => {
+    const direct = keys.map((key) => attributes[key]).filter(Boolean);
+    if (direct.length === 1) return direct[0];
+    if (direct.length > 1) return null;
+    const found = rows.filter(([name]) => name.replace(/:$/, "").trim().toLowerCase() === label.toLowerCase());
+    return found.length === 1 ? found[0][1] : null;
+  };
+  const integer = (value) => /^\d[\d,]*$/.test(value ?? "") ? Number(value.replaceAll(",", "")) : null;
+  const decimal = (value) => /^\d[\d,]*(?:\.\d+)?$/.test(value ?? "") ? Number(value.replaceAll(",", "")) : null;
+  const count = integer(field(["lblBldgCount", "lblBuildingCount"], "Building Count"));
+  const year = integer(field(["lblYearBuilt"], "Year Built"));
+  const livingArea = integer(field(["lblLivingArea"], "Living Area"));
+  const facts = {
+    building_count: count,
+    year_built: year && year >= 1600 && year <= 2100 ? year : null,
+    living_area_sq_ft: livingArea,
+    land_size_acres: decimal(field(["lblLandSize", "lblLandAcres"], "Size (Acres)")),
+    land_use_code: field(["lblLandUseCode"], "Use Code"),
+    style: field(["lblStyle"], "Style"),
+    model: field(["lblModel"], "Model"),
+    stories: decimal(field(["lblStories"], "Stories")),
+  };
+  return Object.fromEntries(Object.entries(facts).filter(([, value]) => value !== null));
+}
+
 async function assessorRecord(parcel) {
   const id = Number(parcel.attributes.parcel_id);
-  const { attributes, url } = await assessorData(parcel);
+  const { attributes, buildingFacts, url } = await assessorData(parcel);
   return result("assessor", [
-    record(id, "assessor", attributes, {
+    record(id, "assessor", { ...attributes, building_facts: buildingFacts }, {
       eventDate: date(attributes.lblSaleDate),
       sourceUrl: url,
       note: "Vision card fields are displayed as published; assessed values are not tax bills.",
@@ -340,8 +371,15 @@ async function boundaryRecords(sourceId, layer, parcel) {
   return result(
     sourceId,
     (data.features ?? []).map((f) =>
-      record(f.attributes?.objectid ?? 0, sourceId, f.attributes ?? {}, {
+      record(f.attributes?.objectid ?? f.attributes?.OBJECTID ?? 0, sourceId, f.attributes ?? {}, {
         match: "parcel-intersection",
+        sourceUrl: sourceId.includes("historic-districts") &&
+          (f.attributes?.objectid ?? f.attributes?.OBJECTID) != null
+          ? `${layer}/${f.attributes?.objectid ?? f.attributes?.OBJECTID}`
+          : null,
+        note: sourceId.includes("historic-districts")
+          ? "Mapped district intersection is geographic context; confirm requirements with the responsible office."
+          : null,
       }),
     ),
     {
@@ -351,6 +389,54 @@ async function boundaryRecords(sourceId, layer, parcel) {
         : null,
     },
   );
+}
+
+async function brownfieldRecords(parcel) {
+  const pid = String(parcel.attributes.parcel_id ?? "").trim();
+  const mblu = text(parcel.attributes.mblu);
+  if (!pid && !mblu) return unavailable("ct-brownfields", "Parcel has no official identifier for the DEEP Site Parcel field.");
+  // Query the bounded New Haven subset because the State and City can print
+  // the same MBLU with either slashes or spaces. Never match on site address.
+  const features = [];
+  let truncated = false;
+  for (let offset = 0; offset < 5000; offset += 1000) {
+    const data = await arcgis(LAYERS.ctBrownfields, {
+      where: "Site_Town IN ('New Haven','NEW HAVEN')",
+      outFields: "OBJECTID,Site_Town,Site_Name,Site_Addre,Site_Parce,Parcel_Acr,Program,Program_Ap,Funding_So",
+      orderByFields: "OBJECTID",
+      resultOffset: String(offset),
+      resultRecordCount: "1000",
+    });
+    features.push(...(data.features ?? []));
+    if (!data.exceededTransferLimit && (data.features ?? []).length < 1000) break;
+    if (offset === 4000) truncated = true;
+  }
+  const rows = features.filter(({ attributes: a }) => {
+    const siteParcel = text(a?.Site_Parce);
+    return text(a?.Site_Town)?.toUpperCase() === "NEW HAVEN" && Boolean(siteParcel) && (
+      [pid.toUpperCase(), mblu?.toUpperCase()].filter(Boolean).includes(siteParcel.toUpperCase()) ||
+      (Boolean(mblu) && printKey(siteParcel) === printKey(mblu))
+    );
+  });
+  return result("ct-brownfields", rows.map(({ attributes: a }) =>
+    record(a.OBJECTID, "ct-brownfields", {
+      site_name: text(a.Site_Name),
+      site_address_as_published: text(a.Site_Addre),
+      site_parcel_as_published: text(a.Site_Parce),
+      parcel_acres_as_published: a.Parcel_Acr ?? null,
+      program: text(a.Program),
+      program_approval_date_as_published: text(a.Program_Ap),
+      funding_source: text(a.Funding_So),
+      inventory_updated: "2026-02-19",
+    }, {
+      match: text(a.Site_Parce)?.toUpperCase() === pid.toUpperCase() ? "assessor-id-exact" : "mblu-exact",
+      sourceUrl: `${LAYERS.ctBrownfields}/${a.OBJECTID}`,
+      note: "DEEP inventory listing for the published parcel ID; it does not establish current contamination or cleanup status.",
+    }),
+  ), {
+    partial: truncated,
+    warning: truncated ? "DEEP New Haven query exceeded the 5,000-row request limit." : null,
+  });
 }
 
 async function cmtFeatures(parcel) {
@@ -945,6 +1031,11 @@ const ADAPTERS = Object.freeze({
   wards: (p) => boundaryRecords("wards", LAYERS.wards, p),
   neighborhoods: (p) =>
     boundaryRecords("neighborhoods", LAYERS.neighborhoods, p),
+  "local-historic-districts": (p) =>
+    boundaryRecords("local-historic-districts", LAYERS.localHistoricDistricts, p),
+  "state-historic-districts": (p) =>
+    boundaryRecords("state-historic-districts", LAYERS.stateHistoricDistricts, p),
+  "ct-brownfields": brownfieldRecords,
   alders: alderRecords,
   cmt: cmtDistrictRecords,
   "cmt-contacts": cmtContactRecords,

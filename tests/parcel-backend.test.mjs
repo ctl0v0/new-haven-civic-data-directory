@@ -561,6 +561,13 @@ test("assessor ownership and valuation tables become separate parcel records", a
     return new Response(`
       <span id="MainContent_lblPid">999030</span>
       <span id="MainContent_lblOwner">Example Owner LLC</span>
+      <table id="MainContent_buildingFacts">
+        <tr><td>Building Count</td><td>1</td></tr>
+        <tr><td>Year Built:</td><td>1910</td></tr>
+        <tr><td>Living Area:</td><td>1,588</td></tr>
+        <tr><td>Size (Acres)</td><td>0.23</td></tr>
+        <tr><td>Use Code</td><td>101</td></tr>
+      </table>
       <table id="MainContent_grdSales"><tr><th>Owner</th><th>Sale Price</th><th>Certificate</th><th>Book &amp; Page</th><th>Instrument</th><th>Sale Date</th></tr>
       <tr><td>Example Owner LLC</td><td>$0</td><td>&nbsp;</td><td>5187/0276</td><td>8</td><td>08/11/1997</td></tr>
       <tr><td>Prior Owner Inc</td><td>$125,000</td><td>&nbsp;</td><td>4861/0099</td><td>&nbsp;</td><td>05/08/1995</td></tr></table>
@@ -578,6 +585,13 @@ test("assessor ownership and valuation tables become separate parcel records", a
   ]);
   assert.equal(calls, 1);
   assert.equal(card.items[0].attributes.lblOwner, "Example Owner LLC");
+  assert.deepEqual(card.items[0].attributes.building_facts, {
+    building_count: 1,
+    year_built: 1910,
+    living_area_sq_ft: 1588,
+    land_size_acres: 0.23,
+    land_use_code: "101",
+  });
   assert.equal(sales.items.length, 2);
   assert.equal(sales.items[0].event_date, "1997-08-11");
   assert.equal(sales.items[0].attributes.book_page, "5187/0276");
@@ -634,6 +648,10 @@ test("parcel geography preserves all intersecting zoning records", async () => {
       return response({
         features: [{ attributes: { objectid: 4, neighborhood: "Downtown" } }],
       });
+    if (u.pathname.includes("New_Haven_Local_Historic_Districts"))
+      return response({ features: [{ attributes: { OBJECTID: 5, HistoricDistrict: "Wooster Square" } }] });
+    if (u.pathname.includes("New_Haven_State_Historic_Districts"))
+      return response({ features: [] });
     throw Error("Unexpected source");
   };
   const out = await parcelRecords("999002", "geography");
@@ -644,7 +662,28 @@ test("parcel geography preserves all intersecting zoning records", async () => {
     ["A", "B"],
   );
   assert.equal(out.partial, false);
-  assert.equal(out.sources.length, 3);
+  assert.equal(out.sources.length, 5);
+  assert.equal(out.items.find((item) => item.source_id === "local-historic-districts").source_record_id, "5");
+  assert.equal(out.items.find((item) => item.source_id === "local-historic-districts").match.method, "parcel-intersection");
+});
+
+test("DEEP inventory attaches only New Haven rows with an exact official parcel identifier", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    assert.ok(u.pathname.includes("Brownfields_Final_2025"));
+    assert.match(u.searchParams.get("where"), /Site_Town/);
+    return response({ features: [
+      { attributes: { OBJECTID: 1, Site_Town: "New Haven", Site_Name: "Matched PID", Site_Parce: "999041" } },
+      { attributes: { OBJECTID: 2, Site_Town: "New Haven", Site_Name: "Matched MBLU", Site_Parce: "12 34" } },
+      { attributes: { OBJECTID: 3, Site_Town: "New Haven", Site_Name: "Same address, other parcel", Site_Parce: "999042", Site_Addre: "165 CHURCH ST" } },
+      { attributes: { OBJECTID: 4, Site_Town: "Other Town", Site_Name: "Same ID, other town", Site_Parce: "999041" } },
+    ] });
+  };
+  const out = await getSourceRecords("ct-brownfields", parcel(999041));
+  assert.equal(out.status, "ok");
+  assert.deepEqual(out.items.map((item) => item.attributes.site_name), ["Matched PID", "Matched MBLU"]);
+  assert.deepEqual(out.items.map((item) => item.match.method), ["assessor-id-exact", "mblu-exact"]);
+  assert.ok(out.items.every((item) => item.event_date === null));
 });
 
 test("ward-layer alder contact remains visible when the roster blocks requests", async () => {
@@ -771,7 +810,7 @@ test("overview keeps source gaps and links visible without raw source fields", a
     throw Error("Upstream unavailable");
   };
   const out = await parcelOverview("999007");
-  assert.equal(out.groups.length, 6);
+  assert.equal(out.groups.length, 7);
   const property = out.groups.find((group) => group.id === "property");
   assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "unavailable");
   assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);

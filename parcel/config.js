@@ -8,6 +8,12 @@ export const LAYERS = Object.freeze({
   neighborhoods: GIS + "Neighborhoods_(View)/FeatureServer/0",
   cmt: GIS + "CMT_Districts_(View)/FeatureServer/0",
   managedLots: GIS + "LCI_Managed_Lots_(View)/FeatureServer/0",
+  localHistoricDistricts:
+    "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/New_Haven_Local_Historic_Districts/FeatureServer/5",
+  stateHistoricDistricts:
+    "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/New_Haven_State_Historic_Districts/FeatureServer/1",
+  ctBrownfields:
+    "https://services1.arcgis.com/FjPcSmEFuDYlIdKC/ArcGIS/rest/services/Brownfields_Final_2025/FeatureServer/0",
   streetsPoints:
     "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/arcgis/rest/services/Complete_Streets_Projects_public_view/FeatureServer/0",
   streetsLines:
@@ -94,6 +100,24 @@ export const SOURCES = Object.freeze([
       "City GIS neighborhood polygons; labels and boundary currency require review.",
   },
   {
+    id: "local-historic-districts",
+    group: "geography",
+    title: "City local historic district boundaries",
+    url: LAYERS.localHistoricDistricts,
+    mode: "live",
+    coverage:
+      "City mapped local historic district polygons, updated January 2022, intersecting the selected parcel. The map is general reference, not a permit or designation determination.",
+  },
+  {
+    id: "state-historic-districts",
+    group: "geography",
+    title: "City hosted State historic district boundaries",
+    url: LAYERS.stateHistoricDistricts,
+    mode: "live",
+    coverage:
+      "City mapped State historic district polygons, updated December 2021, intersecting the selected parcel. The map is general reference, not a permit or designation determination.",
+  },
+  {
     id: "alders",
     group: "representation",
     title: "Board of Alders roster",
@@ -139,6 +163,16 @@ export const SOURCES = Object.freeze([
     mode: "live",
     coverage:
       "Public case number, status, filed date and listed fine only. Complaint narratives, attachments and licensing status are not collected; property PID and address must both match.",
+  },
+  {
+    id: "ct-brownfields",
+    group: "environment",
+    title: "Connecticut DEEP brownfields inventory",
+    url: LAYERS.ctBrownfields,
+    verification_url: "https://portal.ct.gov/deep/remediation--site-clean-up/brownfields/brownfields-site-inventory",
+    mode: "live",
+    coverage:
+      "DEEP inventory updated February 19, 2026. Only New Haven rows whose published Site Parcel equals this parcel's official PID or MBLU are returned. An inventory listing does not establish present contamination, cleanup status, or every environmental condition.",
   },
   {
     id: "tax-bills",
@@ -269,6 +303,7 @@ export const SOURCES = Object.freeze([
 export const GROUPS = Object.freeze([
   { id: "property", title: "Property and assessment" },
   { id: "geography", title: "Zoning and boundaries" },
+  { id: "environment", title: "Environmental records" },
   { id: "representation", title: "Representation" },
   { id: "activity", title: "Parcel activity" },
   { id: "business", title: "Business records" },

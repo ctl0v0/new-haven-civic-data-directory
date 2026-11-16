@@ -4,6 +4,7 @@ const groups = [
   ["business", "Businesses in records", "Municipal licenses and occupant rows attached to the verified parcel. These do not confirm current tenants."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
+  ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
   ["representation", "Representation", "Ward and community management contacts shown by the checked sources."],
   ["nearby", "Nearby projects", "Projects near the parcel, kept separate from parcel-specific records."],
 ];
@@ -13,6 +14,9 @@ const sourceNames = {
   assessor: "Assessor card",
   "assessor-sales": "Assessor ownership history",
   "assessor-valuations": "Assessor valuation history",
+  "local-historic-districts": "City local historic districts",
+  "state-historic-districts": "City hosted State historic districts",
+  "ct-brownfields": "CT DEEP brownfields inventory",
   municity: "Municipal parcel service",
   "municipal-business-licenses": "Municipal licenses",
   "municipal-occupants": "Municipal occupants",
@@ -95,6 +99,10 @@ function recordTitle(item) {
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
   if (item.source_id === "assessor-valuations")
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
+  if (item.source_id === "assessor") return "Assessor building and land facts";
+  if (item.source_id === "ct-brownfields") return a.site_name ?? "DEEP inventory site";
+  if (["local-historic-districts", "state-historic-districts"].includes(item.source_id))
+    return a.HistoricDistrict ?? a.historicdistrict ?? "Historic district boundary";
   return brief(
     a.business_name ?? a.occupant_name ?? a.owner ?? a.BusinessName ?? a.name ?? a.document_name ??
       a.complaint_number ?? a.contact_name ?? a.title ?? a.PermitNo ??
@@ -126,6 +134,21 @@ function recordDescription(item) {
     return [a.sale_price ? `Sale price listed: ${a.sale_price}` : null, a.book_page ? `Book and page ${a.book_page}` : null, a.instrument ? `Instrument ${a.instrument}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "assessor-valuations")
     return [a.table_section, a.total ? `Total ${a.total}` : null, a.land ? `Land ${a.land}` : null, a.improvements ? `Improvements ${a.improvements}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "assessor") {
+    const b = a.building_facts ?? {};
+    return [b.building_count != null ? `${b.building_count} buildings listed` : null,
+      b.year_built ? `Year built ${b.year_built}` : null,
+      b.living_area_sq_ft != null ? `${Number(b.living_area_sq_ft).toLocaleString()} sq ft living area` : null,
+      b.land_size_acres != null ? `${b.land_size_acres} acres listed` : null,
+      b.land_use_code ? `Land use code ${b.land_use_code}` : null,
+      b.model ? `Model ${b.model}` : null,
+      b.style ? `Style ${b.style}` : null].filter(Boolean).join(" · ");
+  }
+  if (item.source_id === "ct-brownfields")
+    return [a.site_address_as_published, a.site_parcel_as_published ? `Site Parcel ${a.site_parcel_as_published}` : null,
+      a.program, a.inventory_updated ? `Inventory ${shortDate(a.inventory_updated)}` : null].filter(Boolean).join(" · ");
+  if (["local-historic-districts", "state-historic-districts"].includes(item.source_id))
+    return "City mapped district intersects the parcel; source boundary date and limits are listed in coverage.";
   if (item.source_id === "municipal-business-licenses")
     return [a.license_type, a.recorded_address, a.expiration_date ? `Expiration listed: ${shortDate(a.expiration_date)}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "municipal-occupants")
@@ -219,6 +242,18 @@ function renderSnapshot() {
       parcel.zone ? `City parcel zone code ${parcel.zone}` : null,
     ].filter(Boolean);
     building.append(el("p", facts.length ? facts.join(" · ") : "The city parcel record did not return a building description."));
+    const assessorFacts = property.items.find((item) => item.source_id === "assessor")?.attributes?.building_facts ?? {};
+    const assessorLines = [
+      assessorFacts.building_count != null ? `${assessorFacts.building_count} buildings listed` : null,
+      assessorFacts.year_built ? `Year built ${assessorFacts.year_built}` : null,
+      assessorFacts.living_area_sq_ft != null ? `${Number(assessorFacts.living_area_sq_ft).toLocaleString()} sq ft living area` : null,
+      assessorFacts.land_size_acres != null ? `${assessorFacts.land_size_acres} acres listed` : null,
+      assessorFacts.land_use_code ? `Land use code ${assessorFacts.land_use_code}` : null,
+    ].filter(Boolean);
+    if (assessorLines.length) {
+      building.append(el("p", "Assessor card", "snapshot-label"));
+      building.append(el("p", assessorLines.join(" · ")));
+    }
     const currentValues = property.items
       .filter((item) => item.source_id === "assessor-valuations" && item.attributes?.table_section === "current")
       .sort((a, b) => String(b.attributes?.valuation_year ?? "").localeCompare(String(a.attributes?.valuation_year ?? "")));
@@ -312,6 +347,23 @@ function renderSnapshot() {
       work.append(list);
     }
     work.append(el("p", "A filed or open record does not confirm a future schedule or completed work.", "snapshot-caveat"));
+  }
+
+  const environment = groupResponses.get("environment");
+  const environmental = snapshotCard("Environmental inventory", "environment");
+  if (!environment) environmental.append(el("p", "Checking the State inventory…", "meta"));
+  else {
+    const source = environment.sources.find((item) => item.source_id === "ct-brownfields");
+    if (source?.status === "unavailable" || source?.status === "partial")
+      environmental.append(el("p", "The DEEP inventory check was incomplete. Review its source status below."));
+    else if (!environment.items.length)
+      environmental.append(el("p", "No DEEP brownfield row matched this parcel's published identifier."));
+    else {
+      const list = el("ul", null, "snapshot-list");
+      for (const item of environment.items.slice(0, 3)) list.append(el("li", recordTitle(item)));
+      environmental.append(list);
+    }
+    environmental.append(el("p", "Inventory updated February 2026. A listing or missing row does not establish present site conditions.", "snapshot-caveat"));
   }
 }
 async function choose(item, searchedQuery = null) {
