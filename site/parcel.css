@@ -264,6 +264,14 @@ summary:focus-visible {
 .source-coverage p { margin: .35rem 0; }
 .source-coverage a { display: inline-block; margin-right: .8rem; font-size: .8rem; }
 .record-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+.context-groups { display: grid; gap: 1.4rem; margin-top: 1rem; }
+.context-group { border-top: 1px solid #d9e4dc; padding-top: 1rem; }
+.context-group h3 { margin: 0; font-size: 1.1rem; }
+.nearby-parcel-list { display: grid; gap: .85rem; }
+.nearby-parcel { border: 1px solid #d9e4dc; border-radius: .6rem; background: #f8faf7; padding: .9rem; }
+.nearby-parcel h4 { margin: 0; font-size: 1rem; }
+.nearby-parcel > p { margin: .2rem 0 .45rem; }
+.nearby-parcel > a { display: inline-block; margin-bottom: .7rem; font-size: .82rem; font-weight: 700; }
 .record-card { min-width: 0; border: 1px solid #d9e4dc; border-radius: .55rem; padding: .9rem 1rem; background: #fff; }
 .record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .7rem; }
 .record-head h3 { margin: 0; font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }

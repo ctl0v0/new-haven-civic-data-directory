@@ -223,7 +223,14 @@ async function assessorData(parcel) {
       current,
       rows: assessorTableRows($, tableId, ["Valuation Year", "Improvements", "Land", "Total"]),
     }));
-    return { attributes, buildingFacts: assessorBuildingFacts($, attributes), sales, valuationTables, url };
+    return {
+      attributes,
+      buildingFacts: assessorBuildingFacts($, attributes),
+      subareas: assessorSubareas($),
+      sales,
+      valuationTables,
+      url,
+    };
   });
   assessorPending.set(id, pending);
   try {
@@ -266,6 +273,49 @@ function assessorBuildingFacts($, attributes) {
   return Object.fromEntries(Object.entries(facts).filter(([, value]) => value !== null));
 }
 
+function assessorSubareas($) {
+  const tables = [];
+  let malformedRows = 0;
+  const heading = (value) => String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  const area = (value) => /^\d[\d,]*(?:\.\d+)?$/.test(value ?? "")
+    ? Number(value.replaceAll(",", "")) : null;
+  for (const table of $("table").toArray()) {
+    const rows = $(table).find("tr").toArray()
+      .filter((row) => $(row).closest("table")[0] === table);
+    const headerIndex = rows.findIndex((row) => {
+      const cells = $(row).children("th,td").toArray().map((cell) => heading($(cell).text()));
+      return cells.length === 4 && cells[0] === "code" && cells[1] === "description" &&
+        cells[2].replaceAll(" ", "") === "grossarea" &&
+        cells[3].replaceAll(" ", "") === "livingarea";
+    });
+    if (headerIndex < 0) continue;
+    const tableNumber = tables.length + 1;
+    const items = [];
+    for (const [rowIndex, row] of rows.slice(headerIndex + 1).entries()) {
+      const cells = $(row).children("td").toArray().map((cell) => text($(cell).text()));
+      if (!cells.length || !cells[0] || /^(?:total|ttl)\b/i.test(cells[0])) continue;
+      if (cells.length !== 4 || !cells[1] || !/^[A-Za-z0-9-]{1,32}$/.test(cells[0])) {
+        malformedRows++;
+        continue;
+      }
+      const gross = area(cells[2]), living = area(cells[3]);
+      if ((cells[2] && gross === null) || (cells[3] && living === null)) malformedRows++;
+      items.push({
+        table_number: tableNumber,
+        row_number: rowIndex + 1,
+        code: cells[0],
+        description_as_published: cells[1],
+        gross_area_sq_ft: gross,
+        gross_area_as_published: cells[2],
+        living_area_sq_ft: living,
+        living_area_as_published: cells[3],
+      });
+    }
+    tables.push(items);
+  }
+  return { tables, malformedRows };
+}
+
 async function assessorRecord(parcel) {
   const id = Number(parcel.attributes.parcel_id);
   const { attributes, buildingFacts, url } = await assessorData(parcel);
@@ -276,6 +326,25 @@ async function assessorRecord(parcel) {
       note: "Vision card fields are displayed as published; assessed values are not tax bills.",
     }),
   ]);
+}
+
+async function assessorSubareaRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { subareas, url } = await assessorData(parcel);
+  if (!subareas.tables.length)
+    return unavailable("assessor-subareas", "The verified assessor card did not return a readable Building Sub-Areas table.");
+  const items = subareas.tables.flatMap((table) => table.map((row) =>
+    record(`${id}:${row.table_number}:${row.row_number}`, "assessor-subareas", row, {
+      sourceUrl: url,
+      note: "Assessor building subarea as published. Gross and living area are not a verified retail lease area or a zoning permission.",
+    }),
+  ));
+  return result("assessor-subareas", items, {
+    partial: subareas.malformedRows > 0,
+    warning: subareas.malformedRows > 0
+      ? `${subareas.malformedRows} assessor subarea rows could not be read completely.`
+      : null,
+  });
 }
 
 async function assessorSalesRecords(parcel) {
@@ -1027,6 +1096,7 @@ const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
   addresses: addressRecords,
   assessor: assessorRecord,
+  "assessor-subareas": assessorSubareaRecords,
   "assessor-sales": assessorSalesRecords,
   "assessor-valuations": assessorValuationRecords,
   zoning: (p) => boundaryRecords("zoning", LAYERS.zoning, p),

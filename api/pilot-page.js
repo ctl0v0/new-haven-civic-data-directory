@@ -40,7 +40,7 @@ const app = `
     <p id="context-status" role="status" aria-live="polite"></p>
     <button id="context-load" type="button" class="secondary" hidden>Retry neighborhood lookup</button>
     <div id="context-sources" class="source-list"></div>
-    <div id="context-records" class="record-list"></div>
+    <div id="context-records" class="context-groups"></div>
     <button id="context-more" type="button" class="secondary" hidden>Check more nearby parcels</button>
     <p class="small">The City’s <a href="https://storymaps.arcgis.com/stories/18b7a2ab8ea9492a89f95456d3879883" target="_blank" rel="noopener noreferrer">2024 downtown pedestrian study</a> counted selected intersections during short observation windows. A parcel foot-traffic feed is not available here.</p>
   </section>

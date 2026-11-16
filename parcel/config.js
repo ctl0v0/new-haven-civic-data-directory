@@ -62,6 +62,16 @@ export const SOURCES = Object.freeze([
     directoryId: "assessor",
   },
   {
+    id: "assessor-subareas",
+    group: "property",
+    title: "Assessor building subareas",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Building Sub-Areas rows from the Vision card with the exact parcel PID. Codes, descriptions, gross area and living area are assessment fields, not a measured retail lease area or a zoning permission.",
+    directoryId: "assessor",
+  },
+  {
     id: "addresses",
     group: "property",
     title: "City address points",
@@ -78,7 +88,7 @@ export const SOURCES = Object.freeze([
     url: LAYERS.zoning,
     mode: "live",
     coverage:
-      "All polygons intersecting the selected parcel; codes are not zoning advice.",
+      "All City zoning polygons intersecting the selected parcel. Zone code, district category and districts are shown as published; they do not specify how many square feet of a building may be used for retail.",
     directoryId: "gis-parcels",
   },
   {
@@ -336,10 +346,10 @@ export const CONTEXT_SOURCES = Object.freeze([
   },
   {
     id: "nearby-municipal-business",
-    title: "Municipal licenses and occupants on nearby parcels",
+    title: "Named municipal license and occupant records on nearby parcels",
     url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
     mode: "live",
-    coverage: "Public License and Occupant rows on nearby City parcels matched by each parcel's verified MBLU. Rows can be historical and do not establish current operation.",
+    coverage: "Public License and Occupant rows on nearby City parcels matched by each parcel's verified MBLU. Source-reported type, status, dates and recorded address are shown where present. Rows can be historical and do not establish current operation.",
   },
   {
     id: "pedestrian-counts",

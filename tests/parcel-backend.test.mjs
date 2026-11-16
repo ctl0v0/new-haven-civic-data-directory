@@ -568,6 +568,10 @@ test("assessor ownership and valuation tables become separate parcel records", a
         <tr><td>Size (Acres)</td><td>0.23</td></tr>
         <tr><td>Use Code</td><td>101</td></tr>
       </table>
+      <table id="MainContent_grdSubareas"><tr><th>Code</th><th>Description</th><th>Gross<br>Area</th><th>Living<br>Area</th></tr>
+      <tr><td>RET</td><td>RETAIL STORE</td><td>2,000</td><td>2,000</td></tr>
+      <tr><td>UBM</td><td>UNFINISHED BASEMENT</td><td>800</td><td>0</td></tr>
+      <tr><td colspan="2">Ttl Gross Liv / Lease Area</td><td>2,800</td><td>2,000</td></tr></table>
       <table id="MainContent_grdSales"><tr><th>Owner</th><th>Sale Price</th><th>Certificate</th><th>Book &amp; Page</th><th>Instrument</th><th>Sale Date</th></tr>
       <tr><td>Example Owner LLC</td><td>$0</td><td>&nbsp;</td><td>5187/0276</td><td>8</td><td>08/11/1997</td></tr>
       <tr><td>Prior Owner Inc</td><td>$125,000</td><td>&nbsp;</td><td>4861/0099</td><td>&nbsp;</td><td>05/08/1995</td></tr></table>
@@ -578,10 +582,11 @@ test("assessor ownership and valuation tables become separate parcel records", a
     `, { headers: { "content-type": "text/html" } });
   };
   const p = parcel(999030);
-  const [sales, values, card] = await Promise.all([
+  const [sales, values, card, subareas] = await Promise.all([
     getSourceRecords("assessor-sales", p),
     getSourceRecords("assessor-valuations", p),
     getSourceRecords("assessor", p),
+    getSourceRecords("assessor-subareas", p),
   ]);
   assert.equal(calls, 1);
   assert.equal(card.items[0].attributes.lblOwner, "Example Owner LLC");
@@ -592,6 +597,11 @@ test("assessor ownership and valuation tables become separate parcel records", a
     land_size_acres: 0.23,
     land_use_code: "101",
   });
+  assert.equal(subareas.status, "ok");
+  assert.deepEqual(subareas.items.map((item) => [item.attributes.code, item.attributes.gross_area_sq_ft, item.attributes.living_area_sq_ft]), [
+    ["RET", 2000, 2000], ["UBM", 800, 0],
+  ]);
+  assert.ok(subareas.items.every((item) => item.event_date === null && item.source_url.endsWith("pid=999030")));
   assert.equal(sales.items.length, 2);
   assert.equal(sales.items[0].event_date, "1997-08-11");
   assert.equal(sales.items[0].attributes.book_page, "5187/0276");
@@ -643,6 +653,22 @@ test("assessor card does not merge facts from multiple buildings", async () => {
   assert.deepEqual(out.items[0].attributes.building_facts, { building_count: 2 });
 });
 
+test("assessor subareas preserve separate source tables and omit unreadable totals", async () => {
+  globalThis.fetch = async () => new Response(`
+    <span id="MainContent_lblPid">999032</span>
+    <table><tr><th>Code</th><th>Description</th><th>Gross Area</th><th>Living Area</th></tr>
+    <tr><td>BAS</td><td>FIRST FLOOR</td><td>1,000</td><td>1,000</td></tr></table>
+    <table><tr><th>Code</th><th>Description</th><th>Gross Area</th><th>Living Area</th></tr>
+    <tr><td>UBM</td><td>BASEMENT</td><td>600</td><td>0</td></tr>
+    <tr><td>BAD</td><td>MALFORMED</td><td>unknown</td><td>0</td></tr></table>
+  `, { headers: { "content-type": "text/html" } });
+  const out = await getSourceRecords("assessor-subareas", parcel(999032));
+  assert.equal(out.status, "partial");
+  assert.deepEqual(out.items.map((item) => item.attributes.table_number), [1, 2, 2]);
+  assert.equal(out.items[2].attributes.gross_area_sq_ft, null);
+  assert.equal(out.items[2].attributes.gross_area_as_published, "unknown");
+});
+
 test("parcel geography preserves all intersecting zoning records", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
@@ -651,8 +677,8 @@ test("parcel geography preserves all intersecting zoning records", async () => {
     if (u.pathname.includes("Zoning_"))
       return response({
         features: [
-          { attributes: { objectid: 1, zone_code: "A" } },
-          { attributes: { objectid: 2, zone_code: "B" } },
+          { attributes: { objectid: 1, zone_code: "A", district_category: "Residential", districts: "A" } },
+          { attributes: { objectid: 2, zone_code: "B", district_category: "Business", districts: "B" } },
         ],
       });
     if (u.pathname.includes("Wards_"))
@@ -674,6 +700,7 @@ test("parcel geography preserves all intersecting zoning records", async () => {
       .map((x) => x.attributes.zone_code),
     ["A", "B"],
   );
+  assert.equal(out.items.find((x) => x.source_id === "zoning" && x.attributes.zone_code === "B").attributes.district_category, "Business");
   assert.equal(out.partial, false);
   assert.equal(out.sources.length, 5);
   assert.equal(out.items.find((item) => item.source_id === "local-historic-districts").source_record_id, "5");
@@ -873,8 +900,8 @@ test("neighborhood context keeps area counts and nearby businesses separate from
     if (u.pathname.endsWith("/Children"))
       return response({
         Document: [], Application: [], Complaint: [], Contact: [], Permit: [], Certificate: [],
-        License: [{ License_ID: 1, BusinessName: "Neighbor Cafe", Status: "Expired", Email: "private@example.org" }],
-        Occupant: [],
+        License: [{ License_ID: 1, BusinessName: "Neighbor Cafe", LicenseNumber: "FSE-24-1", LicenseType: "Food Service Establishment", Status: "Expired", ExpirationDate: "2024-12-31", Email: "private@example.org" }],
+        Occupant: [{ Occupant_ID: 2, Name: "Neighbor Cafe", BusinessName: "Neighbor Cafe", OccupancyType: "Restaurant", InActive: true, CreatedDate: "2022-01-03", Phone: "555-0100" }],
       });
     throw Error(`Unexpected source ${u.pathname}`);
   };
@@ -884,12 +911,18 @@ test("neighborhood context keeps area counts and nearby businesses separate from
   assert.equal(out.items.find((x) => x.source_id === "census-block-2020").attributes.total_population, 64);
   assert.equal(out.items.find((x) => x.source_id === "ct-tract-2020-acs").attributes.median_household_income_usd, 55000);
   assert.equal(out.items.find((x) => x.source_id === "ct-transit-stops").attributes.in_service, 1);
-  const business = out.items.find((x) => x.source_id === "nearby-municipal-business");
+  const businesses = out.items.filter((x) => x.source_id === "nearby-municipal-business");
+  const business = businesses.find((x) => x.attributes.municipal_record_type === "License");
   assert.equal(business.attributes.business_name, "Neighbor Cafe");
   assert.equal(business.attributes.nearby_parcel_id, 999089);
+  assert.equal(business.attributes.nearby_parcel_objectid, 999099);
+  assert.equal(business.attributes.license_type, "Food Service Establishment");
+  assert.equal(business.attributes.status, "Expired");
+  assert.equal(business.attributes.expiration_date, "2024-12-31");
+  assert.equal(businesses.find((x) => x.attributes.municipal_record_type === "Occupant").attributes.inactive, true);
   assert.equal(business.match.method, "nearby-parcel-exact-mblu");
   assert.equal(out.parcels_checked, 1);
-  assert.doesNotMatch(JSON.stringify(out), /private@example.org|foot.traffic estimate/i);
+  assert.doesNotMatch(JSON.stringify(out), /private@example.org|555-0100|foot.traffic estimate/i);
   const api = await contextRoute.fetch(new Request("https://example.com/api/v1/context?parcel_id=999088", {
     headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` },
   }));

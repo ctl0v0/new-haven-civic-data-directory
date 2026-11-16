@@ -225,6 +225,7 @@ async function nearbyBusiness(point, selected, offset) {
       attributes: {
         ...item.attributes,
         nearby_parcel_id: feature.attributes.parcel_id,
+        nearby_parcel_objectid: feature.attributes.objectid,
         nearby_parcel_address: feature.attributes.property_address ?? null,
         distance_m: feature.distance_m,
         municipal_record_type: source.source_id === "municipal-business-licenses" ? "License" : "Occupant",
