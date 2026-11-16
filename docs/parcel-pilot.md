@@ -14,6 +14,8 @@ Use Node.js 24 or later. Run `npm ci`, `npm test`, and `npm run build`. For a lo
 
 Each value must contain at least 24 characters. Configure all three as sensitive Vercel environment variables before testing a deployed preview. The endpoints fail closed when any value is missing. Rotate the passcode and token after the pilot; changing the cookie secret invalidates active browser sessions. The browser and API use the same private access policy, while MCP requires the bearer token. Do not put the bearer token in the browser page or a public client configuration.
 
+After adding or changing Vercel variables, create a new deployment for the selected environment; an existing deployment keeps its original environment snapshot. For a branch-specific Preview pilot, scope all three values to the same Git branch.
+
 For any wider rollout, add rate limits at the deployment edge and review the access terms and request budgets of each upstream source. This pilot uses bounded request sizes, timeouts, fixed upstream hosts, and a short cache; it is not a bulk downloader.
 
 ## Review flow
