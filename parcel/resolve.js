@@ -12,8 +12,11 @@ export function normalizeAddress(value) {
     .trim();
 }
 const aliases = new Map([["50 FITCH ST", 23699]]); // Reviewed official planning document, see curated evidence.
-function candidate(feature, method) {
+function candidate(feature, method, searchedAddress = null) {
   const a = feature.attributes ?? {};
+  const listedAddress = normalizeAddress(a.property_address);
+  const differentAddress =
+    searchedAddress && listedAddress && listedAddress !== searchedAddress;
   return {
     parcel_id: a.parcel_id,
     objectid: a.objectid,
@@ -25,9 +28,17 @@ function candidate(feature, method) {
       confidence:
         method === "documented-alias"
           ? "high"
-          : method === "address-point-intersection"
+          : method === "address-point-intersection" || differentAddress
             ? "medium"
             : "high",
+      ...(differentAddress
+        ? {
+            note:
+              method === "address-point-intersection"
+                ? "The searched address point intersects this parcel, but the parcel lists a different address. Confirm the building before selecting it."
+                : "The parcel's listed address is not an exact match to the search.",
+          }
+        : {}),
     },
   };
 }
@@ -73,7 +84,9 @@ export async function resolveParcel(query) {
           resultRecordCount: "25",
         });
         return {
-          items: (data.features ?? []).map((f) => candidate(f, method)),
+          items: (data.features ?? []).map((f) =>
+            candidate(f, method, method === "parcel-address" ? normalized : null),
+          ),
           truncated: Boolean(data.exceededTransferLimit),
         };
       }),
@@ -86,7 +99,7 @@ export async function resolveParcel(query) {
     );
     const errors = results.filter((r) => r.status === "rejected").length;
     let fallbackUnavailable = false;
-    if (parts && matches.length === 0) {
+    if (parts) {
       const house = Number(parts[1]);
       const street = parts[2].replace(/\s+(ST|AVE|RD)$/, "");
       const metadata = await cached("address-schema", () =>
@@ -97,7 +110,8 @@ export async function resolveParcel(query) {
         "esriFieldTypeString";
       const addressRows = await arcgis(LAYERS.addresses, {
         where: `house_number = ${numericHouse ? house : `'${house}'`} AND UPPER(street_name) LIKE '${sqlString(street)}%'`,
-        outFields: "*",
+        outFields:
+          "objectid,house_number,full_street_name,street_name,suffix_type,unit",
         returnGeometry: "true",
         outSR: "4326",
         resultRecordCount: "25",
@@ -109,6 +123,12 @@ export async function resolveParcel(query) {
       const points = [
         ...new Map(
           (addressRows?.features ?? [])
+            .filter((row) => {
+              const a = row.attributes ?? {};
+              const streetName =
+                a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`;
+              return normalizeAddress(`${a.house_number ?? ""} ${streetName}`) === normalized;
+            })
             .map((row) => row.geometry)
             .filter((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y))
             .map((p) => [`${p.x}:${p.y}`, p]),
@@ -141,7 +161,7 @@ export async function resolveParcel(query) {
         }
         matches.push(
           ...(item.value.features ?? []).map((f) =>
-            candidate(f, "address-point-intersection"),
+            candidate(f, "address-point-intersection", normalized),
           ),
         );
         if (item.value.exceededTransferLimit) truncated = true;
@@ -163,6 +183,7 @@ export async function resolveParcel(query) {
     const candidates = unique(matches).filter((item) =>
       Number.isSafeInteger(Number(item.parcel_id)),
     );
+    if (candidates.length > 25) truncated = true;
     return {
       query: q,
       status:

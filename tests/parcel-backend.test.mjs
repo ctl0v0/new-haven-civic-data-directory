@@ -223,6 +223,52 @@ test("duplicate official parcel IDs are returned as candidates", async () => {
   assert.equal(out.candidates.length, 2);
 });
 
+test("street search shows a second parcel found by its address point", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Addresses_") && !u.pathname.endsWith("/query"))
+      return response({ fields: [{ name: "house_number", type: "esriFieldTypeString" }] });
+    if (u.pathname.includes("Addresses_"))
+      return response({
+        features: [
+          {
+            attributes: { house_number: "100", full_street_name: "MAIN ST" },
+            geometry: { x: -72.9, y: 41.3 },
+          },
+          {
+            attributes: { house_number: "100", full_street_name: "MAIN AVE" },
+            geometry: { x: -72.8, y: 41.3 },
+          },
+        ],
+      });
+    if (u.pathname.includes("Parcel_Viewer")) {
+      if (u.searchParams.get("geometryType") === "esriGeometryPoint")
+        return response({
+          features: [{
+            ...parcel(999012),
+            attributes: { ...parcel(999012).attributes, property_address: "102 MAIN ST" },
+          }],
+        });
+      if (u.searchParams.get("where")?.includes("property_address"))
+        return response({
+          features: [{
+            ...parcel(999011),
+            attributes: { ...parcel(999011).attributes, property_address: "100 MAIN ST" },
+          }],
+        });
+      return response({ features: [] });
+    }
+    throw Error("Unexpected source");
+  };
+  const out = await resolveParcel("100 Main St");
+  assert.equal(out.status, "ambiguous");
+  assert.equal(out.candidates.length, 2);
+  const point = out.candidates.find((x) => x.parcel_id === 999012);
+  assert.equal(point.match.method, "address-point-intersection");
+  assert.match(point.match.note, /different address/);
+  assert.equal(point.match.confidence, "medium");
+});
+
 test("parcel geography preserves all intersecting zoning records", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);

@@ -182,7 +182,7 @@ $("search-form").addEventListener("submit", async (event) => {
     for (const item of data.candidates) {
       const button = el(
         "button",
-        `${item.address ?? "No address"} · Parcel ${item.parcel_id} · ${item.match.method}`,
+        `${item.address ?? "No address"} · Parcel ${item.parcel_id} · ${item.match.method}${item.match.note ? ` · ${item.match.note}` : ""}`,
       );
       button.type = "button";
       button.onclick = () => choose(item);

@@ -26,7 +26,7 @@ For any wider rollout, add rate limits at the deployment edge and review the acc
 
 Open `/parcel`, enter the pilot passcode, and search by address, parcel ID, MBLU or assessor account number. If a query yields multiple parcel records, choose an official parcel ID and object ID. The page shows six groups, source status and coverage, raw public record fields, original links, and a dated activity timeline. No map is needed for this review flow. The URL can preserve a selected parcel ID and object ID for another authenticated reviewer.
 
-The resolver uses the city's parcel layer first. Address-point intersections are a fallback. It does not silently choose one of several candidate parcels, and it preserves every zoning polygon returned for a parcel. Spatial and address matches are labeled as candidates where appropriate. Parcel geometry is returned in longitude and latitude for intersections. A documented alias for 50 Fitch Street is included only for a reviewed planning case.
+The resolver checks the city's parcel-address field and matching city address points for every street-address search. It intersects address-point coordinates with parcel polygons, so a building address can surface a parcel whose listed address differs from the search. That difference is labeled on the candidate; the resolver does not silently choose between parcels. Address-point association is spatial evidence, not proof of a legal address. It preserves every zoning polygon returned for a parcel. Parcel geometry is returned in longitude and latitude for intersections. A documented alias for 50 Fitch Street is included only for a reviewed planning case.
 
 ## REST API
 
