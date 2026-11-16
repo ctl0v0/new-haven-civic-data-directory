@@ -215,11 +215,43 @@ async function alderRecords(parcel) {
       "alders",
       "Parcel does not have one unambiguous ward intersection.",
     );
+  const wardContacts = wards.items
+    .map((item) => item.attributes)
+    .filter(
+      (attributes) =>
+        Number(attributes.ward) === numbers[0] && text(attributes.alder_name),
+    );
+  const fallback = () => {
+    if (
+      !wardContacts.length ||
+      new Set(wardContacts.map((item) => text(item.alder_name))).size !== 1
+    )
+      return unavailable(
+        "alders",
+        "Board roster is unavailable and the ward layer has no unambiguous alder contact.",
+      );
+    return result(
+      "alders",
+      [
+        record(numbers[0], "alders", wardContacts[0], {
+          match: "city-ward-layer",
+          sourceUrl: LAYERS.wards,
+          note: "City ward-layer contact. Verify current officeholding with the Board of Alders.",
+        }),
+      ],
+      {
+        partial: true,
+        warning:
+          "Board roster could not be checked; this contact comes from the city ward layer and may be out of date.",
+      },
+    );
+  };
   const html = await fetchBounded(source("alders").url, {
     accept: "text/html",
     maxBytes: 3_000_000,
     timeout: 9000,
-  });
+  }).catch(() => null);
+  if (!html) return fallback();
   const $ = load(html);
   for (const table of $("table").toArray()) {
     const rows = $(table)
@@ -251,18 +283,14 @@ async function alderRecords(parcel) {
         fields: Object.fromEntries(heads.map((key, i) => [key, row[i] ?? ""])),
       }));
     const selected = records.filter((item) => item.ward === numbers[0]);
-    if (selected.length !== 1)
-      return unavailable(
-        "alders",
-        "Official roster has no unique identified row for this ward.",
-      );
+    if (selected.length !== 1) return fallback();
     return result("alders", [
       record(numbers[0], "alders", selected[0].fields, {
         note: "Roster officeholding and election changes require independent confirmation.",
       }),
     ]);
   }
-  throw new SourceError("Official alder table is not readable");
+  return fallback();
 }
 
 function printKey(value) {

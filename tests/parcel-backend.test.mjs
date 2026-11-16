@@ -137,7 +137,9 @@ test("unconfigured pilot identifies missing variable names without exposing valu
   const token = process.env.PILOT_API_TOKEN;
   delete process.env.PILOT_API_TOKEN;
   try {
-    const page = await pilotPage.fetch(new Request("https://example.com/parcel"));
+    const page = await pilotPage.fetch(
+      new Request("https://example.com/parcel"),
+    );
     const html = await page.text();
     assert.match(html, /PILOT_API_TOKEN \(absent\)/);
     assert.doesNotMatch(html, /a-long-test/);
@@ -195,6 +197,38 @@ test("parcel geography preserves all intersecting zoning records", async () => {
   );
   assert.equal(out.partial, false);
   assert.equal(out.sources.length, 3);
+});
+
+test("ward-layer alder contact remains visible when the roster blocks requests", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(999005)] });
+    if (u.pathname.includes("Wards_"))
+      return response({
+        features: [
+          {
+            attributes: {
+              objectid: 5,
+              ward: 7,
+              alder_name: "Test Alder",
+              email: "ward7@example.com",
+            },
+          },
+        ],
+      });
+    if (u.pathname.includes("list-of-alders"))
+      return new Response("", { status: 403 });
+    throw Error("Unexpected source");
+  };
+  const out = await parcelRecords("999005", "representation");
+  const alder = out.sources.find((item) => item.source_id === "alders");
+  assert.equal(alder.status, "partial");
+  assert.equal(
+    out.items.find((item) => item.source_id === "alders").attributes.alder_name,
+    "Test Alder",
+  );
+  assert.match(alder.warning, /ward layer/);
 });
 
 test("upstream permit failure is labeled partial while dated parcel facts remain", async () => {

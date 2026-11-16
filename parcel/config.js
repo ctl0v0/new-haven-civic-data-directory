@@ -79,7 +79,7 @@ export const SOURCES = Object.freeze([
     url: "https://www.newhavenct.gov/government/departments-divisions/board-of-alders/list-of-alders",
     mode: "live",
     coverage:
-      "Public roster; missing or conflicting ward identifiers remain unresolved.",
+      "Public roster; when inaccessible, city ward-layer contacts are labeled partial and require officeholder confirmation.",
     directoryId: "alders",
   },
   {
