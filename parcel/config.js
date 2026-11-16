@@ -6,6 +6,7 @@ export const LAYERS = Object.freeze({
   zoning: GIS + "Zoning_(View)/FeatureServer/0",
   wards: GIS + "Wards_2022_(View)/FeatureServer/0",
   neighborhoods: GIS + "Neighborhoods_(View)/FeatureServer/0",
+  cmt: GIS + "CMT_Districts_(View)/FeatureServer/0",
   managedLots: GIS + "LCI_Managed_Lots_(View)/FeatureServer/0",
   streetsPoints:
     "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/arcgis/rest/services/Complete_Streets_Projects_public_view/FeatureServer/0",
@@ -86,18 +87,20 @@ export const SOURCES = Object.freeze([
     id: "cmt",
     group: "representation",
     title: "Community Management Team districts",
-    url: "https://maps.newhavenct.gov/datasets/cmt-districts-1",
-    mode: "gap",
+    url: LAYERS.cmt,
+    mode: "live",
     coverage:
-      "Civic Fit uses reviewed district geometry; a standalone live parcel lookup is not verified.",
+      "City GIS districts intersecting the selected parcel. Boundary overlaps are shown as candidates; district currency requires source review.",
   },
   {
     id: "cmt-contacts",
     group: "representation",
-    title: "Community Management Team contacts",
-    url: "https://www.newhavenct.gov/government/departments-divisions/livable-city-initiative/community-management-teams",
-    mode: "gap",
-    coverage: "Current source and district-specific contacts require review.",
+    title: "Community Management Team contacts from city GIS",
+    url: LAYERS.cmt,
+    verification_url: "https://www.newhavenct.gov/government/community-management-team",
+    mode: "live",
+    coverage:
+      "District manager, neighborhood specialist and chair contacts from the city GIS layer. The city CMT page can differ; confirm contacts there before use.",
   },
   {
     id: "municity",
@@ -220,7 +223,7 @@ export const SOURCES = Object.freeze([
     url: "https://www.census.gov/data.html",
     mode: "paused",
     coverage:
-      "Civic Fit area enrichment is paused and is not collected by this pilot.",
+      "Area context is paused and is not collected by this parcel pilot.",
   },
 ]);
 

@@ -55,12 +55,14 @@ The machine-readable catalog is published in `dist/parcel-source-catalog.json` a
 | --- | --- | --- |
 | Property | City parcels and address points; Vision assessor card | Tax bill and City Clerk land-record search links only; no automated parcel joins or balances. Commercial vacancy is also a gap. |
 | Geography | Zoning, wards, neighborhoods | Boundary currency and zoning interpretation remain source limitations |
-| Representation | Board of Alders roster through an unambiguous ward | CMT geometry and contacts |
+| Representation | Board of Alders roster through an unambiguous ward; city GIS CMT district intersections and provisional GIS contact fields | CMT contact details can differ from the city CMT page and require confirmation. |
 | Activity | Municity children, LCI Case HQ case metadata, LCI managed lots, selected planning case | LCI licensing and other inspection or enforcement feeds remain unverified. |
 | Business | CT Business Registry Master and State Licenses address candidates | Registry principals require a reviewed entity join |
 | Nearby | Complete Streets projects within 250 feet | Service requests; area context is paused |
 
-Meetings, agendas and legislation, and budgets and monthly finance reports are outside this pilot's scope. Civic Fit community or administrator data is not ingested. State address matches are candidate links and do not prove occupancy, ownership or current use. Managed lots do not prove vacancy. Nearby records are kept in their own group. The Complete Streets source appears stale, so its event status needs original-source review.
+Meetings, agendas and legislation, and budgets and monthly finance reports are outside this pilot's scope. CMT meeting schedules are not collected. State address matches are candidate links and do not prove occupancy, ownership or current use. Managed lots do not prove vacancy. Nearby records are kept in their own group. The Complete Streets source appears stale, so its event status needs original-source review.
+
+CMT districts are resolved at request time by intersecting the official parcel geometry with the city's CMT district FeatureServer. Every intersecting district is returned; overlapping districts are marked partial rather than selecting one. The same city GIS layer provides manager, neighborhood specialist and chair contact fields. Those contacts are marked provisional because the city's CMT webpage can differ from the GIS layer. No district shapes or contact roster is stored in this project.
 
 LCI is queried at request time by the assessor PID. The adapter requires matching PID and address on the public property page and returns only case number, type, status, filed date, listed case fine, and link. It does not fetch case-detail pages, complaint narratives, or attachments. A listed fine is source-reported and should be confirmed before use. The real-estate tax and land-record sources expose links and honest `unavailable` statuses until a permitted live lookup and parcel join are verified. SearchIQS is not scraped. The API stores no parcel dataset, snapshots, or change history; successful lookups use the existing five-minute runtime cache.
 

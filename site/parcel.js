@@ -63,6 +63,8 @@ function sourceLine(parent, source) {
   );
   row.append(el("p", source.warning ?? source.coverage, "meta"));
   if (source.source_url) row.append(link(source.source_url, "Open source"));
+  if (source.verification_url)
+    row.append(link(source.verification_url, "Confirm contacts with city"));
   parent.append(row);
 }
 async function choose(item) {

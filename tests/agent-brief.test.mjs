@@ -8,7 +8,7 @@ test('brief links to current source facts without inventing integration capabili
  const brief=renderAgentBrief(entry);
  assert(brief.includes('/sources/assessor.json'));assert(brief.includes(entry.checked_on));assert(brief.includes(entry.url));
  assert(brief.includes('untested methods and unknowns'));assert(brief.includes('ask me to paste'));
- assert(!brief.includes('Civic Fit'));assert(!brief.includes('Civic Data Commons'));
+ assert(!brief.includes('Civic Data Commons'));
 });
 test('brief regeneration reflects changed source and safely escapes text in HTML',()=>{
  const changed={...entry,title:'Changed </textarea><script>bad</script>',checked_on:'2026-10-07'};

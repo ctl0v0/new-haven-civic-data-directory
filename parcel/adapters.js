@@ -41,6 +41,7 @@ const result = (sourceId, items, { partial = false, warning = null } = {}) => ({
   warning,
   coverage: source(sourceId)?.coverage ?? "",
   source_url: source(sourceId)?.url ?? null,
+  verification_url: source(sourceId)?.verification_url ?? null,
   retrieved_at: ISO(),
 });
 const unavailable = (sourceId, reason = null) => ({
@@ -50,6 +51,7 @@ const unavailable = (sourceId, reason = null) => ({
   warning: reason ?? source(sourceId)?.coverage ?? "No verified parcel lookup",
   coverage: source(sourceId)?.coverage ?? "",
   source_url: source(sourceId)?.url ?? null,
+  verification_url: source(sourceId)?.verification_url ?? null,
   retrieved_at: null,
 });
 const coded = (error) =>
@@ -246,6 +248,84 @@ async function boundaryRecords(sourceId, layer, parcel) {
         : null,
     },
   );
+}
+
+async function cmtFeatures(parcel) {
+  const key = `cmt-layer:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`;
+  return cached(key, () =>
+    arcgis(LAYERS.cmt, {
+      ...polygonParams(parcel),
+      outFields:
+        "objectid,district_num,district_name,district_manager,dm_email,dm_phone,neighborhood_specialist,ns_email,ns_phone,cmt_chair,cmt_email,cmt_phone",
+      resultRecordCount: "100",
+    }),
+  );
+}
+
+async function cmtDistrictRecords(parcel) {
+  const data = await cmtFeatures(parcel);
+  const features = data.features ?? [];
+  const items = features.map(({ attributes: a = {} }) =>
+    record(
+      a.objectid,
+      "cmt",
+      {
+        district_num: text(a.district_num),
+        district_name: text(a.district_name),
+      },
+      {
+        match: "parcel-intersection",
+        sourceUrl: LAYERS.cmt,
+        note: "City GIS district intersecting the parcel; boundary currency is not independently confirmed.",
+      },
+    ),
+  );
+  const ambiguous = new Set(
+    features.map((f) => text(f.attributes?.district_num)).filter(Boolean),
+  ).size > 1;
+  return result("cmt", items, {
+    partial: Boolean(data.exceededTransferLimit || ambiguous),
+    warning: data.exceededTransferLimit
+      ? "CMT district query was truncated."
+      : ambiguous
+        ? "Parcel intersects more than one CMT district; choose no single district without review."
+        : null,
+  });
+}
+
+async function cmtContactRecords(parcel) {
+  const data = await cmtFeatures(parcel);
+  const features = data.features ?? [];
+  const items = features.map(({ attributes: a = {} }) =>
+    record(
+      a.objectid,
+      "cmt-contacts",
+      {
+        district_num: text(a.district_num),
+        district_name: text(a.district_name),
+        district_manager: text(a.district_manager),
+        dm_email: text(a.dm_email),
+        dm_phone: text(a.dm_phone),
+        neighborhood_specialist: text(a.neighborhood_specialist),
+        ns_email: text(a.ns_email),
+        ns_phone: text(a.ns_phone),
+        cmt_chair: text(a.cmt_chair),
+        cmt_email: text(a.cmt_email),
+        cmt_phone: text(a.cmt_phone),
+      },
+      {
+        match: "parcel-intersection",
+        sourceUrl: LAYERS.cmt,
+        note: "City GIS contact fields may disagree with the city CMT page. Confirm current people and contact details before use.",
+      },
+    ),
+  );
+  return result("cmt-contacts", items, {
+    partial: Boolean(items.length || data.exceededTransferLimit),
+    warning: items.length
+      ? "GIS-published contacts are provisional. Confirm them on the linked city CMT page."
+      : null,
+  });
 }
 
 async function alderRecords(parcel) {
@@ -633,6 +713,8 @@ const ADAPTERS = Object.freeze({
   neighborhoods: (p) =>
     boundaryRecords("neighborhoods", LAYERS.neighborhoods, p),
   alders: alderRecords,
+  cmt: cmtDistrictRecords,
+  "cmt-contacts": cmtContactRecords,
   municity: municityRecords,
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,

@@ -286,6 +286,59 @@ test("ward-layer alder contact remains visible when the roster blocks requests",
   assert.match(alder.warning, /ward layer/);
 });
 
+test("CMT districts come from live parcel intersections and contacts stay provisional", async () => {
+  globalThis.fetch = async (input, options) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(999008)] });
+    if (u.pathname.includes("CMT_Districts")) {
+      const outFields =
+        u.searchParams.get("outFields") ?? options?.body?.get("outFields");
+      assert.doesNotMatch(outFields, /meeting/i);
+      return response({
+        features: [
+          {
+            attributes: {
+              objectid: 1,
+              district_num: "1",
+              district_name: "Downtown/Wooster Square",
+              cmt_chair: "GIS Contact",
+              cmt_email: "contact@example.org",
+            },
+          },
+          {
+            attributes: {
+              objectid: 2,
+              district_num: "2",
+              district_name: "Neighboring district",
+            },
+          },
+        ],
+      });
+    }
+    if (u.pathname.includes("Wards_")) return response({ features: [] });
+    if (u.pathname.includes("list-of-alders"))
+      return new Response("", { status: 403 });
+    throw Error("Unexpected source");
+  };
+  const out = await parcelRecords("999008", "representation");
+  const districts = out.items.filter((item) => item.source_id === "cmt");
+  assert.equal(districts.length, 2);
+  assert.equal(out.sources.find((s) => s.source_id === "cmt").status, "partial");
+  const contacts = out.items.filter((item) => item.source_id === "cmt-contacts");
+  assert.equal(contacts.length, 2);
+  assert.equal(contacts[0].attributes.cmt_chair, "GIS Contact");
+  assert.equal(
+    out.sources.find((s) => s.source_id === "cmt-contacts").status,
+    "partial",
+  );
+  assert.match(
+    out.sources.find((s) => s.source_id === "cmt-contacts").verification_url,
+    /newhavenct\.gov\/government\/community-management-team/,
+  );
+  assert.doesNotMatch(JSON.stringify(contacts), /meeting_location|meetiing_times/);
+});
+
 test("upstream permit failure is labeled partial while dated parcel facts remain", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
