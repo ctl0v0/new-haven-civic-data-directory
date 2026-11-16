@@ -26,14 +26,24 @@ export const SOURCES = Object.freeze([
     directoryId: "gis-parcels",
   },
   {
-    id: "addresses",
+    id: "assessor-sales",
     group: "property",
-    title: "City address points",
-    url: LAYERS.addresses,
+    title: "Assessor ownership history",
+    url: "https://gis.vgsi.com/newhavenct/",
     mode: "live",
     coverage:
-      "Address points may have multiple rows or no unique parcel match.",
-    directoryId: "gis-parcels",
+      "Ownership History rows from the assessor card for the exact parcel PID. Published rows may not be a complete deed chain; a $0 sale price is shown as published.",
+    directoryId: "assessor",
+  },
+  {
+    id: "assessor-valuations",
+    group: "property",
+    title: "Assessor valuation history",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Current and historical appraised and assessed valuation rows from the assessor card for the exact parcel PID. Valuation year is not an exact event date or a tax bill.",
+    directoryId: "assessor",
   },
   {
     id: "assessor",
@@ -44,6 +54,16 @@ export const SOURCES = Object.freeze([
     coverage:
       "Individual assessor cards; card fields and assessment date require source review.",
     directoryId: "assessor",
+  },
+  {
+    id: "addresses",
+    group: "property",
+    title: "City address points",
+    url: LAYERS.addresses,
+    mode: "live",
+    coverage:
+      "Address points may have multiple rows or no unique parcel match.",
+    directoryId: "gis-parcels",
   },
   {
     id: "zoning",
@@ -105,11 +125,11 @@ export const SOURCES = Object.freeze([
   {
     id: "municity",
     group: "activity",
-    title: "City parcel applications, complaints, contacts, documents, licenses and permits",
+    title: "City parcel applications, complaints, contacts, documents, licenses, occupants and permits",
     url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
     mode: "live",
     coverage:
-      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses and permits. Certificates are also returned. Documents link to the vendor; complaint narratives and contact phone, email and address fields are omitted. No complete historical coverage is claimed.",
+      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses, occupants and permits. Certificates are also returned. Occupant personal contact fields, complaint narratives and contact phone, email and address fields are omitted. No complete historical coverage is claimed.",
   },
   {
     id: "lci-cases",
@@ -150,11 +170,11 @@ export const SOURCES = Object.freeze([
   {
     id: "planning",
     group: "activity",
-    title: "Reviewed planning cases",
+    title: "Planning cases",
     url: "https://newhaven-ct.maps.arcgis.com/",
-    mode: "curated",
+    mode: "gap",
     coverage:
-      "Selected documented cases only; no complete case feed or meeting records.",
+      "No planning case feed with a verified parcel identifier is connected. Manually selected documents are not returned as parcel records.",
   },
   {
     id: "municipal-business-licenses",
@@ -166,13 +186,22 @@ export const SOURCES = Object.freeze([
       "Named licenses linked to the verified municipal parcel MBLU. Historical, expired or void records may appear; a license does not prove current occupancy or operation.",
   },
   {
+    id: "municipal-occupants",
+    group: "business",
+    title: "Municipal parcel occupants",
+    url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
+    mode: "live",
+    coverage:
+      "Public Occupant rows returned by the verified municipal parcel. Names and inactive flags are source fields; they do not establish a current tenant or operating business.",
+  },
+  {
     id: "business-master",
     group: "business",
     title: "Connecticut Business Registry Master",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Business-Master/n7gp-d28j",
-    mode: "live",
+    mode: "gap",
     coverage:
-      "Registry billing addresses are matched to the parcel-listed address and city address points. They are address matches, not evidence of occupancy or ownership.",
+      "The registry has billing addresses but no verified parcel identifier. Address-only matches are excluded from parcel records.",
   },
   {
     id: "business-principals",
@@ -188,9 +217,9 @@ export const SOURCES = Object.freeze([
     group: "business",
     title: "Connecticut State Licenses and Credentials",
     url: "https://data.ct.gov/Business/State-Licenses-and-Credentials/ngch-56tr",
-    mode: "live",
+    mode: "gap",
     coverage:
-      "Credential addresses are matched to the parcel-listed address and city address points. They are address matches, not proof of current use or business location.",
+      "Credential addresses lack a verified parcel identifier. Address-only matches are excluded from parcel records.",
   },
   {
     id: "complete-streets",

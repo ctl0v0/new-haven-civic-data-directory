@@ -464,6 +464,7 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
         }],
         License: [],
         Permit: [],
+        Occupant: [],
         Certificate: [],
       });
     throw Error("Unexpected source");
@@ -477,6 +478,7 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
   assert.equal(out.category_counts.Contact, 1);
   assert.equal(out.category_counts.License, 0);
   assert.equal(out.category_counts.Permit, 0);
+  assert.equal(out.category_counts.Occupant, 0);
   assert.equal(out.items.find((x) => x.category === "Document").source_url,
     "https://www.municitymedia.com/public/plan.pdf");
   assert.equal(out.items.find((x) => x.category === "Complaint").attributes.complaint_number,
@@ -525,52 +527,92 @@ test("Cask Republic remains in the original municipal work record on 181 Crown",
   assert.equal(permit.source_url, "https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Parcel/99873");
 });
 
-test("state business registry matches a city address point on the parcel", async () => {
-  let stateQuery = "";
+test("municipal occupants use only public fields attached to the verified parcel", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
-    if (u.pathname.includes("Addresses_"))
-      return response({
-        features: [
-          { attributes: { house_number: "867", full_street_name: "WHALLEY AVE" } },
-          { attributes: { house_number: "869", full_street_name: "WHALLEY AVE" } },
-        ],
-      });
-    if (u.hostname === "data.ct.gov") {
-      stateQuery = u.searchParams.get("$where");
-      return response([{ id: "keys-on-kites", name: "KEYS ON KITES, LLC",
-        billingstreet: "869 WHALLEY AVENUE", billingcity: "New Haven",
-        status: "Dissolved" }]);
-    }
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (u.pathname.endsWith("/Children"))
+      return response({ Occupant: [
+        { Occupant_ID: 1, Name: "Example Cafe", BusinessName: "Example Cafe",
+          Parcel_ID: 99873, LegalAddress: "181 CROWN ST", OccupancyType: "Restaurant",
+          CreatedDate: "2022-11-08T14:10:42", Modified: "2026-11-16T16:00:37",
+          Phone: "555-0100", Comments: "Private notes" },
+        { Occupant_ID: 2, Name: "Deleted Tenant", Deleted: 1 },
+        { Occupant_ID: 3, Name: "Wrong Parcel", Parcel_ID: 444 },
+      ] });
     throw Error("Unexpected source");
   };
-  const p = parcel(999017);
-  p.attributes.property_address = "867 WHALLEY AV ";
-  const out = await getSourceRecords("business-master", p);
+  const out = await getSourceRecords("municipal-occupants", parcel(999021));
   assert.equal(out.status, "ok");
-  assert.match(stateQuery, /867%WHALLEY/);
-  assert.match(stateQuery, /869%WHALLEY/);
   assert.equal(out.items.length, 1);
-  assert.equal(out.items[0].attributes.name, "KEYS ON KITES, LLC");
-  assert.equal(out.items[0].attributes.matched_address, "869 WHALLEY AVE");
-  assert.equal(out.items[0].attributes.address_basis, "city-address-point");
-  assert.equal(out.items[0].match.method, "address-point-candidate");
-  assert.match(out.items[0].note, /billing address.*city address point/i);
+  assert.equal(out.items[0].attributes.occupant_name, "Example Cafe");
+  assert.equal(out.items[0].event_date, "2022-11-08");
+  assert.match(out.items[0].source_url, /entity\/Parcel\/99873$/);
+  assert.doesNotMatch(JSON.stringify(out), /555-0100|Private notes|Deleted Tenant|Wrong Parcel/);
 });
 
-test("state billing address at 179 Crown is not attached to the 181 Crown parcel", async () => {
+test("assessor ownership and valuation tables become separate parcel records", async () => {
+  let calls = 0;
+  globalThis.fetch = async (input) => {
+    assert.match(String(input), /Parcel\.aspx\?pid=999030/);
+    calls++;
+    return new Response(`
+      <span id="MainContent_lblPid">999030</span>
+      <span id="MainContent_lblOwner">Example Owner LLC</span>
+      <table id="MainContent_grdSales"><tr><th>Owner</th><th>Sale Price</th><th>Certificate</th><th>Book &amp; Page</th><th>Instrument</th><th>Sale Date</th></tr>
+      <tr><td>Example Owner LLC</td><td>$0</td><td>&nbsp;</td><td>5187/0276</td><td>8</td><td>08/11/1997</td></tr>
+      <tr><td>Prior Owner Inc</td><td>$125,000</td><td>&nbsp;</td><td>4861/0099</td><td>&nbsp;</td><td>05/08/1995</td></tr></table>
+      <table id="MainContent_grdCurrentValueAppr"><tr><th>Valuation Year</th><th>Improvements</th><th>Land</th><th>Total</th></tr><tr><td>2025</td><td>$200</td><td>$100</td><td>$300</td></tr></table>
+      <table id="MainContent_grdCurrentValueAsmt"><tr><th>Valuation Year</th><th>Improvements</th><th>Land</th><th>Total</th></tr><tr><td>2025</td><td>$140</td><td>$70</td><td>$210</td></tr></table>
+      <table id="MainContent_grdHistoryValuesAppr"><tr><th>Valuation Year</th><th>Improvements</th><th>Land</th><th>Total</th></tr><tr><td>2024</td><td>$200</td><td>$100</td><td>$300</td></tr></table>
+      <table id="MainContent_grdHistoryValuesAsmt"><tr><th>Valuation Year</th><th>Improvements</th><th>Land</th><th>Total</th></tr><tr><td>2024</td><td>$140</td><td>$70</td><td>$210</td></tr></table>
+    `, { headers: { "content-type": "text/html" } });
+  };
+  const p = parcel(999030);
+  const [sales, values, card] = await Promise.all([
+    getSourceRecords("assessor-sales", p),
+    getSourceRecords("assessor-valuations", p),
+    getSourceRecords("assessor", p),
+  ]);
+  assert.equal(calls, 1);
+  assert.equal(card.items[0].attributes.lblOwner, "Example Owner LLC");
+  assert.equal(sales.items.length, 2);
+  assert.equal(sales.items[0].event_date, "1997-08-11");
+  assert.equal(sales.items[0].attributes.book_page, "5187/0276");
+  assert.equal(sales.items[0].attributes.sale_price, "$0");
+  assert.match(sales.items[0].source_url, /Parcel\.aspx\?pid=999030$/);
+  assert.equal(values.items.length, 4);
+  assert.equal(values.items[0].attributes.valuation_year, "2025");
+  assert.equal(values.items[0].attributes.valuation_type, "appraised");
+  assert.equal(values.items[0].event_date, null);
+  const assessorFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const u = new URL(input);
-    if (u.pathname.includes("Addresses_")) return response({ features: [] });
-    if (u.hostname === "data.ct.gov")
-      return response([{ id: "novaract", name: "Novaract LLC",
-        billingstreet: "179 Crown St", billingcity: "New Haven", status: "Active" }]);
-    throw Error("Unexpected source");
+    if (u.pathname.includes("Parcel_Viewer")) return response({ features: [p] });
+    if (u.pathname.includes("LCI_Managed_Lots")) return response({ features: [] });
+    if (u.hostname === "gis.vgsi.com") return assessorFetch(input);
+    throw Error("Other timeline source unavailable");
+  };
+  const feed = await parcelFeed("999030");
+  assert.deepEqual(
+    feed.items.filter((item) => item.source_id === "assessor-sales")
+      .map((item) => item.event_date),
+    ["1997-08-11", "1995-05-08"],
+  );
+});
+
+test("address-only state and manually selected planning sources do not create parcel records", async () => {
+  globalThis.fetch = async () => {
+    throw Error("Gap sources must not make upstream record requests");
   };
   const p = parcel(13791);
   p.attributes.property_address = "181 CROWN ST";
-  const out = await getSourceRecords("business-master", p);
-  assert.equal(out.items.length, 0);
+  for (const sourceId of ["business-master", "state-licenses", "planning"]) {
+    const out = await getSourceRecords(sourceId, p);
+    assert.equal(out.status, "unavailable");
+    assert.deepEqual(out.items, []);
+  }
 });
 
 test("parcel geography preserves all intersecting zoning records", async () => {

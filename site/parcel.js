@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const groups = [
-  ["property", "Building and addresses", "City parcel facts, assessor details, and address points on the parcel."],
-  ["business", "Businesses in records", "Municipal licenses and state address matches. These do not confirm current tenants."],
+  ["property", "Building, ownership, and addresses", "City parcel facts, published assessor ownership history, and address points on the parcel."],
+  ["business", "Businesses in records", "Municipal licenses and occupant rows attached to the verified parcel. These do not confirm current tenants."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["representation", "Representation", "Ward and community management contacts shown by the checked sources."],
@@ -11,8 +11,11 @@ const sourceNames = {
   parcels: "City parcel layer",
   addresses: "City address points",
   assessor: "Assessor card",
+  "assessor-sales": "Assessor ownership history",
+  "assessor-valuations": "Assessor valuation history",
   municity: "Municipal parcel service",
   "municipal-business-licenses": "Municipal licenses",
+  "municipal-occupants": "Municipal occupants",
   "business-master": "CT business registry",
   "state-licenses": "CT credentials",
   "lci-cases": "LCI cases",
@@ -74,14 +77,18 @@ function sourceName(id) {
 }
 function recordStatus(item) {
   const a = item.attributes ?? {};
+  if (item.source_id === "municipal-occupants")
+    return a.inactive == null ? null : `Inactive flag: ${a.inactive ? "Yes" : "No"}`;
   return a.status ?? a.Status ?? a.record_status ?? a.PermStatus ?? a.PermitApplicationStatus ?? a.CompStatus ?? null;
 }
 function recordTitle(item) {
   const a = item.attributes ?? {};
   if (item.source_id === "addresses")
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
+  if (item.source_id === "assessor-valuations")
+    return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   return brief(
-    a.business_name ?? a.BusinessName ?? a.name ?? a.document_name ??
+    a.business_name ?? a.occupant_name ?? a.owner ?? a.BusinessName ?? a.name ?? a.document_name ??
       a.complaint_number ?? a.contact_name ?? a.title ?? a.PermitNo ??
       a.PermitNumber ?? a.ApplicationNumber ?? a.LicenseNumber ??
       a.CertificateNumber ?? a.property_address ?? a.LegalAddress ??
@@ -99,12 +106,14 @@ function recordDescription(item) {
     ];
     return facts.filter(Boolean).join(" · ");
   }
-  if (item.source_id === "business-master")
-    return `Registry billing address: ${a.matched_address ?? a.billingstreet ?? "not shown"}${a.address_basis === "city-address-point" ? " · matched to a city address point" : ""}`;
+  if (item.source_id === "assessor-sales")
+    return [a.sale_price ? `Sale price listed: ${a.sale_price}` : null, a.book_page ? `Book and page ${a.book_page}` : null, a.instrument ? `Instrument ${a.instrument}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "assessor-valuations")
+    return [a.table_section, a.total ? `Total ${a.total}` : null, a.land ? `Land ${a.land}` : null, a.improvements ? `Improvements ${a.improvements}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "municipal-business-licenses")
     return [a.license_type, a.recorded_address, a.expiration_date ? `Expiration listed: ${shortDate(a.expiration_date)}` : null].filter(Boolean).join(" · ");
-  if (item.source_id === "state-licenses")
-    return `Credential address: ${a.matched_address ?? a.address ?? "not shown"}`;
+  if (item.source_id === "municipal-occupants")
+    return [a.occupancy_type, a.recorded_address, a.inactive === true ? "Marked inactive" : null].filter(Boolean).join(" · ");
   return brief(a.Description ?? a.description ?? a.complaint_type ?? a.document_type ?? a.PermitType ?? a.ApplicationType ?? a.section ?? "", 190);
 }
 function appendRecord(parent, item) {
@@ -194,6 +203,24 @@ function renderSnapshot() {
       parcel.zone ? `City parcel zone code ${parcel.zone}` : null,
     ].filter(Boolean);
     building.append(el("p", facts.length ? facts.join(" · ") : "The city parcel record did not return a building description."));
+    const currentValues = property.items
+      .filter((item) => item.source_id === "assessor-valuations" && item.attributes?.table_section === "current")
+      .sort((a, b) => String(b.attributes?.valuation_year ?? "").localeCompare(String(a.attributes?.valuation_year ?? "")));
+    if (currentValues.length) {
+      building.append(el("p", "Current assessor valuation rows", "snapshot-label"));
+      building.append(el("p", currentValues.map((item) =>
+        `${item.attributes.valuation_year} ${item.attributes.valuation_type}: ${item.attributes.total ?? "not listed"}`,
+      ).join(" · ")));
+    }
+    const sales = property.items
+      .filter((item) => item.source_id === "assessor-sales")
+      .sort((a, b) => String(b.event_date ?? "").localeCompare(String(a.event_date ?? "")));
+    if (sales.length) {
+      const latest = sales[0];
+      building.append(el("p", "Latest published ownership row", "snapshot-label"));
+      building.append(el("p", [latest.attributes.owner, latest.event_date ? shortDate(latest.event_date) : null, latest.attributes.sale_price].filter(Boolean).join(" · ")));
+      building.append(el("p", `${sales.length} ownership history ${sales.length === 1 ? "row" : "rows"} returned by the assessor.`, "meta"));
+    }
     const addresses = [...new Set(property.items
       .filter((item) => item.source_id === "addresses")
       .map((item) => recordTitle(item))
@@ -216,17 +243,17 @@ function renderSnapshot() {
   if (!business) businesses.append(el("p", "Loading business records…", "meta"));
   else {
     const named = business.items
-      .filter((item) => ["municipal-business-licenses", "business-master"].includes(item.source_id))
-      .filter((item) => item.attributes?.business_name || item.attributes?.name)
+      .filter((item) => ["municipal-business-licenses", "municipal-occupants"].includes(item.source_id))
+      .filter((item) => item.attributes?.business_name || item.attributes?.occupant_name)
       .sort((a, b) =>
         Number(b.source_id === "municipal-business-licenses") -
         Number(a.source_id === "municipal-business-licenses") ||
-        String(b.attributes?.dissolution_date ?? b.attributes?.expiration_date ?? b.event_date ?? "").localeCompare(
-          String(a.attributes?.dissolution_date ?? a.attributes?.expiration_date ?? a.event_date ?? ""),
+        String(b.attributes?.expiration_date ?? b.event_date ?? "").localeCompare(
+          String(a.attributes?.expiration_date ?? a.event_date ?? ""),
         ));
     if (!named.length) businesses.append(el("p", "No named business record was returned by checked sources."));
     else {
-      businesses.append(el("p", `${business.total} business records returned. These names are candidates or historical records.`, "meta"));
+      businesses.append(el("p", `${business.total} municipal business records returned. Names and inactive flags are shown as published.`, "meta"));
       const list = el("ul", null, "snapshot-list");
       for (const item of named.slice(0, 4)) {
         const row = el("li");
@@ -237,7 +264,7 @@ function renderSnapshot() {
       }
       businesses.append(list);
     }
-    businesses.append(el("p", "A registry billing address or license does not establish a current storefront.", "snapshot-caveat"));
+    businesses.append(el("p", "A municipal occupant row or license does not establish a current storefront.", "snapshot-caveat"));
   }
 
   const activity = groupResponses.get("activity");
@@ -406,6 +433,8 @@ function appendTimelineEvent(parent, item) {
     ? "Document updated"
     : item.category === "Contact"
       ? "Contact record updated"
+      : item.category === "Occupant"
+        ? "Occupant record created"
       : item.source_id === "parcels"
         ? "Sale date on parcel record"
         : item.category ?? sourceName(item.source_id);

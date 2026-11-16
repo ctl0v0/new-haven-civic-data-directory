@@ -1,5 +1,4 @@
 import { load } from "cheerio";
-import curated from "./curated.json" with { type: "json" };
 import { LAYERS, source, SOURCES } from "./config.js";
 import {
   arcgis,
@@ -9,7 +8,6 @@ import {
   sqlString,
   SourceError,
 } from "./http.js";
-import { normalizeAddress } from "./resolve.js";
 import { parseLciProperty } from "./lci.js";
 
 const ISO = () => new Date().toISOString();
@@ -125,7 +123,7 @@ async function parcelRecord(parcel) {
   return result("parcels", [
     record(parcel.attributes.objectid, "parcels", parcel.attributes, {
       eventDate: date(parcel.attributes.sale_date),
-      note: "Published sale date is a parcel attribute, not a complete sale history.",
+      note: "This dated parcel-layer sale field is a single published attribute. Ownership History rows come from the assessor card when available.",
     }),
   ]);
 }
@@ -150,30 +148,94 @@ async function addressRecords(parcel) {
   );
 }
 
+function assessorSaleDate(value) {
+  const match = text(value)?.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, month, day, year] = match.map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+    ? parsed.toISOString().slice(0, 10)
+    : null;
+}
+
+function assessorTableRows($, id, expectedHeadings) {
+  const table = $(`#${id}`);
+  const headings = table.find("tr").first().find("th").toArray()
+    .map((cell) => text($(cell).text()));
+  if (headings.join("|") !== expectedHeadings.join("|")) return null;
+  const rows = table.find("tr").slice(1).toArray().map((row) =>
+    $(row).find("td").toArray().map((cell) => text($(cell).text())),
+  );
+  return rows.every((cells) => cells.length === expectedHeadings.length)
+    ? rows
+    : null;
+}
+
+const assessorPending = new Map();
+async function assessorData(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  if (assessorPending.has(id)) return assessorPending.get(id);
+  const pending = cached(`assessor-card:${id}`, async () => {
+    const url = `https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${id}`;
+    const html = await fetchBounded(url, {
+      accept: "text/html,application/xhtml+xml",
+      timeout: 9000,
+      maxBytes: 5_000_000,
+    });
+    const $ = load(html);
+    if (Number($("#MainContent_lblPid").first().text().trim()) !== id)
+      throw new SourceError("Assessor card did not confirm parcel ID");
+    const attributes = {};
+    $('[id^="MainContent_"]').each((_, el) => {
+      const key = $(el).attr("id");
+      if (
+        !key ||
+        Object.keys(attributes).length >= 500 ||
+        $(el).children('[id^="MainContent_"]').length
+      )
+        return;
+      const value = text($(el).text());
+      if (value)
+        attributes[key.replace(/^MainContent_/, "")] = value.slice(0, 1000);
+    });
+    const saleRows = assessorTableRows($, "MainContent_grdSales", [
+      "Owner", "Sale Price", "Certificate", "Book & Page", "Instrument", "Sale Date",
+    ]);
+    const sales = saleRows?.map((cells) => ({
+      owner: cells[0],
+      sale_price: cells[1],
+      certificate: cells[2],
+      book_page: cells[3],
+      instrument: cells[4],
+      sale_date: assessorSaleDate(cells[5]),
+      sale_date_as_published: cells[5],
+    })) ?? null;
+    const valuationTables = [
+      ["MainContent_grdCurrentValueAppr", "appraised", true],
+      ["MainContent_grdCurrentValueAsmt", "assessed", true],
+      ["MainContent_grdHistoryValuesAppr", "appraised", false],
+      ["MainContent_grdHistoryValuesAsmt", "assessed", false],
+    ].map(([tableId, kind, current]) => ({
+      tableId,
+      kind,
+      current,
+      rows: assessorTableRows($, tableId, ["Valuation Year", "Improvements", "Land", "Total"]),
+    }));
+    return { attributes, sales, valuationTables, url };
+  });
+  assessorPending.set(id, pending);
+  try {
+    return await pending;
+  } finally {
+    assessorPending.delete(id);
+  }
+}
+
 async function assessorRecord(parcel) {
   const id = Number(parcel.attributes.parcel_id);
-  const url = `https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${id}`;
-  const html = await fetchBounded(url, {
-    accept: "text/html,application/xhtml+xml",
-    timeout: 9000,
-    maxBytes: 5_000_000,
-  });
-  const $ = load(html);
-  if (Number($("#MainContent_lblPid").first().text().trim()) !== id)
-    throw new SourceError("Assessor card did not confirm parcel ID");
-  const attributes = {};
-  $('[id^="MainContent_"]').each((_, el) => {
-    const key = $(el).attr("id");
-    if (
-      !key ||
-      Object.keys(attributes).length >= 500 ||
-      $(el).children('[id^="MainContent_"]').length
-    )
-      return;
-    const value = text($(el).text());
-    if (value)
-      attributes[key.replace(/^MainContent_/, "")] = value.slice(0, 1000);
-  });
+  const { attributes, url } = await assessorData(parcel);
   return result("assessor", [
     record(id, "assessor", attributes, {
       eventDate: date(attributes.lblSaleDate),
@@ -181,6 +243,50 @@ async function assessorRecord(parcel) {
       note: "Vision card fields are displayed as published; assessed values are not tax bills.",
     }),
   ]);
+}
+
+async function assessorSalesRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { sales, url } = await assessorData(parcel);
+  if (!sales)
+    return unavailable("assessor-sales", "The assessor card did not return a readable Ownership History table.");
+  return result(
+    "assessor-sales",
+    sales.map((sale, index) =>
+      record(`${id}:${sale.sale_date ?? "undated"}:${sale.book_page ?? index}:${index}`, "assessor-sales", sale, {
+        eventDate: sale.sale_date,
+        sourceUrl: url,
+        note: "Ownership History row as published by the assessor. A $0 sale price is not interpreted as market value; the table may not contain every recorded transfer.",
+      }),
+    ),
+  );
+}
+
+async function assessorValuationRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { valuationTables, url } = await assessorData(parcel);
+  const available = valuationTables.filter((table) => table.rows !== null);
+  if (!available.length)
+    return unavailable("assessor-valuations", "The assessor card did not return readable valuation tables.");
+  const items = available.flatMap((table) => table.rows.map((cells, index) =>
+    record(`${id}:${table.kind}:${table.current ? "current" : "history"}:${cells[0] ?? "undated"}:${index}`, "assessor-valuations", {
+      valuation_year: cells[0],
+      valuation_type: table.kind,
+      table_section: table.current ? "current" : "history",
+      improvements: cells[1],
+      land: cells[2],
+      total: cells[3],
+    }, {
+      sourceUrl: url,
+      note: "Assessor valuation row as published. Valuation year is not an exact event date, and assessed value is not a tax bill.",
+    }),
+  ));
+  return result("assessor-valuations", items, {
+    partial: available.length !== valuationTables.length,
+    warning: available.length !== valuationTables.length
+      ? "One or more assessor valuation tables were not returned in a readable format."
+      : null,
+  });
 }
 
 async function lciCaseRecords(parcel) {
@@ -437,6 +543,7 @@ const MUNICIPAL_CATEGORIES = [
   "Contact",
   "License",
   "Permit",
+  "Occupant",
   "Certificate",
 ];
 
@@ -485,6 +592,15 @@ function municipalChildAttributes(kind, row) {
       contact_role: text(row.ContactRole),
       contact_type: text(row.ContactType),
       primary_owner: [true, 1, "true", "1"].includes(row.PrimaryOwner),
+    };
+  if (kind === "Occupant")
+    return {
+      occupant_name: text(row.Name),
+      business_name: text(row.BusinessName),
+      occupancy_type: text(row.OccupancyType),
+      recorded_address: text(row.LegalAddress ?? row.Addr1),
+      inactive: row.InActive == null ? null : [true, 1, "true", "1"].includes(row.InActive),
+      created_date: date(row.CreatedDate),
     };
   return row;
 }
@@ -545,8 +661,8 @@ async function municityRecords(parcel) {
   const categoryCounts = Object.fromEntries(
     MUNICIPAL_CATEGORIES.map((kind) => [kind, 0]),
   );
-  const missingCategories = MUNICIPAL_CATEGORIES.slice(0, 6).filter(
-    (kind) => children[kind] == null,
+  const missingCategories = MUNICIPAL_CATEGORIES.filter(
+    (kind) => kind !== "Certificate" && children[kind] == null,
   );
   const truncatedCategories = [];
   for (const [kind, idKey, dateKeys] of [
@@ -556,6 +672,7 @@ async function municityRecords(parcel) {
     ["Permit", "Permit_ID", ["PermitDate", "CreatedDate"]],
     ["Application", "Application_ID", ["ApplicationDate", "CreatedDate"]],
     ["License", "License_ID", ["IssueDate", "CreatedDate"]],
+    ["Occupant", "Occupant_ID", ["CreatedDate"]],
     ["Certificate", "Certificate_ID", ["CertificateDate", "CreatedDate"]],
   ]) {
     const rows = children[kind];
@@ -565,9 +682,19 @@ async function municityRecords(parcel) {
     if (rows.length > 500) truncatedCategories.push(kind);
     for (const [index, row] of rows.slice(0, 500).entries()) {
       if (
+        text(row?.Parcel_ID) &&
+        Number(row.Parcel_ID) !== Number(vendor.Parcel_ID)
+      )
+        continue;
+      if (
         kind === "Document" &&
         (![true, 1, "true", "1"].includes(row?.Public) ||
           [true, 1, "true", "1"].includes(row?.Deleted))
+      )
+        continue;
+      if (
+        kind === "Occupant" &&
+        [true, 1, "true", "1"].includes(row?.Deleted)
       )
         continue;
       const eventDate =
@@ -592,6 +719,8 @@ async function municityRecords(parcel) {
                     ? "Municipal parcel-linked contact summary; verify the role and whether it is current."
                     : kind === "Document"
                       ? "Public municipal document metadata; the linked file is hosted by the source."
+                      : kind === "Occupant"
+                        ? "Municipal occupant row returned for this verified parcel. An absent inactive flag does not establish current occupancy."
                       : `Vendor ${kind.toLowerCase()} record; recorded status does not prove completion.`,
             },
           ),
@@ -669,6 +798,34 @@ async function municipalBusinessRecords(parcel) {
   });
 }
 
+async function municipalOccupantRecords(parcel) {
+  const vendor = await getSourceRecords("municity", parcel);
+  if (vendor.status === "unavailable")
+    return unavailable(
+      "municipal-occupants",
+      `Municipal occupant lookup unavailable: ${vendor.warning}`,
+    );
+  const items = vendor.items
+    .filter((item) => item.category === "Occupant")
+    .map((item) =>
+      record(item.source_record_id, "municipal-occupants", item.attributes, {
+        eventDate: item.event_date,
+        sourceUrl: item.source_url,
+        note: "Municipal occupant row attached to the verified parcel. The source name and inactive flag do not establish a current tenant or business operation.",
+      }),
+    );
+  const missing = vendor.missing_categories?.includes("Occupant");
+  const truncated = vendor.truncated_categories?.includes("Occupant");
+  return result("municipal-occupants", items, {
+    partial: missing || truncated,
+    warning: missing
+      ? "The vendor omitted its Occupant category for this parcel; absence of occupant rows cannot be confirmed."
+      : truncated
+        ? "The vendor Occupant category exceeded the 500-record limit; results are incomplete."
+        : "Municipal occupant rows can be historical. Only source-reported inactive flags are shown.",
+  });
+}
+
 async function managedLotRecords(parcel) {
   const mblu = text(parcel.attributes.mblu);
   if (!mblu)
@@ -690,99 +847,6 @@ async function managedLotRecords(parcel) {
       }),
     ),
     { partial: Boolean(data.exceededTransferLimit) },
-  );
-}
-
-async function planningRecords(parcel) {
-  const matches = curated.cases.filter(
-    (item) => item.parcelId === Number(parcel.attributes.parcel_id),
-  );
-  return result(
-    "planning",
-    matches.map((item) =>
-      record(
-        item.id,
-        "planning",
-        { title: item.title, note: item.note, reviewed_on: curated.reviewedOn },
-        {
-          eventDate: item.eventDate,
-          sourceUrl: item.sourceUrl,
-          match: "reviewed-document",
-        },
-      ),
-    ),
-  );
-}
-
-async function socrataRecords(sourceId, parcel) {
-  const listedAddress = normalizeAddress(parcel.attributes.property_address);
-  const addressPoints = await getSourceRecords("addresses", parcel);
-  const pointAddresses = addressPoints.items.map((item) => {
-    const a = item.attributes ?? {};
-    const street =
-      a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`;
-    return normalizeAddress(`${a.house_number ?? ""} ${street}`);
-  });
-  const addresses = [...new Set([listedAddress, ...pointAddresses])].filter(
-    (address) => /^\d{1,6}\s+.+$/.test(address),
-  );
-  if (!addresses.length)
-    return unavailable(sourceId, "Parcel has no comparable city address.");
-  const selectedAddresses = addresses.slice(0, 15);
-  const id = sourceId === "business-master" ? "n7gp-d28j" : "ngch-56tr";
-  const field = sourceId === "business-master" ? "billingstreet" : "address";
-  const url = new URL(`https://data.ct.gov/resource/${id}.json`);
-  const clauses = selectedAddresses.map((address) => {
-    const parts = address.match(/^(\d+)\s+(.+)$/);
-    const street = parts[2]
-      .replace(/\s+(ST|AVE|RD)$/, "")
-      .replaceAll(" ", "%");
-    return `upper(${field}) like '${sqlString(parts[1] + "%" + street)}%'`;
-  });
-  url.searchParams.set(
-    "$where",
-    `(${clauses.join(" OR ")}) AND upper(${sourceId === "business-master" ? "billingcity" : "city"}) = 'NEW HAVEN'`,
-  );
-  url.searchParams.set("$limit", "200");
-  const rows = await fetchJson(url, { timeout: 9000, maxBytes: 4_000_000 });
-  if (!Array.isArray(rows))
-    throw new SourceError("State source returned malformed rows");
-  const selected = new Set(selectedAddresses);
-  const matching = rows
-    .map((row) => ({ row, address: normalizeAddress(row[field]) }))
-    .filter(({ address }) => selected.has(address));
-  return result(
-    sourceId,
-    matching.map(({ row, address }, index) =>
-      record(
-        row.id ?? row.credentialid ?? index,
-        sourceId,
-        {
-          ...row,
-          matched_address: address,
-          address_basis:
-            address === listedAddress
-              ? "parcel-listed"
-              : "city-address-point",
-        },
-        {
-          match:
-            address === listedAddress
-              ? "address-candidate"
-              : "address-point-candidate",
-          eventDate: date(row.date_registration ?? row.issuedate),
-          note: `${sourceId === "business-master" ? "Registry billing address" : "State credential address"} matches ${address === listedAddress ? "the listed parcel address" : "a city address point on this parcel"}. This is an address match; it does not establish occupancy, ownership or current use.`,
-        },
-      ),
-    ),
-    {
-      partial:
-        rows.length === 200 ||
-        addresses.length > selectedAddresses.length ||
-        ["partial", "unavailable"].includes(addressPoints.status),
-      warning:
-        "Candidates use the parcel-listed address and city address points. Registry billing and credential addresses do not prove business location. Address-point or state result limits may omit candidates.",
-    },
   );
 }
 
@@ -875,6 +939,8 @@ const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
   addresses: addressRecords,
   assessor: assessorRecord,
+  "assessor-sales": assessorSalesRecords,
+  "assessor-valuations": assessorValuationRecords,
   zoning: (p) => boundaryRecords("zoning", LAYERS.zoning, p),
   wards: (p) => boundaryRecords("wards", LAYERS.wards, p),
   neighborhoods: (p) =>
@@ -884,11 +950,9 @@ const ADAPTERS = Object.freeze({
   "cmt-contacts": cmtContactRecords,
   municity: municityRecords,
   "municipal-business-licenses": municipalBusinessRecords,
+  "municipal-occupants": municipalOccupantRecords,
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
-  planning: planningRecords,
-  "business-master": (p) => socrataRecords("business-master", p),
-  "state-licenses": (p) => socrataRecords("state-licenses", p),
   "complete-streets": completeStreetsRecords,
 });
 
