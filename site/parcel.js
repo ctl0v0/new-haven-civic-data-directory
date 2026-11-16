@@ -354,15 +354,14 @@ function renderSnapshot() {
   if (!environment) environmental.append(el("p", "Checking the State inventory…", "meta"));
   else {
     const source = environment.sources.find((item) => item.source_id === "ct-brownfields");
-    if (source?.status === "unavailable" || source?.status === "partial")
-      environmental.append(el("p", "The DEEP inventory check was incomplete. Review its source status below."));
-    else if (!environment.items.length)
-      environmental.append(el("p", "No DEEP brownfield row matched this parcel's published identifier."));
-    else {
+    if (environment.items.length) {
       const list = el("ul", null, "snapshot-list");
       for (const item of environment.items.slice(0, 3)) list.append(el("li", recordTitle(item)));
       environmental.append(list);
-    }
+    } else if (source?.status !== "unavailable" && source?.status !== "partial")
+      environmental.append(el("p", "No DEEP brownfield row matched this parcel's published identifier."));
+    if (source?.status === "unavailable" || source?.status === "partial")
+      environmental.append(el("p", "The DEEP inventory check was incomplete. Review its source status below."));
     environmental.append(el("p", "Inventory updated February 2026. A listing or missing row does not establish present site conditions.", "snapshot-caveat"));
   }
 }
