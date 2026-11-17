@@ -116,6 +116,7 @@ export function sourceCoverage() {
     excluded: [
       "meetings, agendas and legislation",
       "budgets and monthly finance reports",
+      "one-off reports and studies",
     ],
     as_of: new Date().toISOString(),
   };

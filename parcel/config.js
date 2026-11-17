@@ -209,7 +209,7 @@ export const SOURCES = Object.freeze([
     url: LAYERS.managedLots,
     mode: "live",
     coverage:
-      "An exact MBP–MBLU candidate is not proof of vacancy or availability.",
+      "An exact MBP–MBLU candidate identifies a managed-lot record; it does not establish current parcel use.",
   },
   {
     id: "planning",
@@ -290,24 +290,6 @@ export const SOURCES = Object.freeze([
     mode: "gap",
     coverage: "No verified safe, complete parcel-level feed.",
   },
-  {
-    id: "vacancy",
-    group: "property",
-    title: "Commercial vacancy",
-    url: "https://www.newhavenct.gov/",
-    mode: "gap",
-    coverage:
-      "No reliable structured commercial vacancy source; managed lots are not vacancy.",
-  },
-  {
-    id: "area-context",
-    group: "nearby",
-    title: "Additional places and walkability context",
-    url: "https://www.newhavenct.gov/government/departments-divisions/city-plan/data-and-resources",
-    mode: "paused",
-    coverage:
-      "No City or State published place roster or measured walkability source with a verified local join is collected. Official census and transit context use the separate context endpoint.",
-  },
 ]);
 
 export const GROUPS = Object.freeze([
@@ -327,7 +309,7 @@ export const CONTEXT_SOURCES = Object.freeze([
     title: "City hosted 2020 census blocks",
     url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/NH_2020_Census_pop_by_Block/FeatureServer/0",
     mode: "live",
-    coverage: "2020 population, adults, and housing units for the census block containing the parcel point; these are area counts, not parcel occupants or commercial vacancy.",
+    coverage: "2020 population, adults, and housing units for the census block containing the parcel point; these are area counts, not parcel occupants or building-level conditions.",
   },
   {
     id: "ct-tract-2020-acs",

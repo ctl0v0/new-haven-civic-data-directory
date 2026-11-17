@@ -1000,7 +1000,7 @@ async function managedLotRecords(parcel) {
     (data.features ?? []).map((f) =>
       record(f.attributes?.objectid ?? 0, "managed-lots", f.attributes ?? {}, {
         match: "inferred-exact-mblu",
-        note: "Managed lot is not evidence of vacancy or availability.",
+        note: "Managed-lot status does not establish current parcel use.",
       }),
     ),
     { partial: Boolean(data.exceededTransferLimit) },
