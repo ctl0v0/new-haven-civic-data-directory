@@ -333,13 +333,6 @@ export const CONTEXT_SOURCES = Object.freeze([
     mode: "live",
     coverage: "Public License and Occupant rows on nearby City parcels matched by each parcel's verified MBLU. Source-reported type, status, dates and recorded address are shown where present. Rows can be historical and do not establish current operation.",
   },
-  {
-    id: "pedestrian-counts",
-    title: "Downtown pedestrian observation counts",
-    url: "https://storymaps.arcgis.com/stories/18b7a2ab8ea9492a89f95456d3879883",
-    mode: "gap",
-    coverage: "The City published counts for 29 downtown intersections during specified October 2024 observation windows; no reusable official record feed has been verified. No parcel foot-traffic estimate is returned.",
-  },
 ]);
 
 export function source(id) {
