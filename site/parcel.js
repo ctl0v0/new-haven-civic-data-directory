@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const groups = [
   ["property", "Building, ownership, and addresses", "City parcel facts, published assessor ownership history, and address points on the parcel."],
-  ["business", "Businesses in records", "Municipal licenses and occupant rows attached to the verified parcel. These do not confirm current tenants."],
+  ["business", "Owner LLC and businesses in records", "Official State LLC registry records linked to the parcel owner when verified, plus municipal license and occupant rows. These do not confirm current tenants."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
@@ -23,6 +23,8 @@ const sourceNames = {
   "municipal-business-licenses": "Municipal licenses",
   "municipal-occupants": "Municipal occupants",
   "business-master": "CT business registry",
+  "business-principals": "CT owner LLC principals",
+  "business-agents": "CT owner LLC agent",
   "state-licenses": "CT credentials",
   "lci-cases": "LCI cases",
   "managed-lots": "LCI managed lots",
@@ -139,6 +141,9 @@ function recordTitle(item) {
   if (item.source_id === "cmt-contacts")
     return `CMT contacts · ${a.district_name ?? a.district_num ?? item.source_record_id}`;
   if (item.source_id === "ct-brownfields") return a.site_name ?? "DEEP inventory site";
+  if (item.source_id === "business-master") return a.legal_name ?? "Owner LLC in State registry";
+  if (item.source_id === "business-principals") return a.principal_name ?? "State registry principal";
+  if (item.source_id === "business-agents") return a.agent_name ?? "State registered agent";
   if (["local-historic-districts", "state-historic-districts"].includes(item.source_id))
     return a.HistoricDistrict ?? a.historicdistrict ?? "Historic district boundary";
   return brief(
@@ -194,6 +199,12 @@ function recordDescription(item) {
     return [a.license_type, a.recorded_address, a.expiration_date ? `Expiration listed: ${shortDate(a.expiration_date)}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "municipal-occupants")
     return [a.occupancy_type, a.recorded_address, a.inactive === true ? "Marked inactive" : null].filter(Boolean).join(" · ");
+  if (item.source_id === "business-master")
+    return [a.entity_type, a.alei ? `ALEI ${a.alei}` : null, a.registry_status ? `Registry status: ${a.registry_status}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "business-principals")
+    return `State-listed principal of ${a.entity_name}; this does not establish beneficial ownership of the parcel.`;
+  if (item.source_id === "business-agents")
+    return `Registered agent for ${a.entity_name}; the agent is a service contact, not identified as the parcel owner.`;
   return brief(a.Description ?? a.description ?? a.complaint_type ?? a.document_type ?? a.PermitType ?? a.ApplicationType ?? a.section ?? "", 190);
 }
 function fieldLabel(key) {
@@ -276,6 +287,25 @@ function appendRecord(parent, item) {
       ["CMT email", item.attributes.cmt_email],
       ["CMT phone", item.attributes.cmt_phone],
     ].filter(([, value]) => value != null && value !== "")
+    : item.source_id === "business-master" ? [
+      ["ALEI", item.attributes.alei],
+      ["Registry status", item.attributes.registry_status],
+      ["Entity business email", item.attributes.business_email],
+      ["City owner mailing address", item.attributes.city_owner_mailing_address],
+    ].filter(([, value]) => value)
+    : item.source_id === "business-principals" ? [
+      ["Entity", item.attributes.entity_name],
+      ["Principal", item.attributes.principal_name],
+      ["Designation", item.attributes.designation],
+      ["Principal business address", [item.attributes.principal_business_street, item.attributes.principal_business_city, item.attributes.principal_business_state].filter(Boolean).join(", ")],
+    ].filter(([, value]) => value)
+    : item.source_id === "business-agents" ? [
+      ["Entity", item.attributes.entity_name],
+      ["Agent", item.attributes.agent_name],
+      ["Agent phone", item.attributes.agent_phone],
+      ["Agent email", item.attributes.agent_email],
+      ["Agent business address", item.attributes.agent_business_address],
+    ].filter(([, value]) => value)
     : item.source_id === "assessor-valuations" ? [] : sourceFields(item.attributes)
       .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
       .slice(0, 4);
@@ -506,7 +536,7 @@ function renderSnapshot() {
         ));
     if (!named.length) businesses.append(el("p", "No named business record was returned by checked sources."));
     else {
-      businesses.append(el("p", `${business.total} municipal business records returned. Names and inactive flags are shown as published.`, "meta"));
+      businesses.append(el("p", `${named.length} named municipal business records returned. Names and inactive flags are shown as published.`, "meta"));
       const list = el("ul", null, "snapshot-list");
       for (const item of named.slice(0, 4)) {
         const row = el("li");

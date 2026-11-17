@@ -11,6 +11,7 @@ import {
 } from "./http.js";
 import { parseLciProperty } from "./lci.js";
 import { normalizeAddress } from "./resolve.js";
+import { AGENTS, MASTER, PRINCIPALS, entityChildren, findOfficialOwnerEntity, legalName } from "./business-registry.js";
 
 const ISO = () => new Date().toISOString();
 const text = (value) =>
@@ -1240,6 +1241,111 @@ async function managedLotRecords(parcel) {
   );
 }
 
+const registryPending = new Map();
+async function linkedOwnerEntity(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const key = `${id}:${parcel.attributes.objectid}`;
+  if (registryPending.has(key)) return registryPending.get(key);
+  const pending = cached(`owner-registry:${key}`, async () => {
+    const owner = parcel.attributes.owner_name_1;
+    if (!legalName(owner).endsWith(" LLC"))
+      return { entity: null, reason: "The City parcel owner is not recorded as an LLC." };
+    const [assessor, found] = await Promise.all([
+      assessorData(parcel).catch(() => null),
+      findOfficialOwnerEntity(parcel.attributes),
+    ]);
+    const assessorOwner = assessor?.attributes.lblOwner ?? null;
+    if (assessorOwner && legalName(assessorOwner) !== legalName(owner))
+      return { entity: null, reason: "The current assessor owner and City parcel owner differ; no State entity was linked." };
+    return { ...found, assessorOwner };
+  });
+  registryPending.set(key, pending);
+  try { return await pending; }
+  finally { registryPending.delete(key); }
+}
+
+function ownerMatch(parcel, entity) {
+  return {
+    method: "official-owner-name-and-mailing-address",
+    parcel_fields: ["owner_name_1", "mail_address", "mail_city", "mail_state", "mail_zip"],
+    registry_fields: ["name", "billingstreet", "billingcity", "billingpostalcode"],
+    registry_entity_id: entity.id,
+    parcel_id: Number(parcel.attributes.parcel_id),
+  };
+}
+
+async function registryMasterRecords(parcel) {
+  const { entity, reason, assessorOwner } = await linkedOwnerEntity(parcel);
+  if (!entity) return registryNoLink("business-master", parcel, reason);
+  return result("business-master", [record(entity.id, "business-master", {
+    legal_name: entity.name,
+    alei: entity.accountnumber ?? null,
+    entity_type: entity.business_type ?? null,
+    registry_status: entity.status ?? null,
+    registry_substatus: entity.sub_status ?? null,
+    registration_date: entity.date_registration ?? null,
+    entity_naics_code: entity.naics_code ?? null,
+    business_email: entity.business_email_address ?? null,
+    billing_street: entity.billingstreet ?? null,
+    billing_city: entity.billingcity ?? null,
+    billing_postal_code: entity.billingpostalcode ?? null,
+    city_owner_name: parcel.attributes.owner_name_1,
+    city_owner_mailing_address: parcel.attributes.mail_address,
+    assessor_owner_name: assessorOwner,
+  }, {
+    match: ownerMatch(parcel, entity),
+    sourceUrl: `${MASTER}?id=${encodeURIComponent(entity.id)}`,
+    note: "The State entity matches the City's parcel owner and mailing address. Registry status is entity status, not property ownership status.",
+  })]);
+}
+
+function registryNoLink(sourceId, parcel, reason) {
+  const owner = parcel.attributes.owner_name_1;
+  return owner && !legalName(owner).endsWith(" LLC")
+    ? result(sourceId, [], { warning: reason })
+    : unavailable(sourceId, reason);
+}
+
+async function registryChildRecords(parcel, sourceId, dataset, joinField) {
+  const { entity, reason } = await linkedOwnerEntity(parcel);
+  if (!entity) return registryNoLink(sourceId, parcel, reason);
+  const { rows, truncated } = await entityChildren(dataset, joinField, entity.id);
+  const items = rows.filter((row) => row[joinField] === entity.id).map((row, index) => {
+    const agent = sourceId === "business-agents";
+    const attributes = agent ? {
+      entity_name: entity.name,
+      entity_alei: entity.accountnumber ?? null,
+      agent_name: row.name__c ?? null,
+      agent_type: row.type ?? null,
+      agent_phone: row.agent_phone ?? null,
+      agent_email: row.email ?? null,
+      agent_business_address: row.business_address ?? null,
+      registry_entity_id: entity.id,
+    } : {
+      entity_name: entity.name,
+      entity_alei: entity.accountnumber ?? null,
+      principal_name: row.name__c ?? null,
+      designation: row.designation ?? null,
+      principal_business_street: row.business_street_address_1 ?? null,
+      principal_business_city: row.business_city ?? null,
+      principal_business_state: row.business_state ?? null,
+      registry_entity_id: entity.id,
+    };
+    return record(`${entity.id}:${row.id ?? index}`, sourceId, attributes, {
+      match: { ...ownerMatch(parcel, entity), state_join_field: joinField },
+      sourceUrl: `${dataset}?${new URLSearchParams({ [joinField]: entity.id })}`,
+      note: agent
+        ? "Published registered agent and service contact for the matched LLC; the agent is not identified as a property owner."
+        : "Published principal of the matched LLC; a principal is not necessarily a beneficial owner or direct owner of this parcel.",
+    });
+  });
+  return result(sourceId, items, {
+    partial: truncated,
+    warning: truncated ? "State registry returned more than 50 rows; this response is incomplete."
+      : items.length ? null : "No joined rows were returned by the State registry; this does not establish that the entity has no principal or agent.",
+  });
+}
+
 const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
   addresses: addressRecords,
@@ -1263,6 +1369,9 @@ const ADAPTERS = Object.freeze({
   municity: municityRecords,
   "municipal-business-licenses": municipalBusinessRecords,
   "municipal-occupants": municipalOccupantRecords,
+  "business-master": registryMasterRecords,
+  "business-principals": (p) => registryChildRecords(p, "business-principals", PRINCIPALS, "business_id"),
+  "business-agents": (p) => registryChildRecords(p, "business-agents", AGENTS, "business_key"),
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
 });

@@ -257,20 +257,29 @@ export const SOURCES = Object.freeze([
   {
     id: "business-master",
     group: "business",
-    title: "Connecticut Business Registry Master",
+    title: "Connecticut registry entity for parcel owner LLC",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Business-Master/n7gp-d28j",
-    mode: "gap",
+    mode: "live",
     coverage:
-      "The registry has billing addresses but no verified parcel identifier. Address-only matches are excluded from parcel records.",
+      "A State LLC is linked only when its legal name and billing street, city and ZIP match the City parcel's owner name and mailing address, with a unique registry result. A conflicting assessor owner blocks the link. No broader LLC affiliations or beneficial owners are inferred.",
   },
   {
     id: "business-principals",
     group: "business",
-    title: "Connecticut Business Registry Principals",
+    title: "Connecticut registry principals of matched owner LLC",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Principals/ka36-64k6",
-    mode: "gap",
+    mode: "live",
     coverage:
-      "Entity joins require reviewed identity; no automatic parcel association.",
+      "Principal rows join by the State registry's entity ID after the owner LLC match. A listed principal may be a member or manager; this does not establish beneficial ownership or a direct property interest.",
+  },
+  {
+    id: "business-agents",
+    group: "business",
+    title: "Connecticut registry agent for matched owner LLC",
+    url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Agents/qh2m-n44y",
+    mode: "live",
+    coverage:
+      "Agent rows join by the State registry business_key after the owner LLC match. Published agent phone and email are service contacts; the registered agent is not identified as a property owner.",
   },
   {
     id: "state-licenses",

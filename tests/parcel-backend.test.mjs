@@ -9,6 +9,7 @@ import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
+import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
 import trashPickupRoute from "../api/v1/trash-pickup.js";
@@ -722,17 +723,98 @@ test("assessor ownership and valuation tables become separate parcel records", a
   );
 });
 
-test("address-only state and manually selected planning sources do not create parcel records", async () => {
+test("state records without an owner LLC and manually selected planning sources do not create parcel records", async () => {
   globalThis.fetch = async () => {
     throw Error("Gap sources must not make upstream record requests");
   };
   const p = parcel(13791);
   p.attributes.property_address = "181 CROWN ST";
-  for (const sourceId of ["business-master", "state-licenses", "planning"]) {
+  for (const sourceId of ["business-master", "business-principals", "business-agents", "state-licenses", "planning"]) {
     const out = await getSourceRecords(sourceId, p);
     assert.equal(out.status, "unavailable");
     assert.deepEqual(out.items, []);
   }
+});
+
+test("owner LLC join requires matching legal name and complete mailing address", () => {
+  const city = {
+    owner_name_1: "990 STATE STREET ASSOCIATES  LLC",
+    mail_address: "40 FOXON HILL RD UNIT 54",
+    mail_city: "NEW HAVEN", mail_state: "CT", mail_zip: "06513",
+  };
+  const state = {
+    name: "990 STATE STREET ASSOCIATES, LLC",
+    business_type: "LLC", billingstreet: "40 FOXON HILL ROAD 54",
+    billingcity: "NEW HAVEN", billingpostalcode: "06513",
+  };
+  assert.equal(officialOwnerMatch(city, state), true);
+  assert.equal(officialOwnerMatch(city, { ...state, billingstreet: "41 FOXON HILL ROAD 54" }), false);
+  assert.equal(officialOwnerMatch(city, { ...state, billingpostalcode: "06511" }), false);
+  assert.equal(officialOwnerMatch(city, { ...state, name: "990 STATE STREET HOLDINGS, LLC" }), false);
+});
+
+test("State owner lookup refuses two entities with the same official name and address", async () => {
+  const city = {
+    owner_name_1: "SAMPLE OWNER LLC", mail_address: "12 MAIN ST",
+    mail_city: "NEW HAVEN", mail_state: "CT", mail_zip: "06511",
+  };
+  const row = { name: "SAMPLE OWNER, LLC", business_type: "LLC",
+    billingstreet: "12 MAIN STREET", billingcity: "NEW HAVEN", billingpostalcode: "06511" };
+  globalThis.fetch = async () => response([{ id: "entity-a", ...row }, { id: "entity-b", ...row }]);
+  const found = await findOfficialOwnerEntity(city);
+  assert.equal(found.entity, null);
+  assert.match(found.reason, /More than one State entity/);
+});
+
+test("matched official owner entity joins State principals and agent without labeling either the property owner", async () => {
+  const p = parcel(999050);
+  Object.assign(p.attributes, {
+    owner_name_1: "990 STATE STREET ASSOCIATES  LLC",
+    mail_address: "40 FOXON HILL RD UNIT 54", mail_city: "NEW HAVEN",
+    mail_state: "CT", mail_zip: "06513",
+  });
+  const master = { id: "state-entity-1", name: "990 STATE STREET ASSOCIATES, LLC",
+    accountnumber: "0659195", business_type: "LLC", status: "Active",
+    billingstreet: "40 FOXON HILL ROAD 54", billingcity: "NEW HAVEN",
+    billingpostalcode: "06513", business_email_address: "entity@example.com" };
+  const requested = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    requested.push(url);
+    if (url.hostname === "gis.vgsi.com") return new Response(
+      '<span id="MainContent_lblPid">999050</span><span id="MainContent_lblOwner">990 STATE STREET ASSOCIATES LLC</span>',
+      { headers: { "content-type": "text/html" } });
+    if (url.pathname.endsWith("n7gp-d28j.json")) {
+      if (url.searchParams.has("$q")) return response([master]);
+      assert.match(url.searchParams.get("$where"), /name = '990 STATE STREET ASSOCIATES, LLC'/);
+      return response([master]);
+    }
+    if (url.pathname.endsWith("ka36-64k6.json")) return response([{
+      business_id: master.id, name__c: "The Robert Megna Trust",
+      business_street_address_1: "40 FOXON HILL ROAD 54",
+      business_city: "NEW HAVEN", business_state: "CT",
+    }]);
+    if (url.pathname.endsWith("qh2m-n44y.json")) return response([{
+      business_key: master.id, name__c: "ROBERT MEGNA", type: "Individual",
+      agent_phone: "2034940995", email: "agent@example.com",
+    }]);
+    throw Error("Unexpected request");
+  };
+  const [entity, principals, agents] = await Promise.all([
+    getSourceRecords("business-master", p),
+    getSourceRecords("business-principals", p),
+    getSourceRecords("business-agents", p),
+  ]);
+  assert.equal(entity.items[0].attributes.alei, "0659195");
+  assert.equal(entity.items[0].match.method, "official-owner-name-and-mailing-address");
+  assert.equal(principals.items[0].attributes.principal_name, "The Robert Megna Trust");
+  assert.equal(principals.items[0].attributes.designation, null);
+  assert.match(principals.items[0].note, /not necessarily a beneficial owner/);
+  assert.equal(agents.items[0].attributes.agent_phone, "2034940995");
+  assert.match(agents.items[0].note, /not identified as a property owner/);
+  assert.equal(requested.filter((url) => url.pathname.endsWith("n7gp-d28j.json")).length, 2);
+  assert(requested.some((url) => url.pathname.endsWith("qh2m-n44y.json") &&
+    url.searchParams.get("$where") === "business_key = 'state-entity-1'"));
 });
 
 test("assessor card does not merge facts from multiple buildings", async () => {
