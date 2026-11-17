@@ -23,7 +23,7 @@ const sourceNames = {
   "state-historic-districts": "City hosted State historic districts",
   "ct-brownfields": "CT DEEP brownfields inventory",
   municity: "Municipal parcel service",
-  "municipal-business-licenses": "Municipal licenses",
+  "municipal-business-licenses": "Municipal licenses naming a business",
   "municipal-occupants": "Municipal occupants",
   "business-master": "CT registry: owner LLC",
   "business-principals": "CT owner LLC principals",
@@ -352,6 +352,8 @@ function sourceLine(parent, source) {
         "category-counts",
       ),
     );
+  if (source.source_id === "municipal-business-licenses" && source.unnamed_license_count > 0)
+    row.append(el("p", `${source.unnamed_license_count} other City License ${source.unnamed_license_count === 1 ? "row does" : "rows do"} not name a business. See Activity → Licenses; historical sections may be collapsed.`, "category-counts"));
   const info = el("details", null, "source-coverage");
   info.append(el("summary", "Coverage and source"));
   info.append(el("p", source.coverage, "meta"));
@@ -546,24 +548,34 @@ function renderSnapshot() {
   }
 
   const business = groupResponses.get("business");
-  const businesses = snapshotCard("Businesses named in City records", "business");
+  const businesses = snapshotCard("Municipal license and occupant names", "business");
   if (!business) businesses.append(el("p", "Loading business records…", "meta"));
   else {
     const named = business.items
       .filter((item) => ["municipal-business-licenses", "municipal-occupants"].includes(item.source_id))
       .filter((item) => item.attributes?.business_name || item.attributes?.occupant_name);
+    const licenseCount = named.filter((item) => item.source_id === "municipal-business-licenses").length;
+    const occupantCount = named.filter((item) => item.source_id === "municipal-occupants").length;
     if (!named.length) businesses.append(el("p", "No municipal business or occupant name was returned by checked sources."));
     else {
-      businesses.append(el("p", `${named.length} named municipal business records returned. Names and inactive flags are shown as published.`, "meta"));
+      businesses.append(el("p", `${licenseCount} ${licenseCount === 1 ? "license" : "licenses"} naming a business · ${occupantCount} ${occupantCount === 1 ? "occupant row" : "occupant rows"}. Names and inactive flags are shown as published.`, "meta"));
       const list = el("ul", null, "snapshot-list");
       for (const item of named.slice(0, 4)) {
         const row = el("li");
-        row.append(el("strong", recordTitle(item)));
+        row.append(el("strong", `${item.source_id === "municipal-occupants" ? "Occupant" : "License"} · ${recordTitle(item)}`));
         const state = recordStatus(item);
         row.append(el("span", [state, item.attributes?.expiration_date ? `Expires ${shortDate(item.attributes.expiration_date)}` : null].filter(Boolean).join(" · ") || "Status not established", "snapshot-state"));
         list.append(row);
       }
       businesses.append(list);
+    }
+    const unnamed = business.sources.find((source) => source.source_id === "municipal-business-licenses")?.unnamed_license_count ?? 0;
+    if (unnamed > 0) {
+      const note = el("p", `${unnamed} other City License ${unnamed === 1 ? "row does" : "rows do"} not name a business. See `, "snapshot-caveat");
+      const activityLink = el("a", "Activity → Licenses");
+      activityLink.href = "#group-activity";
+      note.append(activityLink, "; expand historical sections to see older records.");
+      businesses.append(note);
     }
     businesses.append(el("p", "A municipal occupant row or license does not establish a current storefront.", "snapshot-caveat"));
   }

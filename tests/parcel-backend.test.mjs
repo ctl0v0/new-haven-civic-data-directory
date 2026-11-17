@@ -489,6 +489,31 @@ test("named municipal license appears in business records with historical status
   assert.doesNotMatch(JSON.stringify(out), /Unrelated vendor detail/);
 });
 
+test("unnamed residential licenses stay in Activity and are counted in Business source coverage", async () => {
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (url.pathname.endsWith("/Children")) return response({
+      License: [
+        { License_ID: 1, LicenseNumber: "RL-13-280", LicenseType: "LCI - Residential License",
+          Status: "Renewed", ExpirationDate: "2016-03-31", LegalAddress: "20 ELD ST" },
+        { License_ID: 2, LicenseNumber: "FSE-1", LicenseType: "Food Service",
+          BusinessName: "Named Business", Status: "Void", LegalAddress: "20 ELD ST" },
+      ],
+      Permit: [], Application: [], Complaint: [], Contact: [], Document: [], Occupant: [], Certificate: [],
+    });
+    throw Error(`Unexpected source: ${url}`);
+  };
+  const p = parcel(9990150);
+  const business = await getGroup("business", p);
+  const activity = await getGroup("activity", p);
+  assert.deepEqual(business.items.map((item) => item.attributes.business_name), ["Named Business"]);
+  assert.equal(business.sources.find((source) => source.source_id === "municipal-business-licenses").unnamed_license_count, 1);
+  assert.deepEqual(activity.items.filter((item) => item.category === "License")
+    .map((item) => item.attributes.LicenseNumber), ["RL-13-280", "FSE-1"]);
+});
+
 test("municipal parcel lookup includes public documents, complaint metadata and contact roles", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);

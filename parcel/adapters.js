@@ -32,11 +32,12 @@ const record = (
   source_url: sourceUrl ?? source(sourceId)?.url ?? null,
   retrieved_at: ISO(),
 });
-const result = (sourceId, items, { partial = false, warning = null } = {}) => ({
+const result = (sourceId, items, { partial = false, warning = null, unnamed_license_count = null } = {}) => ({
   source_id: sourceId,
   status: partial ? "partial" : items.length ? "ok" : "no_records",
   items,
   warning,
+  ...(unnamed_license_count == null ? {} : { unnamed_license_count }),
   coverage: source(sourceId)?.coverage ?? "",
   source_url: source(sourceId)?.url ?? null,
   verification_url: source(sourceId)?.verification_url ?? null,
@@ -1211,7 +1212,11 @@ async function municipalBusinessRecords(parcel) {
         },
       );
     });
+  const unnamedLicenseCount = vendor.items.filter(
+    (item) => item.category === "License" && !text(item.attributes?.BusinessName),
+  ).length;
   return result("municipal-business-licenses", items, {
+    unnamed_license_count: unnamedLicenseCount,
     partial:
       vendor.missing_categories?.includes("License") ||
       vendor.truncated_categories?.includes("License"),
