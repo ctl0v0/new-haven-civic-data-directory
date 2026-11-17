@@ -12,8 +12,10 @@
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
+    "@terraformer/arcgis": "2.2.2",
     "@vercel/functions": "3.11.3",
     "cheerio": "1.2.0",
+    "leaflet": "1.9.4",
     "zod": "4.5.4"
   }
 }

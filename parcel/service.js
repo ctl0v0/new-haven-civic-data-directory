@@ -1,9 +1,14 @@
 import { GROUPS, SOURCES } from "./config.js";
 import { cached, SourceError } from "./http.js";
 import { loadParcel, resolveParcel } from "./resolve.js";
+import { parcelFeatureToGeoJSON } from "./geometry.js";
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
 
 export { resolveParcel };
+
+export async function parcelGeometry(id, objectid = null) {
+  return parcelFeatureToGeoJSON(await loadParcel(id, objectid));
+}
 
 export async function parcelSummary(id, objectid = null) {
   const feature = await loadParcel(id, objectid);

@@ -36,6 +36,8 @@ let selected = null;
 let viewVersion = 0;
 let searchedAddress = "";
 const groupResponses = new Map();
+let parcelMap = null;
+const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
 async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
   const body = await r
@@ -64,6 +66,16 @@ function link(url, label) {
 }
 function status(message) {
   $("status").textContent = message;
+}
+function resetMap() {
+  if (parcelMap) {
+    parcelMap.remove();
+    parcelMap = null;
+  }
+  $("parcel-map").replaceChildren();
+  $("parcel-map").hidden = true;
+  $("parcel-map-section").hidden = true;
+  $("parcel-map-status").textContent = "";
 }
 function shortDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "")) return value ?? "";
@@ -395,6 +407,7 @@ function renderSnapshot() {
 }
 async function choose(item, searchedQuery = null) {
   const version = ++viewVersion;
+  resetMap();
   selected = item;
   searchedAddress = searchedQuery ?? "";
   groupResponses.clear();
@@ -440,6 +453,7 @@ async function choose(item, searchedQuery = null) {
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
     const tasks = [];
+    tasks.push(loadMap(qs, version));
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
       section.id = `group-${id}`;
@@ -456,6 +470,61 @@ async function choose(item, searchedQuery = null) {
     if (version === viewVersion) status("Records loaded. Open a record to inspect its source fields.");
   } catch (error) {
     status(error.message);
+  }
+}
+async function loadMap(qs, version) {
+  $("parcel-map-section").hidden = false;
+  $("parcel-map-status").textContent = "Loading the City parcel boundary…";
+  try {
+    const feature = await api(`/api/v1/geometry?${qs}`);
+    if (version !== viewVersion) return;
+    const leaflet = window.L;
+    if (!leaflet) throw Error("Map renderer unavailable");
+    const container = $("parcel-map");
+    container.hidden = false;
+    const map = leaflet.map(container, { scrollWheelZoom: false, keyboard: true });
+    parcelMap = map;
+    let tileLoaded = false;
+    let tileFailed = false;
+    $("parcel-map-status").textContent = "Selected City parcel boundary shown. Loading 2023 aerial imagery…";
+    const aerial = leaflet.tileLayer(AERIAL_TILES, {
+      maxZoom: 21,
+      maxNativeZoom: 21,
+      attribution: '<a href="https://maps.cteco.uconn.edu/data/flight2023/" target="_blank" rel="noopener noreferrer">2023 aerial imagery · CT ECO</a>',
+    });
+    aerial.on("tileload", () => {
+      if (version !== viewVersion) return;
+      tileLoaded = true;
+      $("parcel-map-status").textContent = tileFailed
+        ? "Some aerial tiles did not load. The parcel boundary remains visible."
+        : "Selected City parcel boundary over 2023 aerial imagery.";
+    });
+    aerial.on("tileerror", () => {
+      if (version !== viewVersion) return;
+      tileFailed = true;
+      $("parcel-map-status").textContent = tileLoaded
+        ? "Some aerial tiles did not load. The parcel boundary remains visible."
+        : "Aerial imagery unavailable. The parcel boundary remains visible.";
+    });
+    aerial.addTo(map);
+    const casing = leaflet.geoJSON(feature, {
+      style: { color: "#173e35", weight: 8, fillOpacity: 0 },
+    }).addTo(map);
+    leaflet.geoJSON(feature, {
+      style: { color: "#f8c547", weight: 4, fillColor: "#f8c547", fillOpacity: 0.15 },
+    }).addTo(map);
+    const bounds = casing.getBounds();
+    if (!bounds.isValid()) throw Error("Parcel boundary has no map extent");
+    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 20 });
+    leaflet.control.scale({ metric: false, imperial: true }).addTo(map);
+  } catch (error) {
+    if (version !== viewVersion) return;
+    if (parcelMap) {
+      parcelMap.remove();
+      parcelMap = null;
+    }
+    $("parcel-map").hidden = true;
+    $("parcel-map-status").textContent = `Could not show the parcel map: ${error.message}`;
   }
 }
 async function loadGroup(id, section, qs, version, cursor = null) {
@@ -578,6 +647,15 @@ async function loadFeed(qs, version, cursor = null) {
 }
 $("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const version = ++viewVersion;
+  selected = null;
+  groupResponses.clear();
+  resetMap();
+  $("parcel-summary").hidden = true;
+  $("snapshot").hidden = true;
+  $("feed-section").hidden = true;
+  $("group-nav").hidden = true;
+  $("groups").replaceChildren();
   status("Searching…");
   $("candidates").hidden = true;
   try {
@@ -586,6 +664,7 @@ $("search-form").addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: $("query").value }),
     });
+    if (version !== viewVersion) return;
     if (!data.candidates.length) {
       status(
         data.status === "unavailable"
@@ -615,7 +694,7 @@ $("search-form").addEventListener("submit", async (event) => {
         : "Choose the matching parcel.",
     );
   } catch (error) {
-    status(error.message);
+    if (version === viewVersion) status(error.message);
   }
 });
 const initial = new URL(location.href).searchParams;

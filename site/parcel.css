@@ -213,6 +213,14 @@ summary:focus-visible {
 .parcel-hero .meta, .parcel-hero .small { color: #dcece2; }
 .parcel-hero .small { max-width: 75ch; margin-bottom: 0; }
 .match-note { background: #fff3d6; border-left: 4px solid #d8942c; border-radius: .3rem; color: #5b3c0e; padding: .7rem .9rem; max-width: 80ch; }
+.map-panel { background: #fff; border: 1px solid #d2ded5; border-radius: .8rem; padding: 1rem; margin: -1rem 0 1.6rem; }
+.map-panel .section-heading { margin: .2rem 0 .85rem; }
+#parcel-map { height: clamp(19rem, 42vw, 34rem); border: 1px solid #cbdacf; border-radius: .55rem; background: #e3e9e1; }
+#parcel-map:focus-visible { outline: 3px solid #0b624d; outline-offset: 3px; }
+.map-status { color: #315e4e; font-size: .86rem; min-height: 1.3em; margin: .65rem 0 .35rem; }
+.map-sources { color: #4c655d; font-size: .82rem; line-height: 1.45; margin: .35rem 0 0; }
+.map-swatch { display: inline-block; width: 1rem; height: .7rem; border: 3px solid #f8c547; background: #255744; vertical-align: middle; margin-right: .2rem; }
+#parcel-map-section[hidden], #parcel-map[hidden] { display: none; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1.2rem; margin: 1.5rem 0 .9rem; }
 .section-heading h2 { font-size: 1.65rem; margin: 0; line-height: 1.2; }
 .section-heading > p { max-width: 58ch; color: #4c655d; margin: 0; font-size: .92rem; }

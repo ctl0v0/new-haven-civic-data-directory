@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelFeed, parcelOverview } from "../parcel/service.js";
+import { parcelRecords, parcelFeed, parcelOverview, parcelGeometry } from "../parcel/service.js";
+import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
+import geometryRoute from "../api/v1/geometry.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -224,7 +226,11 @@ test("pilot login creates a private page session", async () => {
     }),
   );
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /id="search-form"/);
+  const html = await page.text();
+  assert.match(html, /id="search-form"/);
+  assert.match(html, /id="parcel-map"/);
+  assert.match(html, /\/leaflet\/leaflet\.js/);
+  assert.match(page.headers.get("content-security-policy"), /img-src 'self' data: https:\/\/cteco\.uconn\.edu/);
   assert.equal(
     (
       await pilotSession.fetch(
@@ -1064,4 +1070,77 @@ test("REST and MCP return the same environmental parcel group", async () => {
   );
   assert.equal(mcpData.result.structuredContent.group, "environment");
   assert.deepEqual(mcpData.result.structuredContent, restData);
+});
+
+test("parcel geometry preserves holes and separate polygon parts", () => {
+  const feature = parcel(999047);
+  feature.geometry = {
+    spatialReference: { wkid: 4326 },
+    rings: [
+      [[-72.93, 41.3], [-72.93, 41.31], [-72.92, 41.31], [-72.92, 41.3], [-72.93, 41.3]],
+      [[-72.928, 41.302], [-72.925, 41.302], [-72.925, 41.305], [-72.928, 41.305], [-72.928, 41.302]],
+      [[-72.91, 41.3], [-72.91, 41.31], [-72.90, 41.31], [-72.90, 41.3], [-72.91, 41.3]],
+    ],
+  };
+  const out = parcelFeatureToGeoJSON(feature);
+  assert.equal(out.type, "Feature");
+  assert.equal(out.geometry.type, "MultiPolygon");
+  assert.deepEqual(out.geometry.coordinates.map((part) => part.length).sort(), [1, 2]);
+  assert.deepEqual(out.bbox, [-72.93, 41.3, -72.90, 41.31]);
+  assert.equal(out.properties.source_id, "parcels");
+  assert.match(out.properties.description, /not a building footprint/);
+  assert.throws(() => parcelFeatureToGeoJSON({ ...feature, geometry: { rings: [] } }));
+});
+
+test("geometry REST and MCP require one selected City parcel object", async () => {
+  let calls = 0;
+  globalThis.fetch = async (input) => {
+    assert.match(String(input), /Parcel_Viewer/);
+    calls++;
+    const first = parcel(999048);
+    const second = parcel(999048);
+    second.attributes.objectid = 88001;
+    return response({ features: [first, second], spatialReference: { wkid: 4326 } });
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const base = "https://example.com/api/v1/geometry?parcel_id=999048";
+  assert.equal((await geometryRoute.fetch(new Request(base))).status, 401);
+  assert.equal((await geometryRoute.fetch(new Request(base, { headers: auth }))).status, 409);
+  const rest = await geometryRoute.fetch(new Request(base + "&objectid=88001", { headers: auth }));
+  assert.equal(rest.status, 200);
+  const feature = await rest.json();
+  assert.equal(feature.id, "999048:88001");
+  assert.equal(feature.properties.objectid, 88001);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 4, method: "tools/call",
+      params: { name: "get_parcel_geometry", arguments: { parcel_id: "999048", objectid: "88001" } },
+    }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, feature);
+  assert.equal(calls, 2, "successful selected parcel geometry uses the five-minute cache");
+});
+
+test("geometry never publishes absent or projected parcel coordinates", async () => {
+  globalThis.fetch = async () => response({
+    features: [{ attributes: parcel(999049).attributes }],
+    spatialReference: { wkid: 4326 },
+  });
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const missing = await geometryRoute.fetch(new Request(
+    "https://example.com/api/v1/geometry?parcel_id=999049", { headers: auth },
+  ));
+  assert.equal(missing.status, 502);
+  globalThis.fetch = async () => response({
+    features: [parcel(999050)], spatialReference: { wkid: 3857 },
+  });
+  const projected = await geometryRoute.fetch(new Request(
+    "https://example.com/api/v1/geometry?parcel_id=999050", { headers: auth },
+  ));
+  assert.equal(projected.status, 502);
 });

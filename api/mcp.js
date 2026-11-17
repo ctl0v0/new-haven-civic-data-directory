@@ -5,6 +5,7 @@ import { json, readRequestText, SourceError } from "../parcel/http.js";
 import {
   resolveParcel,
   parcelSummary,
+  parcelGeometry,
   parcelOverview,
   parcelRecords,
   parcelFeed,
@@ -75,6 +76,14 @@ export function createServer() {
     "Return compact group counts, source statuses and five dated record references; use get_parcel_records for details.",
     z.object(common),
     ({ parcel_id, objectid }) => parcelOverview(parcel_id, objectid),
+  );
+  tool(
+    server,
+    "get_parcel_geometry",
+    "Get parcel geometry",
+    "Return the selected City parcel boundary as GeoJSON, with source and parcel identifiers. The boundary is not a building footprint.",
+    z.object(common),
+    ({ parcel_id, objectid }) => parcelGeometry(parcel_id, objectid),
   );
   tool(
     server,

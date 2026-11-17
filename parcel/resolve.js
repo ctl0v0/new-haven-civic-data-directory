@@ -202,39 +202,46 @@ export async function loadParcel(parcelId, objectId = null) {
     throw new SourceError("Invalid parcel ID", 400);
   if (objectId !== null && !/^\d{1,12}$/.test(String(objectId)))
     throw new SourceError("Invalid parcel object ID", 400);
-  const data = await arcgis(LAYERS.parcels, {
-    where: `parcel_id = ${Number(parcelId)}`,
-    outFields: "*",
-    returnGeometry: "true",
-    outSR: "4326",
-    resultRecordCount: "100",
+  return cached(`parcel-feature:${Number(parcelId)}:${objectId === null ? "all" : Number(objectId)}`, async () => {
+    const data = await arcgis(LAYERS.parcels, {
+      where: `parcel_id = ${Number(parcelId)}`,
+      outFields: "*",
+      returnGeometry: "true",
+      outSR: "4326",
+      resultRecordCount: "100",
+    });
+    const wkid = data.spatialReference?.latestWkid ?? data.spatialReference?.wkid;
+    if (wkid && wkid !== 4326)
+      throw new SourceError(
+        "Parcel geometry was not returned in longitude and latitude",
+      );
+    if (data.exceededTransferLimit)
+      throw new SourceError(
+        "Parcel ID returns too many records; refine selection",
+        409,
+      );
+    const features = (data.features ?? []).filter(
+      (f) => Number(f.attributes?.parcel_id) === Number(parcelId),
+    );
+    const selected =
+      objectId === null
+        ? features
+        : features.filter(
+            (f) => Number(f.attributes?.objectid) === Number(objectId),
+          );
+    if (!selected.length) throw new SourceError("Parcel not found", 404);
+    if (selected.length !== 1)
+      throw new SourceError(
+        "Parcel ID is ambiguous; select a source object ID",
+        409,
+      );
+    const feature = selected[0];
+    const featureWkid = feature.geometry?.spatialReference?.latestWkid ??
+      feature.geometry?.spatialReference?.wkid;
+    if (featureWkid && featureWkid !== 4326)
+      throw new SourceError("Parcel geometry was not returned in longitude and latitude");
+    if (!Array.isArray(feature.geometry?.rings))
+      throw new SourceError("Parcel geometry unavailable");
+    return feature;
   });
-  const wkid = data.spatialReference?.latestWkid ?? data.spatialReference?.wkid;
-  if (wkid && wkid !== 4326)
-    throw new SourceError(
-      "Parcel geometry was not returned in longitude and latitude",
-    );
-  if (data.exceededTransferLimit)
-    throw new SourceError(
-      "Parcel ID returns too many records; refine selection",
-      409,
-    );
-  const features = (data.features ?? []).filter(
-    (f) => Number(f.attributes?.parcel_id) === Number(parcelId),
-  );
-  const selected =
-    objectId === null
-      ? features
-      : features.filter(
-          (f) => Number(f.attributes?.objectid) === Number(objectId),
-        );
-  if (!selected.length) throw new SourceError("Parcel not found", 404);
-  if (selected.length !== 1)
-    throw new SourceError(
-      "Parcel ID is ambiguous; select a source object ID",
-      409,
-    );
-  if (!Array.isArray(selected[0].geometry?.rings))
-    throw new SourceError("Parcel geometry unavailable");
-  return selected[0];
 }
