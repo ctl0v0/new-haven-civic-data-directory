@@ -41,6 +41,21 @@ export default {
           status: item.attributes?.Status ?? null,
           expiration_date: item.attributes?.ExpirationDate ?? null,
           address: item.attributes?.LegalAddress ?? item.attributes?.Addr1 ?? null,
+          source_fields: Object.keys(item.attributes ?? {}),
+          name_and_license_fields: Object.fromEntries(Object.entries(item.attributes ?? {})
+            .filter(([key, value]) => /name|business|trade|dba|applicant|license|company|entity|description|owner/i.test(key)
+              && ["string", "number", "boolean"].includes(typeof value))
+            .map(([key, value]) => [key, String(value).slice(0, 180)])),
+        })),
+      other_municipal_rows: municipal.items
+        .filter((item) => ["Contact", "Document", "Permit"].includes(item.category))
+        .map((item) => ({
+          category: item.category,
+          id: item.source_record_id,
+          fields: Object.fromEntries(Object.entries(item.attributes ?? {})
+            .filter(([key, value]) => /name|business|trade|dba|applicant|license|company|entity|description|owner|type|role/i.test(key)
+              && typeof value === "string")
+            .map(([key, value]) => [key, value.slice(0, 180)])),
         })),
       named_licenses: {
         status: licenses.status,
