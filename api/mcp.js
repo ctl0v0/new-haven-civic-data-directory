@@ -104,6 +104,7 @@ export function createServer() {
       ...common,
       group: z.enum([
         "property",
+        "ownership",
         "geography",
         "environment",
         "representation",

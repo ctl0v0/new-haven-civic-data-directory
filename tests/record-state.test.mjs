@@ -32,20 +32,31 @@ test("an occupant without an inactive flag is not labeled active", () => {
   assert.equal(displayGroup({ ...occupant, attributes: { inactive: true } }, asOf).key, "past");
 });
 
-test("owner registry roles stay together and current source records precede drafts and voids before paging", () => {
+test("owner names, State LLC roles and assessor sales stay in the ownership group", () => {
   const rows = [
-    item("void", "License", "Void"),
     { id: "agent", source_id: "business-agents", attributes: {} },
-    item("draft", "Application", "Draft"),
     { id: "owner", source_id: "business-master", attributes: { registry_status: "Active" } },
-    item("issued", "License", "Issued"),
     { id: "principal", source_id: "business-principals", attributes: {} },
+    { id: "city", source_id: "parcel-owner", attributes: { owner_name_1: "OWNER LLC" } },
+    { id: "assessor", source_id: "assessor-owner", attributes: { owner_name: "OWNER LLC" } },
+    { id: "sale", source_id: "assessor-sales", event_date: "2021-01-01", attributes: { owner: "OWNER LLC" } },
+  ];
+  const ordered = orderDisplayRecords(rows, "ownership", asOf);
+  assert.deepEqual(ordered.map((row) => row.id), ["city", "assessor", "owner", "principal", "agent", "sale"]);
+  assert.equal(displayGroupCounts(ordered).owner_names, 2);
+  assert.equal(displayGroupCounts(ordered).owner_registry, 3);
+  assert.equal(displayGroupCounts(ordered).owner_history, 1);
+});
+
+test("municipal business records sort by published status without including owner LLC roles", () => {
+  const rows = [
+    { id: "void", source_id: "municipal-business-licenses", event_date: "2021-01-01", attributes: { status: "Void" } },
+    { id: "issued", source_id: "municipal-business-licenses", event_date: "2026-09-01", attributes: { status: "Issued", expiration_date: "2027-01-01" } },
+    { id: "occupant", source_id: "municipal-occupants", event_date: "2026-09-01", attributes: { inactive: false } },
   ];
   const ordered = orderDisplayRecords(rows, "business", asOf);
-  assert.deepEqual(ordered.map((row) => row.id), ["owner", "principal", "agent", "issued", "draft", "void"]);
-  assert.deepEqual(displayGroupCounts(ordered), {
-    owner_registry: 3, reported: 1, early: 1, older: 0, past: 1, unclassified: 0,
-  });
+  assert.deepEqual(ordered.map((row) => row.id), ["issued", "void", "occupant"]);
+  assert.deepEqual(ordered.map((row) => row.display_group.key), ["reported", "past", "unclassified"]);
 });
 
 test("activity keeps City categories under the same status section", () => {

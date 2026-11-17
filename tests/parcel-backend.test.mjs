@@ -7,7 +7,7 @@ import { parcelRecords, parcelTrashPickup, parcelFeed, parcelOverview, parcelGeo
 import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
-import { getSourceRecords } from "../parcel/adapters.js";
+import { getGroup, getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import sourcesRoute from "../api/v1/sources.js";
@@ -107,7 +107,8 @@ test("private access fails closed and signed cookies cannot be forged", async ()
   const attendance = coverage.sources.find((x) => x.id === "school-attendance");
   assert.equal(attendance.mode, "gap");
   assert.match(attendance.url, /newhavenmagnetschools\.com/);
-  assert.equal(coverage.groups.length, 6);
+  assert.equal(coverage.groups.length, 7);
+  assert(coverage.groups.some((group) => group.id === "ownership"));
   assert.equal("context_sources" in coverage, false);
   assert.ok(coverage.sources.every((source) => ![
     "census-block-2020", "ct-tract-2020-acs", "ct-transit-stops",
@@ -767,7 +768,7 @@ test("State owner lookup refuses two entities with the same official name and ad
 });
 
 test("matched official owner entity joins State principals and agent without labeling either the property owner", async () => {
-  const p = parcel(999050);
+  const p = parcel(999055);
   Object.assign(p.attributes, {
     owner_name_1: "990 STATE STREET ASSOCIATES  LLC",
     mail_address: "40 FOXON HILL RD UNIT 54", mail_city: "NEW HAVEN",
@@ -781,8 +782,9 @@ test("matched official owner entity joins State principals and agent without lab
   globalThis.fetch = async (input) => {
     const url = new URL(input);
     requested.push(url);
+    if (url.pathname.includes("Parcel_Viewer")) return response({ features: [p] });
     if (url.hostname === "gis.vgsi.com") return new Response(
-      '<span id="MainContent_lblPid">999050</span><span id="MainContent_lblOwner">990 STATE STREET ASSOCIATES LLC</span>',
+      '<span id="MainContent_lblPid">999055</span><span id="MainContent_lblOwner">990 STATE STREET ASSOCIATES LLC</span>',
       { headers: { "content-type": "text/html" } });
     if (url.pathname.endsWith("n7gp-d28j.json")) {
       assert.match(url.searchParams.get("$where"), /name = '990 STATE STREET ASSOCIATES, LLC'/);
@@ -814,6 +816,42 @@ test("matched official owner entity joins State principals and agent without lab
   assert.equal(requested.filter((url) => url.pathname.endsWith("n7gp-d28j.json")).length, 1);
   assert(requested.some((url) => url.pathname.endsWith("qh2m-n44y.json") &&
     url.searchParams.get("$where") === "business_key = 'state-entity-1'"));
+  const ownership = await getGroup("ownership", p);
+  assert(ownership.items.some((item) => item.source_id === "parcel-owner"));
+  assert(ownership.items.some((item) => item.source_id === "assessor-owner"));
+  assert.equal(ownership.items.find((item) => item.source_id === "parcel-owner").attributes.owner_name_1,
+    "990 STATE STREET ASSOCIATES LLC");
+  assert.match(ownership.items.find((item) => item.source_id === "parcel-owner").source_url,
+    /objectIds=999065/);
+  assert.equal(ownership.items.find((item) => item.source_id === "assessor-owner").attributes.owner_name,
+    "990 STATE STREET ASSOCIATES LLC");
+  assert(ownership.items.some((item) => item.source_id === "business-master"));
+  assert(ownership.items.some((item) => item.source_id === "business-principals"));
+  assert(ownership.items.some((item) => item.source_id === "business-agents"));
+  const business = await getGroup("business", p);
+  assert(business.items.every((item) =>
+    ["municipal-business-licenses", "municipal-occupants"].includes(item.source_id)));
+  assert(business.sources.every((source) => !source.source_id.startsWith("business-")));
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await recordsRoute.fetch(new Request(
+    "https://example.com/api/v1/records?parcel_id=999055&group=ownership",
+    { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const restData = await rest.json();
+  assert.deepEqual(restData.items.slice(0, 2).map((item) => item.source_id),
+    ["parcel-owner", "assessor-owner"]);
+  assert(restData.items.some((item) => item.source_id === "business-master"));
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 35, method: "tools/call",
+      params: { name: "get_parcel_records", arguments: { parcel_id: "999055", group: "ownership" } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const body = await mcp.text();
+  const payload = JSON.parse(body.startsWith("event:") ? body.match(/^data: (.+)$/m)?.[1] : body);
+  assert.deepEqual(payload.result.structuredContent, restData);
 });
 
 test("assessor card does not merge facts from multiple buildings", async () => {
@@ -1209,7 +1247,7 @@ test("overview keeps source gaps and links visible without raw source fields", a
     throw Error("Upstream unavailable");
   };
   const out = await parcelOverview("999007");
-  assert.equal(out.groups.length, 6);
+  assert.equal(out.groups.length, 7);
   const property = out.groups.find((group) => group.id === "property");
   assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "unavailable");
   assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);

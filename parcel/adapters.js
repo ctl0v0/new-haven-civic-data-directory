@@ -131,6 +131,26 @@ async function parcelRecord(parcel) {
   ]);
 }
 
+async function parcelOwnerRecords(parcel) {
+  const a = parcel.attributes;
+  if (!text(a.owner_name_1))
+    return unavailable("parcel-owner", "The selected City parcel did not publish an owner name.");
+  return result("parcel-owner", [record(a.objectid, "parcel-owner", {
+    owner_name_1: text(a.owner_name_1),
+    owner_name_2: text(a.owner_name_2),
+    mailing_street: text(a.mail_address),
+    mailing_city: text(a.mail_city),
+    mailing_state: text(a.mail_state),
+    mailing_zip: text(a.mail_zip),
+    property_address: text(a.property_address),
+    parcel_id: a.parcel_id,
+  }, {
+    match: "city-parcel-record",
+    sourceUrl: `${LAYERS.parcels}/query?${new URLSearchParams({ f: "json", objectIds: String(a.objectid), outFields: "*", returnGeometry: "false" })}`,
+    note: "Owner and mailing fields as published on the selected City GIS parcel; confirm title with the official land records.",
+  })]);
+}
+
 async function addressRecords(parcel) {
   const data = await arcgis(LAYERS.addresses, {
     ...polygonParams(parcel),
@@ -498,6 +518,22 @@ async function assessorRecord(parcel) {
       note: "Vision card fields are displayed as published; assessed values are not tax bills.",
     }),
   ]);
+}
+
+async function assessorOwnerRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { attributes, url } = await assessorData(parcel);
+  const owner = text(attributes.lblOwner);
+  if (!owner)
+    return unavailable("assessor-owner", "The verified assessor card did not publish a readable owner name.");
+  return result("assessor-owner", [record(id, "assessor-owner", {
+    owner_name: owner,
+    parcel_id: id,
+  }, {
+    match: "assessor-pid-exact",
+    sourceUrl: url,
+    note: "Owner name as published on the exact Vision assessor card; compare the City GIS owner field if they differ.",
+  })]);
 }
 
 async function assessorSubareaRecords(parcel) {
@@ -1348,9 +1384,11 @@ async function registryChildRecords(parcel, sourceId, dataset, joinField) {
 
 const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
+  "parcel-owner": parcelOwnerRecords,
   addresses: addressRecords,
   "trash-pickup": trashPickupRecords,
   assessor: assessorRecord,
+  "assessor-owner": assessorOwnerRecords,
   "assessor-subareas": assessorSubareaRecords,
   "assessor-sales": assessorSalesRecords,
   "assessor-valuations": assessorValuationRecords,

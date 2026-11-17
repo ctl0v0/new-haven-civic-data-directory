@@ -29,8 +29,28 @@ export const SOURCES = Object.freeze([
     directoryId: "gis-parcels",
   },
   {
+    id: "parcel-owner",
+    group: "ownership",
+    title: "City parcel owner name and mailing fields",
+    url: LAYERS.parcels,
+    mode: "live",
+    coverage:
+      "Owner and mailing fields published on the selected City GIS parcel. These are source fields, not an independent title determination.",
+    directoryId: "gis-parcels",
+  },
+  {
+    id: "assessor-owner",
+    group: "ownership",
+    title: "Assessor card owner name",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Owner name from the Vision assessor card after its PID matches this parcel. It may differ from the City GIS owner field and does not by itself establish a complete title chain.",
+    directoryId: "assessor",
+  },
+  {
     id: "assessor-sales",
-    group: "property",
+    group: "ownership",
     title: "Assessor ownership history",
     url: "https://gis.vgsi.com/newhavenct/",
     mode: "live",
@@ -256,7 +276,7 @@ export const SOURCES = Object.freeze([
   },
   {
     id: "business-master",
-    group: "business",
+    group: "ownership",
     title: "Connecticut registry entity for parcel owner LLC",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Business-Master/n7gp-d28j",
     mode: "live",
@@ -265,7 +285,7 @@ export const SOURCES = Object.freeze([
   },
   {
     id: "business-principals",
-    group: "business",
+    group: "ownership",
     title: "Connecticut registry principals of matched owner LLC",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Principals/ka36-64k6",
     mode: "live",
@@ -274,7 +294,7 @@ export const SOURCES = Object.freeze([
   },
   {
     id: "business-agents",
-    group: "business",
+    group: "ownership",
     title: "Connecticut registry agent for matched owner LLC",
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Agents/qh2m-n44y",
     mode: "live",
@@ -302,6 +322,7 @@ export const SOURCES = Object.freeze([
 
 export const GROUPS = Object.freeze([
   { id: "property", title: "Property and assessment" },
+  { id: "ownership", title: "Parcel ownership" },
   { id: "geography", title: "Zoning and boundaries" },
   { id: "environment", title: "Environmental records" },
   { id: "representation", title: "Representation" },

@@ -80,12 +80,13 @@ export async function parcelRecords(
   const data = await getGroup(group, feature);
   const ordered = orderDisplayRecords(data.items, group);
   const page = pageItems(ordered, cursor, limit);
-  const displayGroups = DISPLAY_GROUPS.filter(({ key }) => group === "business" || key !== "owner_registry");
+  const displayGroups = DISPLAY_GROUPS.filter(({ key }) =>
+    group === "ownership" ? key.startsWith("owner_") : !key.startsWith("owner_"));
   const counts = displayGroupCounts(ordered);
   return {
     ...data,
     ...page,
-    ...(["activity", "business"].includes(group) ? {
+    ...(["activity", "business", "ownership"].includes(group) ? {
       display_groups: displayGroups,
       display_group_counts: Object.fromEntries(displayGroups.map(({ key }) => [key, counts[key]])),
     } : {}),
@@ -150,7 +151,7 @@ export async function parcelFeed(
     ...page,
     ...(queryAddress ? { query_address: queryAddress } : {}),
     items: markAddressEvidence(page.items.map((item) =>
-      item.category || item.source_id === "lci-cases"
+      item.category || ["lci-cases", "assessor-sales"].includes(item.source_id)
         ? { ...item, display_group: displayGroup(item) } : item), queryAddress),
   };
 }

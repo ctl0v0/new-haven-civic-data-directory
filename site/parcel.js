@@ -1,7 +1,8 @@
 const $ = (id) => document.getElementById(id);
 const groups = [
-  ["property", "Building, ownership, and addresses", "City parcel facts, published assessor ownership history, and address points on the parcel."],
-  ["business", "Owner LLC and businesses in records", "Official State LLC registry records linked to the parcel owner when verified, plus municipal license and occupant rows. These do not confirm current tenants."],
+  ["property", "Building and addresses", "City parcel facts, assessment details, valuation rows, and address points on the parcel."],
+  ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, matched State LLC entity roles, and published assessor ownership history."],
+  ["business", "Businesses and occupants in records", "Municipal license and occupant rows associated with this parcel. The same LLC can also be named as owner; a license does not confirm that it occupies the building."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
@@ -9,10 +10,12 @@ const groups = [
 ];
 const sourceNames = {
   parcels: "City parcel layer",
+  "parcel-owner": "City parcel owner fields",
   addresses: "City address points",
   "trash-pickup": "City trash pickup zones",
   "school-attendance": "NHPS attendance-zone schools",
   assessor: "Assessor card",
+  "assessor-owner": "Assessor card owner",
   "assessor-sales": "Assessor ownership history",
   "assessor-valuations": "Assessor valuation history",
   "assessor-subareas": "Assessor building subareas",
@@ -22,7 +25,7 @@ const sourceNames = {
   municity: "Municipal parcel service",
   "municipal-business-licenses": "Municipal licenses",
   "municipal-occupants": "Municipal occupants",
-  "business-master": "CT business registry",
+  "business-master": "CT registry: owner LLC",
   "business-principals": "CT owner LLC principals",
   "business-agents": "CT owner LLC agent",
   "state-licenses": "CT credentials",
@@ -138,6 +141,8 @@ function recordTitle(item) {
   if (item.source_id === "zoning")
     return a.zone_code ? `Zoning district ${a.zone_code}` : "City zoning polygon";
   if (item.source_id === "assessor") return "Assessor building and land facts";
+  if (item.source_id === "parcel-owner") return a.owner_name_1 ?? "City parcel owner name";
+  if (item.source_id === "assessor-owner") return a.owner_name ?? "Assessor owner name";
   if (item.source_id === "cmt-contacts")
     return `CMT contacts · ${a.district_name ?? a.district_num ?? item.source_record_id}`;
   if (item.source_id === "ct-brownfields") return a.site_name ?? "DEEP inventory site";
@@ -370,7 +375,7 @@ function appendDisplayRecord(parent, item) {
   let section = targets.sections.get(key);
   if (!section) {
     const definition = targets.definitions.get(key);
-    const collapsed = ["older", "past", "unclassified"].includes(key);
+    const collapsed = ["owner_history", "older", "past", "unclassified"].includes(key);
     const container = el(collapsed ? "details" : "section", null, `display-section display-${key}`);
     const heading = el(collapsed ? "summary" : "div", null, "display-section-heading");
     heading.append(el(collapsed ? "strong" : "h3", definition?.title ?? "Status not established"));
@@ -480,15 +485,6 @@ function renderSnapshot() {
       }
       building.append(list);
     }
-    const sales = property.items
-      .filter((item) => item.source_id === "assessor-sales")
-      .sort((a, b) => String(b.event_date ?? "").localeCompare(String(a.event_date ?? "")));
-    if (sales.length) {
-      const latest = sales[0];
-      building.append(el("p", "Latest published ownership row", "snapshot-label"));
-      building.append(el("p", [latest.attributes.owner, latest.event_date ? shortDate(latest.event_date) : null, latest.attributes.sale_price].filter(Boolean).join(" · ")));
-      building.append(el("p", `${sales.length} ownership history ${sales.length === 1 ? "row" : "rows"} returned by the assessor.`, "meta"));
-    }
     const addresses = [...new Set(property.items
       .filter((item) => item.source_id === "addresses")
       .map((item) => recordTitle(item))
@@ -518,16 +514,45 @@ function renderSnapshot() {
     building.append(el("p", "Address points are spatial links; occupancy is not verified.", "snapshot-caveat"));
   }
 
+  const ownership = groupResponses.get("ownership");
+  const owner = snapshotCard("Parcel owner in records", "ownership");
+  if (!ownership) owner.append(el("p", "Checking City, assessor, and State owner records…", "meta"));
+  else {
+    const cityOwner = ownership.items.find((item) => item.source_id === "parcel-owner");
+    const assessorOwner = ownership.items.find((item) => item.source_id === "assessor-owner");
+    const ownerEntity = ownership.items.find((item) => item.source_id === "business-master");
+    const sales = ownership.items.filter((item) => item.source_id === "assessor-sales");
+    if (cityOwner) {
+      owner.append(el("p", "City GIS parcel owner", "snapshot-label"));
+      owner.append(el("p", cityOwner.attributes.owner_name_1));
+    }
+    if (assessorOwner) {
+      owner.append(el("p", "Assessor card owner", "snapshot-label"));
+      owner.append(el("p", assessorOwner.attributes.owner_name));
+    }
+    if (ownerEntity) {
+      owner.append(el("p", "Matched State LLC", "snapshot-label"));
+      owner.append(el("p", `${ownerEntity.attributes.legal_name} · registry status ${ownerEntity.attributes.registry_status ?? "not supplied"}`));
+    }
+    if (sales.length) {
+      const latest = sales[0];
+      owner.append(el("p", "Latest published ownership row", "snapshot-label"));
+      owner.append(el("p", [latest.attributes.owner, latest.event_date ? shortDate(latest.event_date) : null, latest.attributes.sale_price].filter(Boolean).join(" · ")));
+      owner.append(el("p", `${ownership.display_group_counts?.owner_history ?? sales.length} assessor ownership history rows returned.`, "meta"));
+    }
+    if (!cityOwner && !assessorOwner && !ownerEntity && !sales.length)
+      owner.append(el("p", "No owner row was returned by the checked sources. Review source coverage below."));
+    owner.append(el("p", "An LLC principal or registered agent is a State registry role, not proof of direct real estate ownership.", "snapshot-caveat"));
+  }
+
   const business = groupResponses.get("business");
-  const businesses = snapshotCard("Business names in records", "business");
+  const businesses = snapshotCard("Businesses named in City records", "business");
   if (!business) businesses.append(el("p", "Loading business records…", "meta"));
   else {
-    const ownerEntity = business.items.find((item) => item.source_id === "business-master");
-    if (ownerEntity) businesses.append(el("p", `City-listed owner LLC: ${recordTitle(ownerEntity)}. State entity status: ${ownerEntity.attributes.registry_status ?? "not supplied"}.`, "meta"));
     const named = business.items
       .filter((item) => ["municipal-business-licenses", "municipal-occupants"].includes(item.source_id))
       .filter((item) => item.attributes?.business_name || item.attributes?.occupant_name);
-    if (!named.length) businesses.append(el("p", "No named business record was returned by checked sources."));
+    if (!named.length) businesses.append(el("p", "No municipal business or occupant name was returned by checked sources."));
     else {
       businesses.append(el("p", `${named.length} named municipal business records returned. Names and inactive flags are shown as published.`, "meta"));
       const list = el("ul", null, "snapshot-list");
@@ -829,7 +854,7 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       for (const source of data.sources) sourceLine(sourceList, source);
       coverage.append(sourceList);
       section.append(coverage);
-      const grouped = id === "activity" || id === "business";
+      const grouped = ["activity", "business", "ownership"].includes(id);
       const records = el("div", null, grouped ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
       section.append(records);
@@ -839,7 +864,7 @@ async function loadGroup(id, section, qs, version, cursor = null) {
     }
     const records = $(`records-${id}`);
     for (const item of data.items) {
-      if (id === "activity" || id === "business") appendDisplayRecord(records, item);
+      if (["activity", "business", "ownership"].includes(id)) appendDisplayRecord(records, item);
       else appendRecord(records, item);
     }
     if (data.next_cursor) {
