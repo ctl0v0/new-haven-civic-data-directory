@@ -2,9 +2,11 @@ import { GROUPS, SOURCES } from "./config.js";
 import { cached, SourceError } from "./http.js";
 import { loadParcel, resolveParcel } from "./resolve.js";
 import { parcelFeatureToGeoJSON } from "./geometry.js";
+import { parcelMapContext } from "./map-context.js";
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
 
 export { resolveParcel };
+export { parcelMapContext };
 
 export async function parcelGeometry(id, objectid = null) {
   return parcelFeatureToGeoJSON(await loadParcel(id, objectid));

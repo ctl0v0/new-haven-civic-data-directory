@@ -6,6 +6,7 @@ import {
   resolveParcel,
   parcelSummary,
   parcelGeometry,
+  parcelMapContext,
   parcelOverview,
   parcelRecords,
   parcelFeed,
@@ -84,6 +85,14 @@ export function createServer() {
     "Return the selected City parcel boundary as GeoJSON, with source and parcel identifiers. The boundary is not a building footprint.",
     z.object(common),
     ({ parcel_id, objectid }) => parcelGeometry(parcel_id, objectid),
+  );
+  tool(
+    server,
+    "get_parcel_map_context",
+    "Get parcel map context",
+    "Return official mapped features on the selected parcel and nearby access features within 400 metres. Nearby features are not parcel records.",
+    z.object(common),
+    ({ parcel_id, objectid }) => parcelMapContext(parcel_id, objectid),
   );
   tool(
     server,

@@ -41,6 +41,7 @@ Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed b
 | `POST /api/v1/resolve` with JSON `{"query":"165 Church Street"}` | Resolve to zero, one, or multiple official parcel candidates. |
 | `GET /api/v1/parcel?parcel_id=...&objectid=...` | Selected parcel identity and available groups. |
 | `GET /api/v1/geometry?parcel_id=...&objectid=...` | Verified selected parcel boundary as a GeoJSON Feature, with bounding box, source link and identifiers. |
+| `GET /api/v1/map-context?parcel_id=...&objectid=...` | Official mapped features on the parcel plus nearby access features, each with a source, status and GeoJSON geometry. |
 | `GET /api/v1/overview?parcel_id=...&objectid=...` | Compact counts, source statuses and five recent dated record references. |
 | `GET /api/v1/records?parcel_id=...&objectid=...&group=property&limit=25&cursor=...` | One grouped, paginated page of source records and source statuses. |
 | `GET /api/v1/feed?parcel_id=...&objectid=...&limit=25&cursor=...` | Dated source records, newest first. |
@@ -50,7 +51,7 @@ Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed b
 
 ## MCP
 
-`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers `resolve_parcel`, `get_parcel`, `get_parcel_geometry`, `get_parcel_overview`, `get_parcel_records`, `get_parcel_feed`, and `list_sources`, plus source-coverage and matching-method resources. Start with `resolve_parcel`, then `get_parcel_overview`; request geometry or one record group only when needed. The geometry tool returns the same GeoJSON Feature as REST. The MCP tools call the same service as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <individual pilot token>` on each request. Keep this token in the client's private secret store.
+`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers `resolve_parcel`, `get_parcel`, `get_parcel_geometry`, `get_parcel_map_context`, `get_parcel_overview`, `get_parcel_records`, `get_parcel_feed`, and `list_sources`, plus source-coverage and matching-method resources. Start with `resolve_parcel`, then `get_parcel_overview`; request geometry, map context or one record group only when needed. The geometry and map context tools return the same data as REST. The MCP tools call the same service as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <individual pilot token>` on each request. Keep this token in the client's private secret store.
 
 ## Source coverage
 
@@ -65,7 +66,9 @@ The machine-readable catalog is published in `dist/parcel-source-catalog.json` a
 | Activity | Live municipal parcel documents, applications, complaints, contacts, licenses, occupants, permits and certificates; LCI Case HQ case metadata; LCI managed lots | Municipal complaint narratives and personal contact fields are omitted. Planning cases, LCI licensing, and other inspection or enforcement feeds need a verified parcel join. |
 | Business | Named municipal license and occupant rows attached to the Municity parcel reached by verified MBLU | State registry, principal and credential records lack a verified parcel identifier. Source-reported names and inactive flags do not establish current occupancy. |
 
-Meetings, agendas and legislation, budgets and monthly finance reports, census and transit area context, and records on nearby parcels are outside this pilot's scope. CMT meeting schedules are not collected.
+Meetings, agendas and legislation, budgets and monthly finance reports, census area context, and records on nearby parcels are outside this pilot's parcel record scope. City hosted transit stops are available only as separately labeled nearby map context. CMT meeting schedules are not collected.
+
+The parcel map uses the selected City parcel polygon. Separate map context layers show City address points and zoning and historic district polygons intersecting that parcel, plus City hosted CT Transit stops and greenway segments within 400 metres in a straight line from the center of the parcel's mapped extent. The City greenway layer publishes statuses including Existing, Funded, In Construction, and Planned; those are source labels, not a promise of future work. Each layer reports its source and last edit date when the service publishes one. A failed layer is `unavailable`, not an empty result. These features are not added to parcel record groups or the timeline. The City publishes [parking maps](https://www.newhavenct.gov/government/departments-divisions/transportation-traffic-parking/resources/maps), but no current machine-readable City or State loading-zone or parking-availability layer has been verified for this pilot. Neither loading-zone markers nor available-space claims are drawn.
 
 CMT districts are resolved at request time by intersecting the official parcel geometry with the city's CMT district FeatureServer. Every intersecting district is returned; overlapping districts are marked partial rather than selecting one. The same city GIS layer provides manager, neighborhood specialist and chair contact fields. Those contacts are marked provisional because the city's CMT webpage can differ from the GIS layer. No district shapes or contact roster is stored in this project.
 

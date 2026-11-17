@@ -32,8 +32,12 @@ const app = `
   </section>
   <section id="parcel-map-section" class="map-panel" aria-labelledby="parcel-map-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Mapped parcel</p><h2 id="parcel-map-title">City parcel boundary</h2></div><p>The outline is a parcel boundary, not a building footprint.</p></div>
-    <div id="parcel-map" role="region" aria-label="Map of the selected city parcel" tabindex="0" hidden></div>
+    <div class="map-workspace">
+      <div id="parcel-map" role="region" aria-label="Map of the selected city parcel" tabindex="0" hidden></div>
+      <div class="map-layers"><h3>Map layers</h3><p class="meta">Parcel facts and nearby street context are separate.</p><div id="map-layer-list" aria-live="polite"></div></div>
+    </div>
     <p id="parcel-map-status" class="map-status" role="status" aria-live="polite"></p>
+    <div id="map-context-notes" class="map-context-notes"></div>
     <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Background: <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. The imagery does not show current occupancy or conditions.</p>
   </section>
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>

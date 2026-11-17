@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelFeed, parcelOverview, parcelGeometry } from "../parcel/service.js";
+import { parcelRecords, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
 import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
@@ -11,6 +11,7 @@ import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
 import geometryRoute from "../api/v1/geometry.js";
+import mapContextRoute from "../api/v1/map-context.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -1143,4 +1144,65 @@ test("geometry never publishes absent or projected parcel coordinates", async ()
     "https://example.com/api/v1/geometry?parcel_id=999050", { headers: auth },
   ));
   assert.equal(projected.status, 502);
+});
+
+test("map context keeps official parcel and nearby layers separate with REST and MCP parity", async () => {
+  const id = 999051;
+  const center = [-72.925, 41.305];
+  const point = (x, y, attributes) => ({ attributes, geometry: { x, y, spatialReference: { wkid: 4326 } } });
+  const line = (points, attributes) => ({ attributes, geometry: { paths: [points], spatialReference: { wkid: 4326 } } });
+  const zone = { attributes: { OBJECTID: 70, zone_code: "BA", district_category: "Business" }, geometry: polygon };
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (!url.pathname.endsWith("/query"))
+      return response({ editingInfo: { lastEditDate: Date.UTC(2026, 3, 15) } });
+    if (url.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(id)], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("Addresses_"))
+      return response({ features: [point(...center, { objectid: 22, house_number: "165", full_street_name: "CHURCH ST" })], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("Zoning_"))
+      return response({ features: [zone], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("New_Haven_Local_Historic_Districts"))
+      return response({ features: [], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("New_Haven_State_Historic_Districts"))
+      return new Response("unavailable", { status: 503 });
+    if (url.pathname.includes("CT_Transit_New_Haven_Bus_Stops"))
+      return response({ features: [
+        point(...center, { OBJECTID: 1, StopName: "Church Street", InService: 1 }),
+        point(-72.90, 41.32, { OBJECTID: 2, StopName: "Far away" }),
+      ], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("Greenways_Status"))
+      return response({ features: [
+        line([[-72.926, 41.304], [-72.924, 41.306]], { OBJECTID: 3, Name: "Canal route", Status: "Planned" }),
+        line([[-72.90, 41.32], [-72.89, 41.33]], { OBJECTID: 4, Name: "Far route", Status: "Existing" }),
+      ], spatialReference: { wkid: 4326 } });
+    throw Error(`Unexpected map source: ${url.pathname}`);
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const url = `https://example.com/api/v1/map-context?parcel_id=${id}`;
+  assert.equal((await mapContextRoute.fetch(new Request(url))).status, 401);
+  const rest = await mapContextRoute.fetch(new Request(url, { headers: auth }));
+  assert.equal(rest.status, 200);
+  const context = await rest.json();
+  assert.equal(context.nearby_radius_m, 400);
+  assert.equal(context.layers.length, 6);
+  assert.equal(context.layers.find((layer) => layer.id === "parcel-addresses").features[0].properties.house_number, "165");
+  assert.equal(context.layers.find((layer) => layer.id === "transit-stops").features.length, 1);
+  assert.equal(context.layers.find((layer) => layer.id === "greenways").features[0].properties.Status, "Planned");
+  assert.equal(context.layers.find((layer) => layer.id === "local-historic").status, "no_records");
+  assert.equal(context.layers.find((layer) => layer.id === "state-historic").status, "unavailable");
+  assert.equal(context.layers.find((layer) => layer.id === "zoning").source_updated_at, "2026-04-15");
+  assert.ok(context.gaps.some((gap) => gap.id === "loading-zones"));
+  assert.doesNotMatch(JSON.stringify(context.layers), /loading.zone|parking.available/i);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 6, method: "tools/call",
+      params: { name: "get_parcel_map_context", arguments: { parcel_id: String(id) } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, context);
+  assert.deepEqual(await parcelMapContext(String(id)), context);
 });

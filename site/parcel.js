@@ -38,6 +38,14 @@ let searchedAddress = "";
 const groupResponses = new Map();
 let parcelMap = null;
 const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
+const MAP_COLORS = {
+  "parcel-addresses": "#dc5c32",
+  zoning: "#195e9d",
+  "local-historic": "#ac5592",
+  "state-historic": "#7d5ac7",
+  "transit-stops": "#2476ba",
+  greenways: "#23865d",
+};
 async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
   const body = await r
@@ -76,6 +84,8 @@ function resetMap() {
   $("parcel-map").hidden = true;
   $("parcel-map-section").hidden = true;
   $("parcel-map-status").textContent = "";
+  $("map-layer-list").replaceChildren();
+  $("map-context-notes").replaceChildren();
 }
 function shortDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "")) return value ?? "";
@@ -162,6 +172,29 @@ function recordDescription(item) {
     return [a.occupancy_type, a.recorded_address, a.inactive === true ? "Marked inactive" : null].filter(Boolean).join(" · ");
   return brief(a.Description ?? a.description ?? a.complaint_type ?? a.document_type ?? a.PermitType ?? a.ApplicationType ?? a.section ?? "", 190);
 }
+function fieldLabel(key) {
+  return key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ")
+    .replace(/\s+/g, " ").trim().replace(/^./, (first) => first.toUpperCase());
+}
+function sourceFields(value, prefix = "") {
+  const fields = [];
+  for (const [key, entry] of Object.entries(value ?? {})) {
+    const label = prefix ? `${prefix} · ${fieldLabel(key)}` : fieldLabel(key);
+    if (entry && typeof entry === "object" && !Array.isArray(entry))
+      fields.push(...sourceFields(entry, label));
+    else fields.push([label, entry == null ? "Not provided" :
+      typeof entry === "object" ? JSON.stringify(entry) : String(entry)]);
+  }
+  return fields;
+}
+function fieldList(entries, className = "record-fields") {
+  const list = el("dl", null, className);
+  for (const [name, value] of entries) {
+    list.append(el("dt", name));
+    list.append(el("dd", value));
+  }
+  return list;
+}
 function matchEvidence(item) {
   const match = item.match;
   if (match?.method !== "exact" || !match.parcel_field || !match.source_field || !match.value)
@@ -171,29 +204,38 @@ function matchEvidence(item) {
 }
 function appendRecord(parent, item) {
   const card = el("article", null, "record-card");
+  const aside = el("div", null, "record-aside");
+  aside.append(el("span", item.category ?? sourceName(item.source_id), "record-kind"));
+  aside.append(el("span", sourceName(item.source_id), "record-source-name"));
+  if (item.event_date) aside.append(el("time", shortDate(item.event_date), "record-date"));
+  card.append(aside);
+  const body = el("div", null, "record-body");
   const head = el("div", null, "record-head");
   head.append(el("h3", recordTitle(item)));
   const state = recordStatus(item);
   if (state) head.append(el("span", brief(state, 45), "status-pill"));
-  card.append(head);
-  card.append(el("p", [item.category, sourceName(item.source_id), item.attributes?.period, item.event_date ? shortDate(item.event_date) : null].filter(Boolean).join(" · "), "record-meta"));
+  body.append(head);
+  if (item.attributes?.period) body.append(el("p", item.attributes.period, "record-meta"));
   const description = recordDescription(item);
-  if (description) card.append(el("p", description, "record-description"));
+  if (description) body.append(el("p", description, "record-description"));
+  const preview = sourceFields(item.attributes)
+    .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
+    .slice(0, 4);
+  if (preview.length) body.append(fieldList(preview));
   const evidence = matchEvidence(item);
-  if (evidence) card.append(el("p", evidence, "record-note"));
-  if (item.note) card.append(el("p", item.note, "record-note"));
+  if (evidence) body.append(el("p", evidence, "record-note"));
+  if (item.note) body.append(el("p", item.note, "record-note"));
   const actions = el("div", null, "record-actions");
   if (item.source_url) actions.append(link(item.source_url, item.category === "Document" && item.source_url.includes("municitymedia.com") ? "Open document" : "Open source"));
   const details = el("details", null, "source-fields");
-  details.append(el("summary", "View source fields"));
-  const pre = el("pre");
-  details.append(pre);
+  details.append(el("summary", "All source fields"));
   details.addEventListener("toggle", () => {
-    if (details.open && !pre.textContent)
-      pre.textContent = JSON.stringify(item.attributes, null, 2);
+    if (details.open && !details.querySelector("dl"))
+      details.append(fieldList(sourceFields(item.attributes), "record-fields all-fields"));
   });
   actions.append(details);
-  card.append(actions);
+  body.append(actions);
+  card.append(body);
   parent.append(card);
 }
 function sourceLine(parent, source) {
@@ -515,8 +557,15 @@ async function loadMap(qs, version) {
     }).addTo(map);
     const bounds = casing.getBounds();
     if (!bounds.isValid()) throw Error("Parcel boundary has no map extent");
-    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 20 });
+    const center = bounds.getCenter();
+    const latOffset = 400 / 111195;
+    const lonOffset = latOffset / Math.cos(center.lat * Math.PI / 180);
+    map.fitBounds([
+      [center.lat - latOffset, center.lng - lonOffset],
+      [center.lat + latOffset, center.lng + lonOffset],
+    ], { padding: [18, 18], maxZoom: 18 });
     leaflet.control.scale({ metric: false, imperial: true }).addTo(map);
+    await loadMapContext(map, qs, version);
   } catch (error) {
     if (version !== viewVersion) return;
     if (parcelMap) {
@@ -525,6 +574,95 @@ async function loadMap(qs, version) {
     }
     $("parcel-map").hidden = true;
     $("parcel-map-status").textContent = `Could not show the parcel map: ${error.message}`;
+  }
+}
+function mapFeatureTitle(feature, layerId) {
+  const p = feature.properties ?? {};
+  if (layerId === "parcel-addresses") return `${p.house_number ?? ""} ${p.full_street_name ?? ""}`.trim() || "City address point";
+  if (layerId === "zoning") return p.zone_code ? `Zoning ${p.zone_code}` : "City zoning district";
+  if (layerId === "local-historic" || layerId === "state-historic")
+    return p.HistoricDistrict ?? p.historicdistrict ?? "Historic district";
+  if (layerId === "transit-stops") return p.StopName ?? "CT Transit stop";
+  if (layerId === "greenways") return p.Name ?? p.Greenway ?? "Greenway segment";
+  return "Mapped feature";
+}
+function mapFeaturePopup(feature, layer) {
+  const popup = el("div", null, "map-popup");
+  popup.append(el("strong", mapFeatureTitle(feature, layer.id)));
+  const fields = Object.entries(feature.properties ?? {})
+    .filter(([key, value]) => !["source_id", "source_record_id", "source_url", "scope"].includes(key) && value != null && value !== "")
+    .slice(0, 5);
+  if (fields.length) popup.append(fieldList(fields.map(([key, value]) => [fieldLabel(key), String(value)])));
+  if (feature.properties?.source_url) popup.append(link(feature.properties.source_url, "Open City source"));
+  popup.append(el("p", layer.scope === "nearby"
+    ? "Nearby map context; not linked to the parcel."
+    : layer.id === "parcel-addresses"
+      ? "City address point; not a verified entrance."
+      : "Mapped district intersects the selected parcel.", "meta"));
+  return popup;
+}
+function mapFeatureLayer(layer) {
+  const color = MAP_COLORS[layer.id] ?? "#315e4e";
+  return window.L.geoJSON({ type: "FeatureCollection", features: layer.features }, {
+    style: (feature) => ({
+      color: layer.id === "greenways" && feature.properties?.Status === "Planned" ? "#a35e2e" : color,
+      weight: layer.id === "greenways" ? 4 : 3,
+      dashArray: layer.id === "greenways" && feature.properties?.Status !== "Existing" ? "5 5" : null,
+      fillOpacity: 0.04,
+    }),
+    pointToLayer: (_feature, latlng) => window.L.circleMarker(latlng, {
+      radius: layer.id === "parcel-addresses" ? 6 : 5,
+      color: "#fff", weight: 2, fillColor: color, fillOpacity: 1,
+    }),
+    onEachFeature: (feature, leafletLayer) => leafletLayer.bindPopup(mapFeaturePopup(feature, layer)),
+  });
+}
+async function loadMapContext(map, qs, version) {
+  const list = $("map-layer-list");
+  list.replaceChildren(el("p", "Loading official map layers…", "meta"));
+  try {
+    const context = await api(`/api/v1/map-context?${qs}`);
+    if (version !== viewVersion || map !== parcelMap) return;
+    list.replaceChildren();
+    for (const layer of context.layers) {
+      const row = el("div", null, "map-layer-row");
+      const title = el("label", null, "map-layer-toggle");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.disabled = !layer.features.length;
+      checkbox.checked = layer.features.length > 0 &&
+        ["parcel-addresses", "zoning", "transit-stops"].includes(layer.id);
+      const swatch = el("span", null, "map-layer-swatch");
+      swatch.style.backgroundColor = MAP_COLORS[layer.id] ?? "#315e4e";
+      swatch.setAttribute("aria-hidden", "true");
+      const name = el("span", layer.title);
+      title.append(checkbox, swatch, name);
+      row.append(title);
+      row.append(el("p", `${layer.scope === "nearby" ? "Nearby · " : "On parcel · "}${layer.features.length} mapped · ${layer.status.replaceAll("_", " ")}`, "map-layer-meta"));
+      if (layer.source_updated_at)
+        row.append(el("p", `Source data last edited ${shortDate(layer.source_updated_at)}`, "map-layer-meta"));
+      else row.append(el("p", "Source update date unavailable", "map-layer-meta"));
+      if (layer.warning) row.append(el("p", layer.warning, "map-layer-warning"));
+      row.append(link(layer.source_url, "Open City GIS layer"));
+      list.append(row);
+      if (!layer.features.length) continue;
+      const rendered = mapFeatureLayer(layer);
+      if (checkbox.checked) rendered.addTo(map);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) rendered.addTo(map);
+        else map.removeLayer(rendered);
+      });
+    }
+    const notes = $("map-context-notes");
+    notes.replaceChildren();
+    notes.append(el("p", `Nearby layers cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.`, "meta"));
+    const gaps = el("p", null, "meta");
+    gaps.append(document.createTextNode("Loading zones and current parking availability are not mapped: no verified City or State GIS feed has been connected. "));
+    gaps.append(link(context.gaps?.[0]?.source_url, "See City parking maps"));
+    notes.append(gaps);
+  } catch (error) {
+    if (version !== viewVersion) return;
+    list.replaceChildren(el("p", `Map context unavailable: ${error.message}. The selected parcel boundary remains visible.`, "map-layer-warning"));
   }
 }
 async function loadGroup(id, section, qs, version, cursor = null) {
