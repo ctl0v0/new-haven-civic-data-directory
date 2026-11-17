@@ -16,26 +16,36 @@ export default {
   async fetch(request) {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
-    const parcel = await loadParcel(11236, 979);
+    const parcelId = new URL(request.url).searchParams.get("sample") === "10386" ? 10386 : 11236;
+    const parcel = await loadParcel(parcelId, parcelId === 11236 ? 979 : null);
     const assessor = await getSourceRecords("assessor", parcel);
     const fields = assessor.items[0]?.attributes ?? {};
-    const owner = fields.lblOwner ?? null;
-    const metadata = Object.fromEntries(await Promise.all(Object.entries(datasets).map(async ([key, id]) => {
-      const result = await checked(fetchJson(`https://data.ct.gov/api/views/${id}.json`, { timeout: 10000 }));
-      return [key, result.ok ? { columns: result.value.columns?.map((column) => column.fieldName) } : result];
-    })));
+    const owner = fields.lblOwner ?? "CLAY ST LLC";
     const query = new URLSearchParams({
-      $where: `upper(name) = '${String(owner ?? "").toUpperCase().replaceAll("'", "''")}'`,
-      $limit: "11",
+      $select: "id,name,accountnumber,business_type,status,billingstreet,billingcity,billingpostalcode",
+      $where: `name = '${owner.replaceAll("'", "''")}'`,
+      $limit: "6",
     });
-    const matches = await checked(fetchJson(`https://data.ct.gov/resource/${datasets.master}.json?${query}`, { timeout: 10000 }));
+    const matches = await checked(fetchJson(`https://data.ct.gov/resource/${datasets.master}.json?${query}`, { timeout: 16000 }));
+    const id = matches.ok && matches.value.length === 1 ? matches.value[0].id : null;
+    const related = id ? await Promise.all([datasets.principals, datasets.agents].map(async (dataset, index) => {
+      const where = `${index === 0 ? "business_id" : "business_key"} = '${id.replaceAll("'", "''")}'`;
+      return checked(fetchJson(`https://data.ct.gov/resource/${dataset}.json?${new URLSearchParams({ $where: where, $limit: "11" })}`, { timeout: 12000 }));
+    })) : null;
     return Response.json({
-      parcel_id: 11236,
-      assessor_owner: owner,
+      parcel_id: parcelId,
+      assessor_status: assessor.status,
+      assessor_warning: assessor.warning,
+      assessor_owner: fields.lblOwner ?? null,
       assessor_address_fields: Object.fromEntries(Object.entries(fields).filter(([key]) => /address|city|state|zip|mail/i.test(key))),
-      metadata,
+      city_owner_fields: Object.fromEntries(Object.entries(parcel.attributes).filter(([key]) => /owner|mail/i.test(key))),
+      state_name_query: owner,
       master_match: matches.ok ? matches.value.map(({ id, name, accountnumber, business_type, status, billingstreet, billingcity, billingpostalcode }) =>
         ({ id, name, accountnumber, business_type, status, billingstreet, billingcity, billingpostalcode })) : matches,
+      principals: related?.[0]?.ok ? related[0].value.map(({ business_id, name__c, designation, business_street_address_1, business_city, business_state }) =>
+        ({ business_id, name__c, designation, business_street_address_1, business_city, business_state })) : related?.[0] ?? null,
+      agents: related?.[1]?.ok ? related[1].value.map(({ business_key, name__c, type, agent_phone, email, business_address }) =>
+        ({ business_key, name__c, type, agent_phone, email, business_address })) : related?.[1] ?? null,
     }, { headers: { "Cache-Control": "private, no-store" } });
   },
 };
