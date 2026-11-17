@@ -418,9 +418,22 @@ function renderSnapshot() {
       .sort((a, b) => String(b.attributes?.valuation_year ?? "").localeCompare(String(a.attributes?.valuation_year ?? "")));
     if (currentValues.length) {
       building.append(el("p", "Current assessor valuation rows", "snapshot-label"));
-      building.append(el("p", currentValues.map((item) =>
-        `${item.attributes.valuation_year} ${item.attributes.valuation_type}: ${item.attributes.total ?? "not listed"}`,
-      ).join(" · ")));
+      const list = el("ul", null, "snapshot-list valuation-list");
+      for (const item of currentValues) {
+        const a = item.attributes;
+        const row = el("li");
+        row.append(el("strong", `${a.valuation_year ?? "Year not listed"} · ${fieldLabel(a.valuation_type ?? "valuation")}`));
+        const amounts = el("dl", null, "valuation-values");
+        for (const [label, value] of [["Land", a.land], ["Improvements", a.improvements], ["Total", a.total]]) {
+          const entry = el("div");
+          entry.append(el("dt", label));
+          entry.append(el("dd", value ?? "Not listed"));
+          amounts.append(entry);
+        }
+        row.append(amounts);
+        list.append(row);
+      }
+      building.append(list);
     }
     const sales = property.items
       .filter((item) => item.source_id === "assessor-sales")

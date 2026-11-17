@@ -321,6 +321,9 @@ main { max-width: 82rem; }
 .snapshot-card p { margin: .25rem 0 .6rem; }
 .snapshot-card .snapshot-link { margin: .1rem 0; text-align: right; }
 .snapshot-list li { border-top: 1px dotted #d2ded5; }
+.valuation-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem .8rem; margin: .35rem 0 0; font-variant-numeric: tabular-nums; }
+.valuation-values dt { color: #577064; font-size: .75rem; font-weight: 650; }
+.valuation-values dd { margin: .15rem 0 0; font-size: .87rem; font-weight: 650; overflow-wrap: anywhere; }
 .record-groups .panel { border: 0; border-top: 2px solid #173e35; border-radius: 0; background: transparent; padding: 1.3rem 0; margin: 2rem 0; }
 .sources-panel { border: 0; border-top: 1px solid #d4e0d6; border-bottom: 1px solid #d4e0d6; border-radius: 0; background: transparent; }
 .sources-panel > summary { padding: .6rem 0; }
@@ -345,4 +348,4 @@ main { max-width: 82rem; }
 .timeline-entry { border-top: 1px solid #dce6de; }
 .timeline-note { border-radius: 0; }
 @media (max-width: 64rem) { .map-workspace { grid-template-columns: minmax(0, 1fr) 17rem; } .snapshot-card { grid-template-columns: 9rem minmax(0, 1fr) 7rem; } }
-@media (max-width: 48rem) { .map-workspace { grid-template-columns: 1fr; } .map-layers { border-left: 0; border-top: 1px solid #cbdacf; padding: .8rem 0 0; max-height: none; } .snapshot-card { grid-template-columns: 1fr; gap: .3rem; } .snapshot-card .snapshot-link { text-align: left; } .record-card { grid-template-columns: 1fr; gap: .5rem; } .record-aside { flex-direction: row; flex-wrap: wrap; gap: .15rem .6rem; } .record-fields { grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr); } }
+@media (max-width: 48rem) { .map-workspace { grid-template-columns: 1fr; } .map-layers { border-left: 0; border-top: 1px solid #cbdacf; padding: .8rem 0 0; max-height: none; } .snapshot-card { grid-template-columns: 1fr; gap: .3rem; } .snapshot-card .snapshot-link { text-align: left; } .record-card { grid-template-columns: 1fr; gap: .5rem; } .record-aside { flex-direction: row; flex-wrap: wrap; gap: .15rem .6rem; } .record-fields { grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr); } .valuation-values { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
