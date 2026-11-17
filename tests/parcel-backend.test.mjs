@@ -3,12 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelFeed, parcelOverview, parcelContext } from "../parcel/service.js";
+import { parcelRecords, parcelFeed, parcelOverview } from "../parcel/service.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
-import contextRoute from "../api/v1/context.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -95,7 +94,14 @@ test("private access fails closed and signed cookies cannot be forged", async ()
     }),
   );
   assert.equal(allowed.status, 200);
-  assert.ok((await allowed.json()).sources.some((x) => x.id === "municity"));
+  const coverage = await allowed.json();
+  assert.ok(coverage.sources.some((x) => x.id === "municity"));
+  assert.equal(coverage.groups.length, 6);
+  assert.equal("context_sources" in coverage, false);
+  assert.ok(coverage.sources.every((source) => ![
+    "census-block-2020", "ct-tract-2020-acs", "ct-transit-stops",
+    "nearby-municipal-business", "complete-streets", "service-requests",
+  ].includes(source.id)));
 });
 
 test("invited keys can be revoked without a parcel database", () => {
@@ -850,7 +856,7 @@ test("overview keeps source gaps and links visible without raw source fields", a
     throw Error("Upstream unavailable");
   };
   const out = await parcelOverview("999007");
-  assert.equal(out.groups.length, 7);
+  assert.equal(out.groups.length, 6);
   const property = out.groups.find((group) => group.id === "property");
   assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "unavailable");
   assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);
@@ -873,59 +879,6 @@ test("ArcGIS uses a form body for long spatial queries and source dates accept e
   feature.attributes.sale_date = 1577923200000;
   const out = await getSourceRecords("parcels", feature);
   assert.equal(out.items[0].event_date, "2020-01-02");
-});
-
-test("neighborhood context keeps area counts and nearby businesses separate from the selected parcel", async () => {
-  const selected = parcel(999088);
-  const neighbor = {
-    ...parcel(999089),
-    attributes: { ...parcel(999089).attributes, mblu: "56/78", property_address: "167 CHURCH ST" },
-  };
-  globalThis.fetch = async (input) => {
-    const u = new URL(input);
-    if (u.pathname.includes("Parcel_Viewer"))
-      return response({ features: u.searchParams.has("distance") ? [selected, neighbor] : [selected], spatialReference: { wkid: 4326 } });
-    if (u.pathname.includes("NH_2020_Census_pop_by_Block"))
-      return response({ features: [{ attributes: { GEOID: "090091404001001", P0010001: 64, P0030001: 49, H0010001: 20 } }] });
-    if (u.pathname.includes("CT_Transit_New_Haven_Bus_Stops"))
-      return response({ features: [{ attributes: { OBJECTID: 3, StopId: 101, StopName: "Church Street", InService: 1 }, geometry: { x: -72.925, y: 41.305 } }] });
-    if (u.pathname.endsWith("/GetM5Data")) {
-      assert.equal(u.searchParams.get("value"), "56 78");
-      return response({ rows: [{ PrintKey: "56 78", Parcel_ID: 444 }] });
-    }
-    if (u.pathname.endsWith("/Children"))
-      return response({
-        Document: [], Application: [], Complaint: [], Contact: [], Permit: [], Certificate: [],
-        License: [{ License_ID: 1, BusinessName: "Neighbor Cafe", LicenseNumber: "FSE-24-1", LicenseType: "Food Service Establishment", Status: "Expired", ExpirationDate: "2024-12-31", Email: "private@example.org" }],
-        Occupant: [{ Occupant_ID: 2, Name: "Neighbor Cafe", BusinessName: "Neighbor Cafe", OccupancyType: "Restaurant", InActive: true, CreatedDate: "2022-01-03", Phone: "555-0100" }],
-      });
-    throw Error(`Unexpected source ${u.pathname}`);
-  };
-  const out = await parcelContext("999088");
-  assert.equal(out.parcel_id, 999088);
-  assert.equal(out.radius_m, 400);
-  assert.equal(out.items.find((x) => x.source_id === "census-block-2020").attributes.total_population, 64);
-  assert.ok(out.sources.every((source) => source.source_id !== "ct-tract-2020-acs"));
-  assert.ok(out.items.every((item) => item.source_id !== "ct-tract-2020-acs"));
-  assert.equal(out.items.find((x) => x.source_id === "ct-transit-stops").attributes.in_service, 1);
-  const businesses = out.items.filter((x) => x.source_id === "nearby-municipal-business");
-  const business = businesses.find((x) => x.attributes.municipal_record_type === "License");
-  assert.equal(business.attributes.business_name, "Neighbor Cafe");
-  assert.equal(business.attributes.nearby_parcel_id, 999089);
-  assert.equal(business.attributes.nearby_parcel_objectid, 999099);
-  assert.equal(business.attributes.license_type, "Food Service Establishment");
-  assert.equal(business.attributes.status, "Expired");
-  assert.equal(business.attributes.expiration_date, "2024-12-31");
-  assert.equal(businesses.find((x) => x.attributes.municipal_record_type === "Occupant").attributes.inactive, true);
-  assert.equal(business.match.method, "nearby-parcel-exact-mblu");
-  assert.equal(out.parcels_checked, 1);
-  assert.doesNotMatch(JSON.stringify(out), /private@example.org|555-0100|foot.traffic estimate/i);
-  const api = await contextRoute.fetch(new Request("https://example.com/api/v1/context?parcel_id=999088", {
-    headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` },
-  }));
-  assert.equal(api.status, 200);
-  assert.equal((await api.json()).parcel_id, 999088);
-  await assert.rejects(() => parcelContext("999088", { cursor: "7" }), /Invalid context cursor/);
 });
 
 test("MCP requires pilot auth and lists bounded read tools", async () => {
@@ -992,5 +945,5 @@ test("MCP requires pilot auth and lists bounded read tools", async () => {
   assert.equal(listed.status, 200);
   const toolsList = await listed.text();
   assert.match(toolsList, /get_parcel_overview/);
-  assert.match(toolsList, /get_parcel_context/);
+  assert.doesNotMatch(toolsList, /get_parcel_context/);
 });

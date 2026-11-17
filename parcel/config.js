@@ -14,10 +14,6 @@ export const LAYERS = Object.freeze({
     "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/New_Haven_State_Historic_Districts/FeatureServer/1",
   ctBrownfields:
     "https://services1.arcgis.com/FjPcSmEFuDYlIdKC/ArcGIS/rest/services/Brownfields_Final_2025/FeatureServer/0",
-  streetsPoints:
-    "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/arcgis/rest/services/Complete_Streets_Projects_public_view/FeatureServer/0",
-  streetsLines:
-    "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/arcgis/rest/services/Complete_Streets_Projects_public_view/FeatureServer/1",
 });
 
 // The source catalog describes access, not completeness. IDs are shared by API and MCP.
@@ -266,23 +262,6 @@ export const SOURCES = Object.freeze([
       "Credential addresses lack a verified parcel identifier. Address-only matches are excluded from parcel records.",
   },
   {
-    id: "complete-streets",
-    group: "nearby",
-    title: "Complete Streets projects",
-    url: LAYERS.streetsPoints,
-    mode: "live",
-    coverage:
-      "Nearby recorded projects; source appears stale and distance is not a parcel relationship.",
-  },
-  {
-    id: "service-requests",
-    group: "nearby",
-    title: "Service requests",
-    url: "https://seeclickfix.com/new-haven",
-    mode: "gap",
-    coverage: "No verified stable New Haven parcel lookup or reusable feed.",
-  },
-  {
     id: "inspections",
     group: "activity",
     title: "Inspections and enforcement",
@@ -299,32 +278,6 @@ export const GROUPS = Object.freeze([
   { id: "representation", title: "Representation" },
   { id: "activity", title: "Parcel activity" },
   { id: "business", title: "Business records" },
-  { id: "nearby", title: "Nearby activity" },
-]);
-
-// Area context is requested separately from parcel records and the parcel timeline.
-export const CONTEXT_SOURCES = Object.freeze([
-  {
-    id: "census-block-2020",
-    title: "City hosted 2020 census blocks",
-    url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/NH_2020_Census_pop_by_Block/FeatureServer/0",
-    mode: "live",
-    coverage: "2020 population, adults, and housing units for the census block containing the parcel point; these are area counts, not parcel occupants or building-level conditions.",
-  },
-  {
-    id: "ct-transit-stops",
-    title: "City hosted CT Transit bus stops",
-    url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0",
-    mode: "live",
-    coverage: "Recorded stop points within 400 meters. The source InService flag is shown; current schedules are not established by this layer.",
-  },
-  {
-    id: "nearby-municipal-business",
-    title: "Named municipal license and occupant records on nearby parcels",
-    url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
-    mode: "live",
-    coverage: "Public License and Occupant rows on nearby City parcels matched by each parcel's verified MBLU. Source-reported type, status, dates and recorded address are shown where present. Rows can be historical and do not establish current operation.",
-  },
 ]);
 
 export function source(id) {

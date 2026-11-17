@@ -1,7 +1,7 @@
 import {validateReadiness} from './readiness.mjs';
 import {readFile, readdir, mkdir, writeFile, copyFile} from 'node:fs/promises';
 import {render, renderSource} from './render.mjs';
-import {SOURCES as parcelSources, CONTEXT_SOURCES as contextSources} from '../parcel/config.js';
+import {SOURCES as parcelSources} from '../parcel/config.js';
 const root = new URL('../', import.meta.url);
 const repo = 'https://github.com/ctl0v0/new-haven-civic-data-directory';
 const entries = [];
@@ -40,6 +40,6 @@ for (const entry of entries) {
 }
 await writeFile(new URL('dist/catalog.json',root),JSON.stringify(entries,null,2)+'\n');
 for (const source of parcelSources) if (source.directoryId && !entries.some(entry=>entry.id===source.directoryId)) throw new Error('Unknown parcel directory source '+source.directoryId);
-await writeFile(new URL('dist/parcel-source-catalog.json',root),JSON.stringify([...parcelSources,...contextSources],null,2)+'\n');
+await writeFile(new URL('dist/parcel-source-catalog.json',root),JSON.stringify(parcelSources,null,2)+'\n');
 for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js','readiness.js','build-readiness.html','source-checks.json','parcel.css','parcel.js']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
 console.log('Validated and built '+entries.length+' source entries.');

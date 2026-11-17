@@ -8,7 +8,6 @@ import {
   parcelOverview,
   parcelRecords,
   parcelFeed,
-  parcelContext,
   sourceCoverage,
 } from "../parcel/service.js";
 
@@ -90,7 +89,6 @@ export function createServer() {
         "representation",
         "activity",
         "business",
-        "nearby",
       ]),
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(50).optional(),
@@ -110,18 +108,6 @@ export function createServer() {
     }),
     ({ parcel_id, objectid, cursor, limit }) =>
       parcelFeed(parcel_id, { objectid, cursor, limit }),
-  );
-  tool(
-    server,
-    "get_parcel_context",
-    "Get neighborhood context",
-    "Return official 2020 census block counts, nearby transit stops, and municipal business records on nearby parcels. Context is separate from records attached to the selected parcel.",
-    z.object({
-      ...common,
-      cursor: z.string().regex(/^\d+$/).optional(),
-    }),
-    ({ parcel_id, objectid, cursor }) =>
-      parcelContext(parcel_id, { objectid, cursor }),
   );
   tool(
     server,
@@ -166,7 +152,7 @@ export function createServer() {
             rules: [
               "Official parcel ID anchors a result.",
               "Address and spatial matches may be ambiguous.",
-              "Nearby and state address matches are candidates, not parcel facts.",
+              "Address-point and spatial matches can be candidates rather than parcel facts.",
               "No record returned does not prove no event occurred.",
             ],
           }),

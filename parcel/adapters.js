@@ -1007,91 +1007,6 @@ async function managedLotRecords(parcel) {
   );
 }
 
-function nearFeet(point, parcel) {
-  if (
-    !Array.isArray(point) ||
-    !Number.isFinite(point[0]) ||
-    !Number.isFinite(point[1])
-  )
-    return null;
-  const scaleX = 364000 * Math.cos((point[1] * Math.PI) / 180),
-    scaleY = 364000;
-  let best = Infinity;
-  for (const ring of parcel.geometry.rings ?? [])
-    for (let i = 1; i < ring.length; i++) {
-      const a = ring[i - 1],
-        b = ring[i];
-      const x = (point[0] - a[0]) * scaleX,
-        y = (point[1] - a[1]) * scaleY;
-      const dx = (b[0] - a[0]) * scaleX,
-        dy = (b[1] - a[1]) * scaleY;
-      const t = Math.max(
-        0,
-        Math.min(1, (x * dx + y * dy) / (dx * dx + dy * dy || 1)),
-      );
-      best = Math.min(best, Math.hypot(x - t * dx, y - t * dy));
-    }
-  return Number.isFinite(best) ? Math.round(best) : null;
-}
-async function completeStreetsRecords(parcel) {
-  const params = {
-    ...polygonParams(parcel),
-    distance: "250",
-    units: "esriSRUnit_Foot",
-    resultRecordCount: "250",
-    returnGeometry: "true",
-    outSR: "4326",
-  };
-  const layers = [
-    ["point", LAYERS.streetsPoints],
-    ["line", LAYERS.streetsLines],
-  ];
-  const responses = await Promise.allSettled(
-    layers.map(async ([kind, layer]) => ({
-      kind,
-      data: await arcgis(layer, params),
-    })),
-  );
-  const successes = responses
-    .filter((r) => r.status === "fulfilled")
-    .map((r) => r.value);
-  if (!successes.length)
-    throw new SourceError("Complete Streets layers were unavailable");
-  const items = successes.flatMap(({ kind, data }) =>
-    (data.features ?? []).map((f) => {
-      const coordinates =
-        kind === "point"
-          ? [[f.geometry?.x, f.geometry?.y]]
-          : (f.geometry?.paths ?? []).flat();
-      const distances = coordinates
-        .map((p) => nearFeet(p, parcel))
-        .filter(Number.isFinite);
-      const distance = distances.length ? Math.min(...distances) : null;
-      return record(
-        `${kind}:${f.attributes?.OBJECTID ?? 0}`,
-        "complete-streets",
-        {
-          ...f.attributes,
-          geometry_kind: kind,
-          approx_distance_feet: distance,
-        },
-        {
-          match: "within-250-feet",
-          eventDate: date(f.attributes?.ConstBegin),
-          note: "Nearby project from a source last edited in 2022; distance is approximate and recorded status may be stale.",
-        },
-      );
-    }),
-  );
-  return result("complete-streets", items, {
-    partial:
-      successes.length < layers.length ||
-      successes.some((x) => x.data.exceededTransferLimit),
-    warning:
-      "Within 250 feet of parcel geometry. Approximate distances are in feet. These are nearby projects, not parcel records.",
-  });
-}
-
 const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
   addresses: addressRecords,
@@ -1116,7 +1031,6 @@ const ADAPTERS = Object.freeze({
   "municipal-occupants": municipalOccupantRecords,
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
-  "complete-streets": completeStreetsRecords,
 });
 
 export async function getSourceRecords(sourceId, parcel) {
