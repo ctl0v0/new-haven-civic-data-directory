@@ -34,15 +34,6 @@ const app = `
     <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="snapshot-title">At a glance</h2></div><p>Plain-language facts from the records below.</p></div>
     <div id="snapshot-grid" class="snapshot-grid"></div>
   </section>
-  <section id="context-section" class="panel" aria-labelledby="context-title" hidden>
-    <h2 id="context-title">Around this parcel</h2>
-    <p>Official census area counts, nearby transit stops, and municipal business records on neighboring parcels. These records describe the area, not this building.</p>
-    <p id="context-status" role="status" aria-live="polite"></p>
-    <button id="context-load" type="button" class="secondary" hidden>Retry neighborhood lookup</button>
-    <div id="context-sources" class="source-list"></div>
-    <div id="context-records" class="context-groups"></div>
-    <button id="context-more" type="button" class="secondary" hidden>Check more nearby parcels</button>
-  </section>
   <nav id="group-nav" aria-label="Jump to parcel sections" hidden></nav>
   <section id="feed-section" class="timeline-section" aria-labelledby="timeline-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. A document or contact date may only mark an update to that record.</p></div>
@@ -50,6 +41,15 @@ const app = `
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
   </section>
   <div id="groups" class="record-groups"></div>
+  <section id="context-section" class="panel" aria-labelledby="context-title" hidden>
+    <h2 id="context-title">Around this parcel</h2>
+    <p>Municipal business records on neighboring parcels, official census area counts, and nearby transit stops. These records describe the area, not this building.</p>
+    <p id="context-status" role="status" aria-live="polite"></p>
+    <button id="context-load" type="button" class="secondary" hidden>Retry neighborhood lookup</button>
+    <div id="context-sources" class="source-list"></div>
+    <div id="context-records" class="context-groups"></div>
+    <button id="context-more" type="button" class="secondary" hidden>Check more nearby parcels</button>
+  </section>
   <script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
   String(value).replace(

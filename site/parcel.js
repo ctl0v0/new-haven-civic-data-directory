@@ -463,10 +463,7 @@ async function choose(item, searchedQuery = null) {
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
     $("context-section").hidden = false;
-    void loadContext();
-    const contextLink = el("a", "Around this parcel");
-    contextLink.href = "#context-section";
-    $("group-nav").append(contextLink);
+    $("context-status").textContent = "Neighborhood context will load after parcel records.";
     const tasks = [];
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
@@ -479,9 +476,15 @@ async function choose(item, searchedQuery = null) {
       $("group-nav").append(a);
       tasks.push(loadGroup(id, section, qs, version));
     }
+    const contextLink = el("a", "Around this parcel");
+    contextLink.href = "#context-section";
+    $("group-nav").append(contextLink);
     tasks.push(loadFeed(qs, version));
     await Promise.allSettled(tasks);
-    if (version === viewVersion) status("Records loaded. Open a record to inspect its source fields.");
+    if (version === viewVersion) {
+      status("Records loaded. Open a record to inspect its source fields.");
+      void loadContext();
+    }
   } catch (error) {
     status(error.message);
   }
@@ -504,9 +507,9 @@ async function loadContext(cursor = null) {
       $("context-records").replaceChildren();
       contextParcelCards.clear();
       for (const [id, title, intro] of [
+        ["business", "Named records on nearby parcels", "These are municipal license and occupant records, including historical rows. They do not establish which businesses operate today."],
         ["area", "Census area facts", "Published block and tract figures describe a larger area."],
         ["transit", "Transit stops", "Recorded stops within 400 meters of a point inside the parcel."],
-        ["business", "Named records on nearby parcels", "These are municipal license and occupant records, including historical rows. They do not establish which businesses operate today."],
       ]) {
         const section = el("section", null, "context-group");
         section.append(el("h3", title));
