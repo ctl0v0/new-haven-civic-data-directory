@@ -36,6 +36,17 @@ let selected = null;
 let viewVersion = 0;
 let searchedAddress = "";
 const groupResponses = new Map();
+const activityTargets = new WeakMap();
+const municipalCategoryTitles = {
+  Document: "Documents",
+  Application: "Applications",
+  Complaint: "Complaints",
+  Contact: "Contacts",
+  License: "Licenses",
+  Permit: "Permits",
+  Occupant: "Occupants",
+  Certificate: "Certificates",
+};
 let parcelMap = null;
 const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
 const MAP_COLORS = {
@@ -270,6 +281,48 @@ function sourceLine(parent, source) {
   if (source.verification_url) info.append(link(source.verification_url, "Confirm with city"));
   row.append(info);
   parent.append(row);
+}
+function activitySubgroup(parent, key, title, countLabel) {
+  const section = el("section", null, "activity-subgroup");
+  const heading = el("div", null, "activity-subgroup-heading");
+  heading.append(el("h3", title));
+  heading.append(el("span", countLabel, "group-count"));
+  section.append(heading);
+  const list = el("div", null, "record-list");
+  section.append(list);
+  parent.append(section);
+  activityTargets.get(parent).set(key, list);
+  return list;
+}
+function prepareActivitySubgroups(parent, sources) {
+  activityTargets.set(parent, new Map());
+  const municipal = sources.find((source) => source.source_id === "municity");
+  if (municipal?.category_counts) {
+    for (const [kind, count] of Object.entries(municipal.category_counts)) {
+      const truncated = municipal.truncated_categories?.includes(kind);
+      const label = count == null
+        ? "Not returned by source"
+        : truncated
+          ? `${count} shown · source truncated`
+          : `${count} returned`;
+      activitySubgroup(parent, `municity:${kind}`, municipalCategoryTitles[kind] ?? kind, label);
+    }
+  } else if (municipal) {
+    parent.append(el("p", "City parcel categories unavailable. See source coverage above.", "empty-state"));
+  }
+  for (const source of sources.filter((entry) => entry.source_id !== "municity" && entry.count > 0))
+    activitySubgroup(parent, source.source_id, sourceName(source.source_id), `${source.count} returned`);
+}
+function appendActivityRecord(parent, item) {
+  const key = item.source_id === "municity" ? `municity:${item.category}` : item.source_id;
+  const targets = activityTargets.get(parent);
+  const list = targets.get(key) ?? activitySubgroup(
+    parent,
+    key,
+    item.source_id === "municity" ? municipalCategoryTitles[item.category] ?? item.category ?? "Other City records" : sourceName(item.source_id),
+    "Returned by source",
+  );
+  appendRecord(list, item);
 }
 function normalizedAddress(value) {
   return String(value ?? "")
@@ -692,18 +745,6 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       heading.append(el("span", `${data.total} ${data.total === 1 ? "record" : "records"}`, "group-count"));
       section.append(heading);
       section.append(el("p", definition[2], "group-intro"));
-      if (id === "activity") {
-        const municipal = data.sources.find((source) => source.source_id === "municity");
-        if (municipal?.category_counts) {
-          const categories = el("div", null, "category-strip");
-          for (const [kind, count] of Object.entries(municipal.category_counts)) {
-            const missing = count == null;
-            const truncated = municipal.truncated_categories?.includes(kind);
-            categories.append(el("span", `${kind}: ${missing ? "not returned" : truncated ? `${count} shown; truncated` : count}`, missing || truncated ? "category-missing" : ""));
-          }
-          section.append(categories);
-        }
-      }
       const coverage = el("details", null, "sources-panel");
       const gaps = data.sources.filter((source) => ["partial", "unavailable"].includes(source.status)).length;
       coverage.append(el("summary", `Sources checked: ${data.sources.length}${gaps ? ` · ${gaps} with gaps` : ""}`));
@@ -711,14 +752,18 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       for (const source of data.sources) sourceLine(sourceList, source);
       coverage.append(sourceList);
       section.append(coverage);
-      const records = el("div", null, "record-list");
+      const records = el("div", null, id === "activity" ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
       section.append(records);
+      if (id === "activity") prepareActivitySubgroups(records, data.sources);
       if (!data.items.length)
-        records.append(el("p", "No records returned by the checked sources. Open source coverage to see any gaps.", "empty-state"));
+        section.append(el("p", "No records returned by the checked sources. Open source coverage to see any gaps.", "empty-state"));
     }
     const records = $(`records-${id}`);
-    for (const item of data.items) appendRecord(records, item);
+    for (const item of data.items) {
+      if (id === "activity") appendActivityRecord(records, item);
+      else appendRecord(records, item);
+    }
     if (data.next_cursor) {
       const b = el("button", "Load more records", "load-more secondary");
       b.type = "button";
