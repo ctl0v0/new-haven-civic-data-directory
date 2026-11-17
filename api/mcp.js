@@ -111,9 +111,10 @@ export function createServer() {
       ]),
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(50).optional(),
+      query_address: z.string().min(1).max(160).optional(),
     }),
-    ({ parcel_id, objectid, group, cursor, limit }) =>
-      parcelRecords(parcel_id, group, { objectid, cursor, limit }),
+    ({ parcel_id, objectid, group, cursor, limit, query_address }) =>
+      parcelRecords(parcel_id, group, { objectid, cursor, limit, query_address }),
   );
   tool(
     server,
@@ -124,9 +125,10 @@ export function createServer() {
       ...common,
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(50).optional(),
+      query_address: z.string().min(1).max(160).optional(),
     }),
-    ({ parcel_id, objectid, cursor, limit }) =>
-      parcelFeed(parcel_id, { objectid, cursor, limit }),
+    ({ parcel_id, objectid, cursor, limit, query_address }) =>
+      parcelFeed(parcel_id, { objectid, cursor, limit, query_address }),
   );
   tool(
     server,

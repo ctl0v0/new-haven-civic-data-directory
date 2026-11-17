@@ -3,6 +3,7 @@ import { cached, SourceError } from "./http.js";
 import { loadParcel, resolveParcel } from "./resolve.js";
 import { parcelFeatureToGeoJSON } from "./geometry.js";
 import { parcelMapContext } from "./map-context.js";
+import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js";
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
 
 export { resolveParcel };
@@ -71,17 +72,25 @@ export async function parcelOverview(id, objectid = null) {
 export async function parcelRecords(
   id,
   group,
-  { objectid = null, cursor = null, limit = 25 } = {},
+  { objectid = null, cursor = null, limit = 25, query_address = null } = {},
 ) {
+  const queryAddress = checkedQueryAddress(query_address);
   const feature = await loadParcel(id, objectid);
   const data = await getGroup(group, feature);
-  return { ...data, ...pageItems(data.items, cursor, limit) };
+  const page = pageItems(data.items, cursor, limit);
+  return {
+    ...data,
+    ...page,
+    ...(queryAddress ? { query_address: queryAddress } : {}),
+    items: markAddressEvidence(page.items, queryAddress),
+  };
 }
 
 export async function parcelFeed(
   id,
-  { objectid = null, cursor = null, limit = 25 } = {},
+  { objectid = null, cursor = null, limit = 25, query_address = null } = {},
 ) {
+  const queryAddress = checkedQueryAddress(query_address);
   const feature = await loadParcel(id, objectid);
   const key = `feed:${feature.attributes.parcel_id}:${feature.attributes.objectid}`;
   const data = await cached(key, async () => {
@@ -110,7 +119,13 @@ export async function parcelFeed(
       note: "Dates are reported event or source-record dates. This feed does not track changes between source checks.",
     };
   });
-  return { ...data, ...pageItems(data.items, cursor, limit) };
+  const page = pageItems(data.items, cursor, limit);
+  return {
+    ...data,
+    ...page,
+    ...(queryAddress ? { query_address: queryAddress } : {}),
+    items: markAddressEvidence(page.items, queryAddress),
+  };
 }
 
 export function sourceCoverage() {

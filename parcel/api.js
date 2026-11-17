@@ -38,5 +38,6 @@ export function params(request) {
     group: url.searchParams.get("group"),
     cursor: url.searchParams.get("cursor"),
     limit: url.searchParams.get("limit"),
+    query_address: url.searchParams.get("query_address"),
   };
 }

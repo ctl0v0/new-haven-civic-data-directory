@@ -750,6 +750,7 @@ function municipalChildAttributes(kind, row) {
       status: text(row.CompStatus),
       filed_date: date(row.Date),
       recorded_address: text(row.LegalAddress ?? row.Address),
+      recorded_address_field: row.LegalAddress ? "LegalAddress" : row.Address ? "Address" : null,
     };
   if (kind === "Contact")
     return {
@@ -767,6 +768,7 @@ function municipalChildAttributes(kind, row) {
       business_name: text(row.BusinessName),
       occupancy_type: text(row.OccupancyType),
       recorded_address: text(row.LegalAddress ?? row.Addr1),
+      recorded_address_field: row.LegalAddress ? "LegalAddress" : row.Addr1 ? "Addr1" : null,
       inactive: row.InActive == null ? null : [true, 1, "true", "1"].includes(row.InActive),
       created_date: date(row.CreatedDate),
     };
@@ -951,6 +953,7 @@ async function municipalBusinessRecords(parcel) {
           license_type: text(a.LicenseType),
           status: text(a.Status),
           recorded_address: text(a.LegalAddress ?? a.Addr1),
+          recorded_address_field: a.LegalAddress ? "LegalAddress" : a.Addr1 ? "Addr1" : null,
           expiration_date: date(a.ExpirationDate),
         },
         {

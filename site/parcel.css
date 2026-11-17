@@ -212,7 +212,7 @@ summary:focus-visible {
 .parcel-hero h2 { font-size: clamp(1.9rem, 3.5vw, 2.8rem); margin: .1rem 0 .35rem; letter-spacing: -.03em; }
 .parcel-hero .meta, .parcel-hero .small { color: #dcece2; }
 .parcel-hero .small { max-width: 75ch; margin-bottom: 0; }
-.match-note { background: #fff3d6; border-left: 4px solid #d8942c; border-radius: .3rem; color: #5b3c0e; padding: .7rem .9rem; max-width: 80ch; }
+.match-note { background: #e8f2eb; border-left: 4px solid #317c58; border-radius: .2rem; color: #1a4b36; padding: .7rem .9rem; max-width: 80ch; }
 .map-panel { background: #fff; border: 1px solid #d2ded5; border-radius: .8rem; padding: 1rem; margin: -1rem 0 1.6rem; }
 .map-panel .section-heading { margin: .2rem 0 .85rem; }
 #parcel-map { height: clamp(19rem, 42vw, 34rem); border: 1px solid #cbdacf; border-radius: .55rem; background: #e3e9e1; }
@@ -332,6 +332,7 @@ main { max-width: 82rem; }
 .record-date { color: #426151; }
 .record-head { justify-content: flex-start; align-items: center; flex-wrap: wrap; }
 .record-head h3 { font-size: 1.03rem; }
+.address-badge { display: inline-block; background: #e1f1e7; border-left: 3px solid #16734b; color: #15533d; padding: .2rem .55rem; font-size: .74rem; font-weight: 750; }
 .record-description { color: #294139; margin: .4rem 0 .65rem; }
 .record-fields { display: grid; grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr); gap: .25rem .8rem; margin: .55rem 0; font-size: .84rem; }
 .record-fields dt { color: #577064; font-weight: 650; overflow-wrap: anywhere; }

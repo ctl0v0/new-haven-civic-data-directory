@@ -5,11 +5,13 @@ import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel
 import { resolveParcel } from "../parcel/resolve.js";
 import { parcelRecords, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
 import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
+import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
+import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
 import mcpRoute from "../api/mcp.js";
@@ -477,6 +479,7 @@ test("named municipal license appears in business records with historical status
   assert.equal(out.items[0].attributes.business_name, "Weary Hobo LLC aka Bar August");
   assert.equal(out.items[0].attributes.status, "Void");
   assert.equal(out.items[0].attributes.recorded_address, "990 STATE ST");
+  assert.equal(out.items[0].attributes.recorded_address_field, "LegalAddress");
   assert.doesNotMatch(JSON.stringify(out), /Unrelated vendor detail/);
 });
 
@@ -1205,4 +1208,109 @@ test("map context keeps official parcel and nearby layers separate with REST and
   const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
   assert.deepEqual(payload.result.structuredContent, context);
   assert.deepEqual(await parcelMapContext(String(id)), context);
+});
+
+test("address focus uses explicit full source addresses, not descriptions or parcel-only links", () => {
+  const query = "3 Edwards St";
+  assert.equal(addressEvidence({ source_id: "addresses", attributes: {
+    house_number: "3", full_street_name: "EDWARDS STREET",
+  } }, query).matches_query, true);
+  assert.equal(addressEvidence({ source_id: "parcels", attributes: {
+    property_address: "990 STATE ST",
+  } }, query).matches_query, false);
+  assert.deepEqual(addressEvidence({ source_id: "municity", category: "Permit", attributes: {
+    LegalAddress: "3 EDWARDS STREET", Description: "Work at 990 State St",
+  } }, query), {
+    source_field: "LegalAddress", source_address: "3 EDWARDS STREET", matches_query: true,
+  });
+  assert.equal(addressEvidence({ source_id: "municity", category: "Permit", attributes: {
+    Description: "Work at 3 Edwards St",
+  } }, query), null);
+  assert.equal(addressEvidence({ source_id: "municipal-business-licenses", attributes: {
+    recorded_address: "3 EDWARDS ST", recorded_address_field: "Addr1",
+  } }, query), null);
+  assert.equal(addressEvidence({ source_id: "municipal-business-licenses", attributes: {
+    recorded_address: "990 STATE ST", recorded_address_field: "LegalAddress",
+  } }, query).matches_query, false);
+  assert.equal(addressEvidence({ source_id: "assessor-sales", attributes: {
+    owner: "3 Edwards St LLC",
+  } }, query), null);
+  assert.equal(addressEvidence({ source_id: "municity", category: "Document", attributes: {
+    document_name: "3 Edwards St plan",
+  } }, query), null);
+});
+
+test("address focus annotates REST and MCP records without filtering the parcel", async () => {
+  const id = 999052;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer"))
+      return response({ features: [{ ...parcel(id), attributes: {
+        ...parcel(id).attributes, property_address: "990 STATE ST",
+      } }], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("Addresses_") && url.pathname.endsWith("/query"))
+      return response({ features: [{ attributes: {
+        objectid: 63, house_number: "3", full_street_name: "EDWARDS ST",
+      } }] });
+    return response({ features: [] });
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await recordsRoute.fetch(new Request(
+    `https://example.com/api/v1/records?parcel_id=${id}&group=property&query_address=3%20Edwards%20St`,
+    { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const records = await rest.json();
+  assert.equal(records.query_address, "3 Edwards St");
+  assert.equal(records.items.find((item) => item.source_id === "addresses").address_evidence.matches_query, true);
+  assert.equal(records.items.find((item) => item.source_id === "parcels").address_evidence.matches_query, false);
+  assert.ok(records.items.some((item) => item.source_id === "parcels"), "parcel-wide records remain visible");
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 8, method: "tools/call",
+      params: { name: "get_parcel_records", arguments: {
+        parcel_id: String(id), group: "property", query_address: "3 Edwards St",
+      } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, records);
+  const invalid = await recordsRoute.fetch(new Request(
+    `https://example.com/api/v1/records?parcel_id=${id}&group=property&query_address=not-an-address`,
+    { headers: auth },
+  ));
+  assert.equal(invalid.status, 400);
+});
+
+test("address focus marks only municipal permit LegalAddress in the dated feed", async () => {
+  const id = 999053;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer"))
+      return response({ features: [{ ...parcel(id), attributes: {
+        ...parcel(id).attributes, property_address: "990 STATE ST",
+      } }], spatialReference: { wkid: 4326 } });
+    if (url.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 999053 }] });
+    if (url.pathname.endsWith("/Children"))
+      return response({ Permit: [
+        { Permit_ID: 1, Parcel_ID: id, LegalAddress: "3 EDWARDS ST", PermitDate: "2024-06-01", Description: "Shop work" },
+        { Permit_ID: 2, Parcel_ID: id, PermitDate: "2024-05-01", Description: "3 Edwards St shop work" },
+      ] });
+    return response({ features: [] });
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const responseData = await feedRoute.fetch(new Request(
+    `https://example.com/api/v1/feed?parcel_id=${id}&query_address=3%20Edwards%20St`,
+    { headers: auth },
+  ));
+  assert.equal(responseData.status, 200);
+  const feed = await responseData.json();
+  const permits = feed.items.filter((item) => item.category === "Permit");
+  assert.equal(permits.length, 2);
+  assert.equal(permits[0].address_evidence.matches_query, true);
+  assert.equal(permits[1].address_evidence, null);
+  assert.ok(feed.items.some((item) => item.source_id === "parcels"), "parcel-wide timeline entries remain");
 });

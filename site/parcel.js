@@ -214,6 +214,8 @@ function appendRecord(parent, item) {
   head.append(el("h3", recordTitle(item)));
   const state = recordStatus(item);
   if (state) head.append(el("span", brief(state, 45), "status-pill"));
+  if (item.address_evidence?.matches_query)
+    head.append(el("span", "Source address matches search", "address-badge"));
   body.append(head);
   if (item.attributes?.period) body.append(el("p", item.attributes.period, "record-meta"));
   const description = recordDescription(item);
@@ -222,6 +224,8 @@ function appendRecord(parent, item) {
     .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
     .slice(0, 4);
   if (preview.length) body.append(fieldList(preview));
+  if (item.address_evidence)
+    body.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "record-note"));
   const evidence = matchEvidence(item);
   if (evidence) body.append(el("p", evidence, "record-note"));
   if (item.note) body.append(el("p", item.note, "record-note"));
@@ -451,13 +455,15 @@ async function choose(item, searchedQuery = null) {
   const version = ++viewVersion;
   resetMap();
   selected = item;
-  searchedAddress = searchedQuery ?? "";
+  searchedAddress = searchedQuery &&
+    ["parcel-address", "address-point-intersection"].includes(item.match?.method)
+    ? searchedQuery.trim() : "";
   groupResponses.clear();
   $("candidates").hidden = true;
   history.replaceState(
     null,
     "",
-    `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}`,
+    `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}${searchedAddress ? `&query_address=${encodeURIComponent(searchedAddress)}` : ""}`,
   );
   $("groups").replaceChildren();
   $("group-nav").replaceChildren();
@@ -469,6 +475,7 @@ async function choose(item, searchedQuery = null) {
   try {
     const qs = new URLSearchParams({ parcel_id: item.parcel_id });
     if (item.objectid) qs.set("objectid", item.objectid);
+    if (searchedAddress) qs.set("query_address", searchedAddress);
     const summary = await api(`/api/v1/parcel?${qs}`);
     if (version !== viewVersion) return;
     $("parcel-summary").hidden = false;
@@ -478,14 +485,16 @@ async function choose(item, searchedQuery = null) {
     $("parcel-identifiers").textContent =
       `Parcel ID ${summary.parcel.parcel_id} · MBLU ${summary.parcel.mblu ?? "unavailable"} · Assessor account ${summary.parcel.account_number ?? "unavailable"}`;
     const alternateMatch =
-      searchedQuery &&
+      searchedAddress &&
       item.match?.method === "address-point-intersection" &&
-      normalizedAddress(searchedQuery) !== normalizedAddress(summary.parcel.address);
-    $("parcel-match").hidden = !alternateMatch;
+      normalizedAddress(searchedAddress) !== normalizedAddress(summary.parcel.address);
+    $("parcel-match").hidden = !searchedAddress;
     $("parcel-match").replaceChildren();
-    if (alternateMatch) {
+    if (searchedAddress) {
       $("parcel-match").append(document.createTextNode(
-        `${searchedQuery} is a city address point on this parcel. The parcel lists ${summary.parcel.address ?? "another address"}. Check the building before relying on the match.`,
+        alternateMatch
+          ? `Address focus: ${searchedAddress}. A City address point for this address intersects the selected parcel, which lists ${summary.parcel.address ?? "another address"}. A badge below appears only when a record's own address field matches your search.`
+          : `Address focus: ${searchedAddress}. The selected City parcel lists this address. A badge below appears only when a record's own address field matches your search.`,
       ));
     }
     renderSnapshot();
@@ -745,6 +754,10 @@ function appendTimelineEvent(parent, item) {
   content.append(el("h3", recordTitle(item)));
   const state = recordStatus(item);
   if (state) content.append(el("span", state, "status-pill"));
+  if (item.address_evidence?.matches_query)
+    content.append(el("span", "Source address matches search", "address-badge"));
+  if (item.address_evidence?.matches_query)
+    content.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "timeline-description"));
   const description = recordDescription(item);
   if (description) content.append(el("p", description, "timeline-description"));
   const source = el("p", null, "timeline-source");
@@ -836,11 +849,34 @@ $("search-form").addEventListener("submit", async (event) => {
   }
 });
 const initial = new URL(location.href).searchParams;
-if (initial.has("parcel_id"))
-  void choose({
-    parcel_id: initial.get("parcel_id"),
-    objectid: initial.get("objectid"),
-  });
+if (initial.has("parcel_id")) {
+  const restore = async () => {
+    const startingVersion = viewVersion;
+    const original = initial.get("query_address");
+    if (original) {
+      status("Checking the saved address against City parcel records…");
+      try {
+        const resolved = await api("/api/v1/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: original }),
+        });
+        const verified = resolved.candidates?.find((candidate) =>
+          String(candidate.parcel_id) === initial.get("parcel_id") &&
+          String(candidate.objectid) === initial.get("objectid") &&
+          ["parcel-address", "address-point-intersection"].includes(candidate.match?.method));
+        if (verified && startingVersion === viewVersion) {
+          $("query").value = original;
+          await choose(verified, original);
+          return;
+        }
+      } catch { /* Load the parcel without an unverified address focus. */ }
+    }
+    if (startingVersion === viewVersion)
+      await choose({ parcel_id: initial.get("parcel_id"), objectid: initial.get("objectid") });
+  };
+  void restore();
+}
 for (const example of document.querySelectorAll("[data-example]"))
   example.addEventListener("click", () => {
     $("query").value = example.dataset.example;
