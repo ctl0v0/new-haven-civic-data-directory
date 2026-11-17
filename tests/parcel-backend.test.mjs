@@ -764,7 +764,7 @@ test("assessor subareas preserve separate source tables and omit unreadable tota
   assert.equal(out.items[2].attributes.gross_area_as_published, "unknown");
 });
 
-test("City pickup zones join to individual parcel address points and retain source dates", async () => {
+test("City pickup zones consolidate duplicate address points and retain their IDs and source dates", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
     if (u.pathname.includes("Trash_Pickup_Day") && !u.pathname.endsWith("/query"))
@@ -787,7 +787,8 @@ test("City pickup zones join to individual parcel address points and retain sour
       ] });
     if (u.pathname.includes("Addresses_"))
       return response({ spatialReference: { wkid: 4326 }, features: [
-        { attributes: { objectid: 20, house_number: "3", full_street_name: "EDWARDS ST" }, geometry: { x: 0.5, y: 0.5 } },
+        { attributes: { objectid: 20, house_number: "3", full_street_name: "EDWARDS ST", unit: "2" }, geometry: { x: 0.5, y: 0.5 } },
+        { attributes: { objectid: 22, house_number: "3", full_street_name: "EDWARDS ST", unit: "2" }, geometry: { x: 0.6, y: 0.5 } },
         { attributes: { objectid: 21, house_number: "990", full_street_name: "STATE ST" }, geometry: { x: 1.5, y: 0.5 } },
       ] });
     throw Error("Unexpected source");
@@ -798,6 +799,8 @@ test("City pickup zones join to individual parcel address points and retain sour
     ["3 EDWARDS ST", "Monday"], ["990 STATE ST", "Friday"],
   ]);
   assert.equal(out.items[0].attributes.source_last_edited, "2025-07-03");
+  assert.deepEqual(out.items[0].attributes.address_point_objectids, [20, 22]);
+  assert.deepEqual(out.items[0].match.address_point_objectids, [20, 22]);
   assert.equal(out.items[0].match.method, "address-point-zone-intersection");
   assert.equal(addressEvidence(out.items[0], "3 Edwards St").matches_query, true);
   assert.equal(addressEvidence(out.items[1], "3 Edwards St").matches_query, false);
@@ -828,6 +831,36 @@ test("overlapping City pickup zones do not assign an address a day", async () =>
   assert.equal(out.status, "partial");
   assert.equal(out.items.length, 0);
   assert.match(out.warning, /multiple pickup zones/);
+});
+
+test("duplicate address points in different City zones do not assign a day", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Trash_Pickup_Day") && !u.pathname.endsWith("/query"))
+      return response({ geometryType: "esriGeometryPolygon",
+        editingInfo: { lastEditDate: 1751566162283 },
+        fields: [{ name: "trash_day", domain: { codedValues: [
+          { code: "M", name: "Monday" }, { code: "F", name: "Friday" },
+        ] } }],
+      });
+    if (u.pathname.includes("Trash_Pickup_Day"))
+      return response({ features: ["M", "F"].map((code, index) => ({
+        attributes: { objectid: index + 10, trash_day: code },
+        geometry: { rings: [[
+          [index, 0], [index + 1, 0], [index + 1, 1], [index, 1], [index, 0],
+        ]] },
+      })) });
+    if (u.pathname.includes("Addresses_"))
+      return response({ features: [0.5, 1.5].map((x, index) => ({
+        attributes: { objectid: index + 20, house_number: "20", full_street_name: "ELD ST", unit: "2" },
+        geometry: { x, y: 0.5 },
+      })) });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("trash-pickup", parcel(999064));
+  assert.equal(out.status, "partial");
+  assert.equal(out.items.length, 0);
+  assert.match(out.warning, /points in different pickup zones/);
 });
 
 test("pickup records have matching REST and MCP responses with address focus", async () => {

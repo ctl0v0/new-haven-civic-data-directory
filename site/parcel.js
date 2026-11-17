@@ -125,7 +125,7 @@ function recordTitle(item) {
   if (item.source_id === "addresses")
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
   if (item.source_id === "trash-pickup")
-    return `${a.address}: ${a.trash_day} trash pickup zone`;
+    return `${a.address}${a.unit ? ` · unit ${a.unit}` : ""}: ${a.trash_day} trash pickup zone`;
   if (item.source_id === "assessor-valuations")
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   if (item.source_id === "assessor-subareas")
@@ -149,8 +149,10 @@ function recordTitle(item) {
 }
 function recordDescription(item) {
   const a = item.attributes ?? {};
-  if (item.source_id === "trash-pickup")
-    return `City address point ${a.address_point_objectid} · pickup zone ${a.zone_objectid}${a.source_last_edited ? ` · source last edited ${shortDate(a.source_last_edited)}` : ""}`;
+  if (item.source_id === "trash-pickup") {
+    const ids = a.address_point_objectids ?? [a.address_point_objectid];
+    return `City address point${ids.length === 1 ? "" : "s"} ${ids.join(", ")} · pickup zone ${a.zone_objectid}${a.source_last_edited ? ` · source last edited ${shortDate(a.source_last_edited)}` : ""}`;
+  }
   if (item.source_id === "parcels") {
     const facts = [
       a.year_building_built ? `Built ${a.year_building_built}` : null,
@@ -161,8 +163,7 @@ function recordDescription(item) {
   }
   if (item.source_id === "assessor-sales")
     return [a.sale_price ? `Sale price listed: ${a.sale_price}` : null, a.book_page ? `Book and page ${a.book_page}` : null, a.instrument ? `Instrument ${a.instrument}` : null].filter(Boolean).join(" · ");
-  if (item.source_id === "assessor-valuations")
-    return [a.table_section, a.total ? `Total ${a.total}` : null, a.land ? `Land ${a.land}` : null, a.improvements ? `Improvements ${a.improvements}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "assessor-valuations") return null;
   if (item.source_id === "assessor-subareas")
     return [a.gross_area_sq_ft != null ? `${Number(a.gross_area_sq_ft).toLocaleString()} gross sq ft` : a.gross_area_as_published ? `Gross area as published: ${a.gross_area_as_published}` : null,
       a.living_area_sq_ft != null ? `${Number(a.living_area_sq_ft).toLocaleString()} living sq ft` : a.living_area_as_published ? `Living area as published: ${a.living_area_as_published}` : null,
@@ -214,6 +215,16 @@ function fieldList(entries, className = "record-fields") {
   }
   return list;
 }
+function valuationAmounts(attributes, className = "valuation-values") {
+  const amounts = el("dl", null, className);
+  for (const [label, value] of [["Land", attributes.land], ["Improvements", attributes.improvements], ["Total", attributes.total]]) {
+    const entry = el("div");
+    entry.append(el("dt", label));
+    entry.append(el("dd", value ?? "Not listed"));
+    amounts.append(entry);
+  }
+  return amounts;
+}
 function matchEvidence(item) {
   const match = item.match;
   if (match?.method !== "exact" || !match.parcel_field || !match.source_field || !match.value)
@@ -239,6 +250,10 @@ function appendRecord(parent, item) {
   if (item.attributes?.period) body.append(el("p", item.attributes.period, "record-meta"));
   const description = recordDescription(item);
   if (description) body.append(el("p", description, "record-description"));
+  if (item.source_id === "assessor-valuations") {
+    body.append(el("p", `${fieldLabel(item.attributes.table_section ?? "valuation")} row`, "record-meta"));
+    body.append(valuationAmounts(item.attributes, "valuation-values valuation-record-values"));
+  }
   const preview = item.source_id === "cmt-contacts"
     ? [
       ["District manager", item.attributes.district_manager ?? "Not published"],
@@ -251,7 +266,7 @@ function appendRecord(parent, item) {
       ["CMT email", item.attributes.cmt_email],
       ["CMT phone", item.attributes.cmt_phone],
     ].filter(([, value]) => value != null && value !== "")
-    : sourceFields(item.attributes)
+    : item.source_id === "assessor-valuations" ? [] : sourceFields(item.attributes)
       .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
       .slice(0, 4);
   if (preview.length) body.append(fieldList(preview));
@@ -423,14 +438,7 @@ function renderSnapshot() {
         const a = item.attributes;
         const row = el("li");
         row.append(el("strong", `${a.valuation_year ?? "Year not listed"} · ${fieldLabel(a.valuation_type ?? "valuation")}`));
-        const amounts = el("dl", null, "valuation-values");
-        for (const [label, value] of [["Land", a.land], ["Improvements", a.improvements], ["Total", a.total]]) {
-          const entry = el("div");
-          entry.append(el("dt", label));
-          entry.append(el("dd", value ?? "Not listed"));
-          amounts.append(entry);
-        }
-        row.append(amounts);
+        row.append(valuationAmounts(a));
         list.append(row);
       }
       building.append(list);

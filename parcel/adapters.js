@@ -10,6 +10,7 @@ import {
   SourceError,
 } from "./http.js";
 import { parseLciProperty } from "./lci.js";
+import { normalizeAddress } from "./resolve.js";
 
 const ISO = () => new Date().toISOString();
 const text = (value) =>
@@ -228,7 +229,7 @@ async function trashPickupRecords(parcel) {
     metadata.editingInfo?.lastEditDate ?? null;
   const sourceLastEdited = Number.isFinite(edited) && edited > 0
     ? new Date(edited).toISOString().slice(0, 10) : null;
-  const items = [];
+  const addressGroups = new Map();
   let unmatched = 0;
   let ambiguous = 0;
   let invalid = 0;
@@ -237,38 +238,66 @@ async function trashPickupRecords(parcel) {
     const point = [row.geometry?.x, row.geometry?.y];
     const street = a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`.trim();
     const address = `${a.house_number ?? ""} ${street}`.trim();
-    if (a.objectid == null || !address || !point.every(Number.isFinite)) {
+    if (!address) {
       invalid++;
+      continue;
+    }
+    const unit = text(a.unit);
+    const key = `${normalizeAddress(address)}:${unit?.toUpperCase() ?? ""}`;
+    if (!addressGroups.has(key)) addressGroups.set(key, []);
+    const rows = addressGroups.get(key);
+    if (a.objectid == null || !point.every(Number.isFinite)) {
+      invalid++;
+      rows.push(null);
       continue;
     }
     const matches = zoneRows.filter(({ geometry }) => pointInZone(point, geometry));
     if (!matches.length) {
       unmatched++;
+      rows.push(null);
       continue;
     }
     if (matches.length > 1) {
       ambiguous++;
+      rows.push(null);
       continue;
     }
     const zone = matches[0];
     const day = dayNames.get(String(zone.code));
     if (!day) {
       invalid++;
+      rows.push(null);
       continue;
     }
-    items.push(record(`address:${a.objectid}:zone:${zone.id}`, "trash-pickup", {
-      address,
-      unit: a.unit ?? null,
-      address_point_objectid: a.objectid,
-      zone_objectid: zone.id,
-      trash_day_code: zone.code,
-      trash_day: day,
+    rows.push({ address, unit, addressPointId: a.objectid, zone, day });
+  }
+  const items = [];
+  let conflicting = 0;
+  for (const rows of addressGroups.values()) {
+    if (rows.some((row) => row === null)) continue;
+    const zonesForAddress = new Set(rows.map(({ zone }) => String(zone.id)));
+    if (zonesForAddress.size > 1) {
+      conflicting++;
+      continue;
+    }
+    const first = rows[0];
+    const addressPointIds = [...new Set(rows.map(({ addressPointId }) => addressPointId))]
+      .sort((a, b) => Number(a) - Number(b));
+    items.push(record(`address:${addressPointIds[0]}:zone:${first.zone.id}`, "trash-pickup", {
+      address: first.address,
+      unit: first.unit,
+      address_point_objectid: addressPointIds[0],
+      address_point_objectids: addressPointIds,
+      zone_objectid: first.zone.id,
+      trash_day_code: first.zone.code,
+      trash_day: first.day,
       source_last_edited: sourceLastEdited,
     }, {
       match: {
         method: "address-point-zone-intersection",
-        address_point_objectid: a.objectid,
-        zone_objectid: zone.id,
+        address_point_objectid: addressPointIds[0],
+        address_point_objectids: addressPointIds,
+        zone_objectid: first.zone.id,
       },
       note: "City address point inside a City trash pickup zone. This does not establish collection eligibility for a business or account for holiday changes.",
     }));
@@ -280,6 +309,7 @@ async function trashPickupRecords(parcel) {
     truncatedAddresses ? "More than 100 City address points were returned; only the first 100 were checked." : null,
     unmatched ? `${unmatched} address point(s) did not fall inside a returned pickup zone.` : null,
     ambiguous ? `${ambiguous} address point(s) fell inside multiple pickup zones; no day was assigned to them.` : null,
+    conflicting ? `${conflicting} address(es) had points in different pickup zones; no day was assigned to them.` : null,
     invalid ? `${invalid} address point(s) or day codes could not be read.` : null,
     !sourceLastEdited ? "The City layer did not report a data edit date." : null,
   ].filter(Boolean);
