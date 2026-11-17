@@ -15,11 +15,21 @@ export default {
       getSourceRecords("municipal-business-licenses", parcel),
       getSourceRecords("municipal-occupants", parcel),
     ]);
-    const stateNameRows = await fetchJson(`https://data.ct.gov/resource/n7gp-d28j.json?${new URLSearchParams({
-      $where: "name = 'ALL DAY BAR LLC' OR name = 'ALL DAY BAR, LLC'",
-      $select: "id,name,accountnumber,business_type,status,billingstreet,billingcity,billingpostalcode",
-      $limit: "10",
-    })}`, { timeout: 12000 }).catch((error) => ({ error: error.message }));
+    const stateChecks = await Promise.all([
+      ["registry_name", "n7gp-d28j", "upper(name) like '%ALL DAY BAR%'"],
+      ["registry_address", "n7gp-d28j", "upper(billingstreet) like '20%ELD%' AND upper(billingcity) = 'NEW HAVEN'"],
+      ["credential_address", "ngch-56tr", "upper(address) like '20%ELD%' AND upper(city) = 'NEW HAVEN'"],
+    ].map(async ([key, dataset, where]) => {
+      const rows = await fetchJson(`https://data.ct.gov/resource/${dataset}.json?${new URLSearchParams({ $where: where, $limit: "100" })}`, { timeout: 12000 }).catch((error) => ({ error: error.message }));
+      return [key, Array.isArray(rows) ? rows.map((row) => ({
+        name: row.name ?? row.businessname ?? row.credentialname ?? null,
+        address: row.billingstreet ?? row.address ?? null,
+        city: row.billingcity ?? row.city ?? null,
+        status: row.status ?? row.credentialstatus ?? null,
+        id: row.id ?? row.credentialid ?? null,
+        name_fields: Object.fromEntries(Object.entries(row).filter(([field]) => /name|license|credential|trade|dba/i.test(field))),
+      })) : rows];
+    }));
     return Response.json({
       resolver: {
         status: resolved.status,
@@ -73,7 +83,7 @@ export default {
         warning: occupants.warning,
         items: occupants.items.slice(0, 40).map((item) => item.attributes),
       },
-      state_name_rows: stateNameRows,
+      state_checks: Object.fromEntries(stateChecks),
     }, { headers: { "Cache-Control": "private, no-store" } });
   },
 };
