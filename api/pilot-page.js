@@ -41,15 +41,6 @@ const app = `
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
   </section>
   <div id="groups" class="record-groups"></div>
-  <section id="context-section" class="panel" aria-labelledby="context-title" hidden>
-    <h2 id="context-title">Around this parcel</h2>
-    <p>Municipal business records on neighboring parcels, 2020 census block counts, and nearby transit stops. These records describe the area, not this building.</p>
-    <p id="context-status" role="status" aria-live="polite"></p>
-    <button id="context-load" type="button" class="secondary" hidden>Retry neighborhood lookup</button>
-    <div id="context-sources" class="source-list"></div>
-    <div id="context-records" class="context-groups"></div>
-    <button id="context-more" type="button" class="secondary" hidden>Check more nearby parcels</button>
-  </section>
   <script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
   String(value).replace(

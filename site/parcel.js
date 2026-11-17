@@ -6,7 +6,6 @@ const groups = [
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
   ["representation", "Representation", "Ward and community management contacts shown by the checked sources."],
-  ["nearby", "Nearby projects", "Projects near the parcel, kept separate from parcel-specific records."],
 ];
 const sourceNames = {
   parcels: "City parcel layer",
@@ -21,9 +20,6 @@ const sourceNames = {
   municity: "Municipal parcel service",
   "municipal-business-licenses": "Municipal licenses",
   "municipal-occupants": "Municipal occupants",
-  "census-block-2020": "City 2020 census block",
-  "ct-transit-stops": "City hosted CT Transit stops",
-  "nearby-municipal-business": "Nearby municipal business records",
   "business-master": "CT business registry",
   "state-licenses": "CT credentials",
   "lci-cases": "LCI cases",
@@ -40,7 +36,6 @@ let selected = null;
 let viewVersion = 0;
 let searchedAddress = "";
 const groupResponses = new Map();
-const contextParcelCards = new Map();
 async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
   const body = await r
@@ -88,15 +83,10 @@ function recordStatus(item) {
   const a = item.attributes ?? {};
   if (item.source_id === "municipal-occupants")
     return a.inactive == null ? null : `Inactive flag: ${a.inactive ? "Yes" : "No"}`;
-  if (item.source_id === "nearby-municipal-business" && a.municipal_record_type === "Occupant")
-    return a.inactive == null ? null : `Inactive flag: ${a.inactive ? "Yes" : "No"}`;
   return a.status ?? a.Status ?? a.record_status ?? a.PermStatus ?? a.PermitApplicationStatus ?? a.CompStatus ?? null;
 }
 function recordTitle(item) {
   const a = item.attributes ?? {};
-  if (item.source_id === "census-block-2020") return `Census block ${item.source_record_id}`;
-  if (item.source_id === "ct-transit-stops") return a.stop_name ?? `Transit stop ${item.source_record_id}`;
-  if (item.source_id === "nearby-municipal-business") return a.business_name ?? a.occupant_name ?? item.source_record_id;
   if (item.source_id === "addresses")
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
   if (item.source_id === "assessor-valuations")
@@ -120,18 +110,6 @@ function recordTitle(item) {
 }
 function recordDescription(item) {
   const a = item.attributes ?? {};
-  if (item.source_id === "census-block-2020")
-    return [`Population ${a.total_population ?? "not reported"}`, `Adults ${a.adult_population ?? "not reported"}`, `Housing units ${a.total_housing_units ?? "not reported"}`].join(" · ");
-  if (item.source_id === "ct-transit-stops")
-    return [a.distance_m != null ? `${a.distance_m} m away` : null, a.on_street, a.at_street ? `at ${a.at_street}` : null, a.in_service != null ? `InService flag: ${a.in_service}` : null].filter(Boolean).join(" · ");
-  if (item.source_id === "nearby-municipal-business")
-    return [a.municipal_record_type === "License" ? "Municipal license" : "Municipal occupant row",
-      a.license_type ?? a.occupancy_type ?? "Type not listed",
-      a.license_number ? `License ${a.license_number}` : null,
-      a.status ? `Status ${a.status}` : null,
-      a.inactive != null ? `Inactive flag ${a.inactive ? "Yes" : "No"}` : null,
-      a.expiration_date ? `Expiration listed ${shortDate(a.expiration_date)}` : null,
-      a.recorded_address ? `Recorded address ${a.recorded_address}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "parcels") {
     const facts = [
       a.year_building_built ? `Built ${a.year_building_built}` : null,
@@ -423,12 +401,6 @@ async function choose(item, searchedQuery = null) {
   $("parcel-summary").hidden = true;
   $("snapshot").hidden = true;
   $("feed-section").hidden = false;
-  $("context-section").hidden = true;
-  $("context-records").replaceChildren();
-  $("context-sources").replaceChildren();
-  $("context-status").textContent = "";
-  $("context-load").hidden = true;
-  $("context-more").hidden = true;
   status("Loading parcel records…");
   try {
     const qs = new URLSearchParams({ parcel_id: item.parcel_id });
@@ -458,8 +430,6 @@ async function choose(item, searchedQuery = null) {
     const timelineLink = el("a", "Timeline");
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
-    $("context-section").hidden = false;
-    $("context-status").textContent = "Neighborhood context will load after parcel records.";
     const tasks = [];
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
@@ -472,96 +442,13 @@ async function choose(item, searchedQuery = null) {
       $("group-nav").append(a);
       tasks.push(loadGroup(id, section, qs, version));
     }
-    const contextLink = el("a", "Around this parcel");
-    contextLink.href = "#context-section";
-    $("group-nav").append(contextLink);
     tasks.push(loadFeed(qs, version));
     await Promise.allSettled(tasks);
-    if (version === viewVersion) {
-      status("Records loaded. Open a record to inspect its source fields.");
-      void loadContext();
-    }
+    if (version === viewVersion) status("Records loaded. Open a record to inspect its source fields.");
   } catch (error) {
     status(error.message);
   }
 }
-async function loadContext(cursor = null) {
-  if (!selected) return;
-  const version = viewVersion;
-  const button = cursor ? $("context-more") : $("context-load");
-  button.disabled = true;
-  $("context-status").textContent = cursor ? "Checking more nearby parcels…" : "Checking official neighborhood sources…";
-  try {
-    const p = new URLSearchParams({ parcel_id: selected.parcel_id });
-    if (selected.objectid) p.set("objectid", selected.objectid);
-    if (cursor) p.set("cursor", cursor);
-    const data = await api(`/api/v1/context?${p}`);
-    if (version !== viewVersion) return;
-    if (!cursor) {
-      $("context-load").hidden = true;
-      $("context-sources").replaceChildren();
-      $("context-records").replaceChildren();
-      contextParcelCards.clear();
-      for (const [id, title, intro] of [
-        ["business", "Named records on nearby parcels", "These are municipal license and occupant records, including historical rows. They do not establish which businesses operate today."],
-        ["area", "2020 census block", "Published block counts describe an area, not this building."],
-        ["transit", "Transit stops", "Recorded stops within 400 meters of a point inside the parcel."],
-      ]) {
-        const section = el("section", null, "context-group");
-        section.append(el("h3", title));
-        section.append(el("p", intro, "group-intro"));
-        const records = el("div", null, id === "business" ? "nearby-parcel-list" : "record-list");
-        records.id = `context-${id}-records`;
-        section.append(records);
-        $("context-records").append(section);
-      }
-    }
-    for (const source of data.sources) sourceLine($("context-sources"), source);
-    for (const item of data.items) {
-      if (item.source_id === "nearby-municipal-business") appendNearbyBusinessRecord(item);
-      else appendRecord($(item.source_id === "ct-transit-stops" ? "context-transit-records" : "context-area-records"), item);
-    }
-    if (!contextParcelCards.size && !$("context-business-empty")) {
-      const empty = el("p", "No named municipal license or occupant record was returned on the nearby parcels checked so far. More parcels may remain.", "empty-state");
-      empty.id = "context-business-empty";
-      $("context-business-records").append(empty);
-    }
-    if (!data.items.length && !cursor)
-      $("context-records").append(el("p", "No area or nearby records returned by the checked sources. Review the source statuses above.", "empty-state"));
-    $("context-status").textContent = `Checked ${Number(cursor ?? 0) + data.parcels_checked} nearby parcels${data.parcels_available == null ? "" : ` of ${data.parcels_available} returned by the City query`}. Distances are straight-line measurements from a point inside the selected parcel.`;
-    $("context-more").hidden = !data.next_cursor;
-    $("context-more").onclick = data.next_cursor ? () => void loadContext(data.next_cursor) : null;
-  } catch (error) {
-    if (version === viewVersion) {
-      $("context-status").textContent = `Could not load neighborhood context: ${error.message}`;
-      if (!cursor) $("context-load").hidden = false;
-    }
-  } finally {
-    button.disabled = false;
-  }
-}
-function appendNearbyBusinessRecord(item) {
-  const a = item.attributes ?? {};
-  $("context-business-empty")?.remove();
-  const key = String(a.nearby_parcel_objectid ?? a.nearby_parcel_id);
-  let parcelCard = contextParcelCards.get(key);
-  if (!parcelCard) {
-    parcelCard = el("section", null, "nearby-parcel");
-    parcelCard.append(el("h4", a.nearby_parcel_address ?? `Parcel ${a.nearby_parcel_id}`));
-    parcelCard.append(el("p", [a.nearby_parcel_id ? `City parcel ${a.nearby_parcel_id}` : null,
-      a.distance_m != null ? `${a.distance_m} m from the selected parcel` : null].filter(Boolean).join(" · "), "meta"));
-    if (a.nearby_parcel_id && a.nearby_parcel_objectid) {
-      const params = new URLSearchParams({ parcel_id: a.nearby_parcel_id, objectid: a.nearby_parcel_objectid });
-      parcelCard.append(link(`${location.origin}/parcel?${params}`, "Review this parcel"));
-    }
-    const rows = el("div", null, "record-list");
-    parcelCard.append(rows);
-    $("context-business-records").append(parcelCard);
-    contextParcelCards.set(key, parcelCard);
-  }
-  appendRecord(parcelCard.lastElementChild, item);
-}
-$("context-load").addEventListener("click", () => void loadContext());
 async function loadGroup(id, section, qs, version, cursor = null) {
   try {
     const p = new URLSearchParams(qs);
