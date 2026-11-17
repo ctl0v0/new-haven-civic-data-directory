@@ -887,10 +887,6 @@ test("neighborhood context keeps area counts and nearby businesses separate from
       return response({ features: u.searchParams.has("distance") ? [selected, neighbor] : [selected], spatialReference: { wkid: 4326 } });
     if (u.pathname.includes("NH_2020_Census_pop_by_Block"))
       return response({ features: [{ attributes: { GEOID: "090091404001001", P0010001: 64, P0030001: 49, H0010001: 20 } }] });
-    if (u.pathname.includes("2020_USA_Tracts"))
-      return response({ features: [{ attributes: { FIPS: "09009140400" } }] });
-    if (u.pathname.includes("3p9s-pdza.json"))
-      return response([{ geoid: "9009140400", medianhouseholdincome: "55000", povertyrate: "17.5", censuspopulation: "3100" }]);
     if (u.pathname.includes("CT_Transit_New_Haven_Bus_Stops"))
       return response({ features: [{ attributes: { OBJECTID: 3, StopId: 101, StopName: "Church Street", InService: 1 }, geometry: { x: -72.925, y: 41.305 } }] });
     if (u.pathname.endsWith("/GetM5Data")) {
@@ -909,7 +905,8 @@ test("neighborhood context keeps area counts and nearby businesses separate from
   assert.equal(out.parcel_id, 999088);
   assert.equal(out.radius_m, 400);
   assert.equal(out.items.find((x) => x.source_id === "census-block-2020").attributes.total_population, 64);
-  assert.equal(out.items.find((x) => x.source_id === "ct-tract-2020-acs").attributes.median_household_income_usd, 55000);
+  assert.ok(out.sources.every((source) => source.source_id !== "ct-tract-2020-acs"));
+  assert.ok(out.items.every((item) => item.source_id !== "ct-tract-2020-acs"));
   assert.equal(out.items.find((x) => x.source_id === "ct-transit-stops").attributes.in_service, 1);
   const businesses = out.items.filter((x) => x.source_id === "nearby-municipal-business");
   const business = businesses.find((x) => x.attributes.municipal_record_type === "License");

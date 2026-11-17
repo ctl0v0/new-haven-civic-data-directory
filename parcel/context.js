@@ -1,6 +1,6 @@
 import { CONTEXT_SOURCES, LAYERS } from "./config.js";
 import { getSourceRecords } from "./adapters.js";
-import { arcgis, cached, fetchJson, SourceError } from "./http.js";
+import { arcgis, cached, SourceError } from "./http.js";
 import { loadParcel } from "./resolve.js";
 
 const RADIUS_M = 400;
@@ -101,33 +101,6 @@ async function censusBlock(point) {
     adult_population: a.P0030001 ?? null,
     total_housing_units: a.H0010001 ?? null,
   }, layer, "census_block", "2020 Census")]);
-}
-
-async function tractDemographics(point) {
-  const id = "ct-tract-2020-acs";
-  const definition = definitions[id];
-  const tract = await arcgis(definition.geometry_url,
-    pointQuery(point, "FIPS", { resultRecordCount: "3" }));
-  if (tract.exceededTransferLimit || tract.features?.length > 1)
-    return sourceResult(id, [], "partial", "More than one census tract matched the parcel point.");
-  const fips = String(tract.features?.[0]?.attributes?.FIPS ?? "");
-  if (!/^09\d{9}$/.test(fips)) return sourceResult(id, []);
-  const url = new URL("https://data.ct.gov/resource/3p9s-pdza.json");
-  url.searchParams.set("geoid", String(Number(fips)));
-  url.searchParams.set("$select", "geoid,medianhouseholdincome,povertyrate,censuspopulation");
-  url.searchParams.set("$limit", "2");
-  const rows = await fetchJson(url, { timeout: 10000, maxBytes: 20000 });
-  if (!Array.isArray(rows)) throw new SourceError("State tract response lacks records");
-  const matches = rows.filter((r) => String(Number(r.geoid)) === String(Number(fips)));
-  if (matches.length > 1) return sourceResult(id, [], "partial", "State returned multiple rows for one tract GEOID.");
-  if (!matches.length) return sourceResult(id, []);
-  const row = matches[0];
-  const number = (v) => v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
-  return sourceResult(id, [areaRecord(id, fips, {
-    median_household_income_usd: number(row.medianhouseholdincome),
-    poverty_rate_source_value: number(row.povertyrate),
-    census_population: number(row.censuspopulation),
-  }, definition.url, "census_tract", "2020 ACS; State dataset published 2023")]);
 }
 
 function distanceMeters(point, other) {
@@ -253,13 +226,12 @@ export async function parcelContext(parcelId, { objectid = null, cursor = null }
     throw new SourceError("Invalid context cursor", 400);
   const parcel = await loadParcel(parcelId, objectid);
   const point = representativePoint(parcel.geometry);
-  const [block, tract, stops, nearby] = await Promise.all([
+  const [block, stops, nearby] = await Promise.all([
     offset ? null : checked("census-block-2020", () => cached(`context:block:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, () => censusBlock(point))),
-    offset ? null : checked("ct-tract-2020-acs", () => cached(`context:tract:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, () => tractDemographics(point))),
     offset ? null : checked("ct-transit-stops", () => cached(`context:stops:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, () => transitStops(point))),
     checked("nearby-municipal-business", () => nearbyBusiness(point, parcel, offset)),
   ]);
-  const sources = [block, tract, stops, nearby?.source ?? nearby].filter(Boolean);
+  const sources = [block, stops, nearby?.source ?? nearby].filter(Boolean);
   return {
     parcel_id: Number(parcel.attributes.parcel_id),
     radius_m: RADIUS_M,

@@ -115,7 +115,7 @@ export function createServer() {
     server,
     "get_parcel_context",
     "Get neighborhood context",
-    "Return official census geography, State tract measures, nearby transit stops, and municipal business records on nearby parcels. Context is separate from records attached to the selected parcel.",
+    "Return official 2020 census block counts, nearby transit stops, and municipal business records on nearby parcels. Context is separate from records attached to the selected parcel.",
     z.object({
       ...common,
       cursor: z.string().regex(/^\d+$/).optional(),

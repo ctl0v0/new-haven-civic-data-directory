@@ -22,7 +22,6 @@ const sourceNames = {
   "municipal-business-licenses": "Municipal licenses",
   "municipal-occupants": "Municipal occupants",
   "census-block-2020": "City 2020 census block",
-  "ct-tract-2020-acs": "CT 2020 ACS tract measures",
   "ct-transit-stops": "City hosted CT Transit stops",
   "nearby-municipal-business": "Nearby municipal business records",
   "business-master": "CT business registry",
@@ -96,7 +95,6 @@ function recordStatus(item) {
 function recordTitle(item) {
   const a = item.attributes ?? {};
   if (item.source_id === "census-block-2020") return `Census block ${item.source_record_id}`;
-  if (item.source_id === "ct-tract-2020-acs") return `Census tract ${item.source_record_id}`;
   if (item.source_id === "ct-transit-stops") return a.stop_name ?? `Transit stop ${item.source_record_id}`;
   if (item.source_id === "nearby-municipal-business") return a.business_name ?? a.occupant_name ?? item.source_record_id;
   if (item.source_id === "addresses")
@@ -124,8 +122,6 @@ function recordDescription(item) {
   const a = item.attributes ?? {};
   if (item.source_id === "census-block-2020")
     return [`Population ${a.total_population ?? "not reported"}`, `Adults ${a.adult_population ?? "not reported"}`, `Housing units ${a.total_housing_units ?? "not reported"}`].join(" · ");
-  if (item.source_id === "ct-tract-2020-acs")
-    return [a.median_household_income_usd != null ? `Median household income $${Number(a.median_household_income_usd).toLocaleString()}` : null, a.census_population != null ? `Population ${Number(a.census_population).toLocaleString()}` : null, a.poverty_rate_source_value != null ? `Poverty rate field ${a.poverty_rate_source_value}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "ct-transit-stops")
     return [a.distance_m != null ? `${a.distance_m} m away` : null, a.on_street, a.at_street ? `at ${a.at_street}` : null, a.in_service != null ? `InService flag: ${a.in_service}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "nearby-municipal-business")
@@ -508,7 +504,7 @@ async function loadContext(cursor = null) {
       contextParcelCards.clear();
       for (const [id, title, intro] of [
         ["business", "Named records on nearby parcels", "These are municipal license and occupant records, including historical rows. They do not establish which businesses operate today."],
-        ["area", "Census area facts", "Published block and tract figures describe a larger area."],
+        ["area", "2020 census block", "Published block counts describe an area, not this building."],
         ["transit", "Transit stops", "Recorded stops within 400 meters of a point inside the parcel."],
       ]) {
         const section = el("section", null, "context-group");

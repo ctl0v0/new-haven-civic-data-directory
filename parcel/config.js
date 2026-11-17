@@ -312,14 +312,6 @@ export const CONTEXT_SOURCES = Object.freeze([
     coverage: "2020 population, adults, and housing units for the census block containing the parcel point; these are area counts, not parcel occupants or building-level conditions.",
   },
   {
-    id: "ct-tract-2020-acs",
-    title: "Connecticut 2023 tract dataset (2020 ACS measures)",
-    url: "https://data.ct.gov/Government/2023-Disproportionately-Impacted-Areas/3p9s-pdza",
-    geometry_url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/2020_USA_Tracts/FeatureServer/0",
-    mode: "live",
-    coverage: "2020 ACS income, poverty, and population only where the State dataset has an exact row for the City hosted 2020 census tract FIPS.",
-  },
-  {
     id: "ct-transit-stops",
     title: "City hosted CT Transit bus stops",
     url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0",
