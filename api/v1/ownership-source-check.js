@@ -32,7 +32,8 @@ export default {
       $q: owner.replace(/\b(?:LLC|L L C|INC|CORP|CORPORATION|LTD)\b/gi, "").trim(),
       $limit: "25",
     })}`, { timeout: 16000 }));
-    const id = matches.ok && matches.value.length === 1 ? matches.value[0].id : null;
+    const id = matches.ok && matches.value.length === 1 ? matches.value[0].id :
+      search.ok && search.value.length === 1 ? search.value[0].id : null;
     const related = id ? await Promise.all([datasets.principals, datasets.agents].map(async (dataset, index) => {
       const where = `${index === 0 ? "business_id" : "business_key"} = '${id.replaceAll("'", "''")}'`;
       return checked(fetchJson(`https://data.ct.gov/resource/${dataset}.json?${new URLSearchParams({ $where: where, $limit: "11" })}`, { timeout: 12000 }));
@@ -52,6 +53,9 @@ export default {
         ({ business_id, name__c, designation, business_street_address_1, business_city, business_state })) : related?.[0] ?? null,
       agents: related?.[1]?.ok ? related[1].value.map(({ business_key, name__c, type, agent_phone, email, business_address }) =>
         ({ business_key, name__c, type, agent_phone, email, business_address })) : related?.[1] ?? null,
+      principal_field_names: related?.[0]?.ok ? Object.keys(related[0].value[0] ?? {}) : null,
+      agent_field_names: related?.[1]?.ok ? Object.keys(related[1].value[0] ?? {}) : null,
+      master_full: id ? await checked(fetchJson(`https://data.ct.gov/resource/${datasets.master}.json?${new URLSearchParams({ $where: `id = '${id}'`, $limit: "1" })}`, { timeout: 12000 })) : null,
     }, { headers: { "Cache-Control": "private, no-store" } });
   },
 };
