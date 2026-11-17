@@ -3,6 +3,7 @@ export const LAYERS = Object.freeze({
   parcels:
     GIS + "New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
   addresses: GIS + "New_Haven_Addresses_Authoritative_view/FeatureServer/0",
+  trashPickup: GIS + "Trash_Pickup_Day_%28View%29/FeatureServer/0",
   zoning: GIS + "Zoning_(View)/FeatureServer/0",
   wards: GIS + "Wards_2022_(View)/FeatureServer/0",
   neighborhoods: GIS + "Neighborhoods_(View)/FeatureServer/0",
@@ -76,6 +77,16 @@ export const SOURCES = Object.freeze([
     coverage:
       "Address points may have multiple rows or no unique parcel match.",
     directoryId: "gis-parcels",
+  },
+  {
+    id: "trash-pickup",
+    group: "property",
+    title: "City trash pickup zones at parcel addresses",
+    url: LAYERS.trashPickup,
+    verification_url: "https://www.newhavenct.gov/government/departments-divisions/public-works-department/trash-recycling",
+    mode: "live",
+    coverage:
+      "City address points intersecting this parcel are matched to the City's published trash pickup day polygons. The source edit date is shown per record. A mapped zone does not establish City collection eligibility for a business or account for holiday changes.",
   },
   {
     id: "zoning",

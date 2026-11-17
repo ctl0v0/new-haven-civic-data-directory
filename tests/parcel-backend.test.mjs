@@ -760,6 +760,71 @@ test("assessor subareas preserve separate source tables and omit unreadable tota
   assert.equal(out.items[2].attributes.gross_area_as_published, "unknown");
 });
 
+test("City pickup zones join to individual parcel address points and retain source dates", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Trash_Pickup_Day") && !u.pathname.endsWith("/query"))
+      return response({
+        geometryType: "esriGeometryPolygon",
+        editingInfo: { lastEditDate: 1751566162283 },
+        fields: [{ name: "trash_day", domain: { codedValues: [
+          { code: "M", name: "Monday" }, { code: "F", name: "Friday" },
+        ] } }],
+      });
+    if (u.pathname.includes("Trash_Pickup_Day"))
+      return response({ spatialReference: { wkid: 4326 }, features: [
+        { attributes: { objectid: 10, trash_day: "M" }, geometry: { rings: [[
+          [0, 0], [1, 0], [1, 1], [0, 1], [0, 0],
+        ]] } },
+        { attributes: { objectid: 11, trash_day: "F" }, geometry: { rings: [[
+          [1, 0], [2, 0], [2, 1], [1, 1], [1, 0],
+        ]] } },
+      ] });
+    if (u.pathname.includes("Addresses_"))
+      return response({ spatialReference: { wkid: 4326 }, features: [
+        { attributes: { objectid: 20, house_number: "3", full_street_name: "EDWARDS ST" }, geometry: { x: 0.5, y: 0.5 } },
+        { attributes: { objectid: 21, house_number: "990", full_street_name: "STATE ST" }, geometry: { x: 1.5, y: 0.5 } },
+      ] });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("trash-pickup", parcel(999061));
+  assert.equal(out.status, "ok");
+  assert.deepEqual(out.items.map((item) => [item.attributes.address, item.attributes.trash_day]), [
+    ["3 EDWARDS ST", "Monday"], ["990 STATE ST", "Friday"],
+  ]);
+  assert.equal(out.items[0].attributes.source_last_edited, "2025-07-03");
+  assert.equal(out.items[0].match.method, "address-point-zone-intersection");
+  assert.equal(addressEvidence(out.items[0], "3 Edwards St").matches_query, true);
+  assert.equal(addressEvidence(out.items[1], "3 Edwards St").matches_query, false);
+});
+
+test("overlapping City pickup zones do not assign an address a day", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Trash_Pickup_Day") && !u.pathname.endsWith("/query"))
+      return response({ geometryType: "esriGeometryPolygon",
+        editingInfo: { lastEditDate: 1751566162283 },
+        fields: [{ name: "trash_day", domain: { codedValues: [
+          { code: "M", name: "Monday" }, { code: "F", name: "Friday" },
+        ] } }],
+      });
+    if (u.pathname.includes("Trash_Pickup_Day"))
+      return response({ features: ["M", "F"].map((code, index) => ({
+        attributes: { objectid: index + 10, trash_day: code },
+        geometry: { rings: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] },
+      })) });
+    if (u.pathname.includes("Addresses_"))
+      return response({ features: [{ attributes: {
+        objectid: 20, house_number: "3", full_street_name: "EDWARDS ST",
+      }, geometry: { x: 0.5, y: 0.5 } }] });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("trash-pickup", parcel(999062));
+  assert.equal(out.status, "partial");
+  assert.equal(out.items.length, 0);
+  assert.match(out.warning, /multiple pickup zones/);
+});
+
 test("parcel geography preserves all intersecting zoning records", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);

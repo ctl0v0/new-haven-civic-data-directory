@@ -10,6 +10,7 @@ const groups = [
 const sourceNames = {
   parcels: "City parcel layer",
   addresses: "City address points",
+  "trash-pickup": "City trash pickup zones",
   assessor: "Assessor card",
   "assessor-sales": "Assessor ownership history",
   "assessor-valuations": "Assessor valuation history",
@@ -122,6 +123,8 @@ function recordTitle(item) {
   const a = item.attributes ?? {};
   if (item.source_id === "addresses")
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
+  if (item.source_id === "trash-pickup")
+    return `${a.address}: ${a.trash_day} trash pickup zone`;
   if (item.source_id === "assessor-valuations")
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   if (item.source_id === "assessor-subareas")
@@ -143,6 +146,8 @@ function recordTitle(item) {
 }
 function recordDescription(item) {
   const a = item.attributes ?? {};
+  if (item.source_id === "trash-pickup")
+    return `City address point ${a.address_point_objectid} · pickup zone ${a.zone_objectid}${a.source_last_edited ? ` · source last edited ${shortDate(a.source_last_edited)}` : ""}`;
   if (item.source_id === "parcels") {
     const facts = [
       a.year_building_built ? `Built ${a.year_building_built}` : null,
@@ -424,6 +429,18 @@ function renderSnapshot() {
       for (const address of addresses.slice(0, 12)) list.append(el("li", address));
       building.append(list);
       if (addresses.length > 12) building.append(el("p", `And ${addresses.length - 12} more in Building and addresses.`, "meta"));
+    }
+    const pickupZones = property.items
+      .filter((item) => item.source_id === "trash-pickup")
+      .sort((a, b) => Number(normalizedAddress(b.attributes.address) === normalizedAddress(searchedAddress)) -
+        Number(normalizedAddress(a.attributes.address) === normalizedAddress(searchedAddress)));
+    if (pickupZones.length) {
+      building.append(el("p", "City trash pickup zones at address points", "snapshot-label"));
+      const list = el("ul", null, "snapshot-list");
+      for (const item of pickupZones.slice(0, 4)) list.append(el("li", recordTitle(item)));
+      building.append(list);
+      if (pickupZones.length > 4) building.append(el("p", `And ${pickupZones.length - 4} more pickup zone rows below.`, "meta"));
+      building.append(el("p", `City layer last edited ${shortDate(pickupZones[0].attributes.source_last_edited) || "date unavailable"}. A mapped zone does not establish commercial collection eligibility.`, "snapshot-caveat"));
     }
     building.append(el("p", "Address points are spatial links; occupancy is not verified.", "snapshot-caveat"));
   }

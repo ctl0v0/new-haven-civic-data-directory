@@ -18,6 +18,8 @@ function explicitAddress(item) {
     const address = `${a.house_number ?? ""} ${street}`.trim();
     return address ? { field: "house_number + full_street_name", value: address } : null;
   }
+  if (item.source_id === "trash-pickup" && a.address)
+    return { field: "City address point house_number + full_street_name", value: a.address };
   if (item.source_id === "municity" && a.LegalAddress &&
     ["Permit", "Application", "License", "Certificate"].includes(item.category))
     return { field: "LegalAddress", value: a.LegalAddress };

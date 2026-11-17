@@ -1,4 +1,5 @@
 import { load } from "cheerio";
+import { arcgisToGeoJSON } from "@terraformer/arcgis";
 import { LAYERS, source, SOURCES } from "./config.js";
 import {
   arcgis,
@@ -146,6 +147,146 @@ async function addressRecords(parcel) {
         "Address points inside the parcel are spatial candidates; they do not prove a unit or legal address.",
     },
   );
+}
+
+function pointOnSegment([x, y], [ax, ay], [bx, by]) {
+  const cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax);
+  return Math.abs(cross) < 1e-12 &&
+    x >= Math.min(ax, bx) && x <= Math.max(ax, bx) &&
+    y >= Math.min(ay, by) && y <= Math.max(ay, by);
+}
+
+function pointInRing(point, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j];
+    const b = ring[i];
+    if (pointOnSegment(point, a, b)) return true;
+    if ((a[1] > point[1]) !== (b[1] > point[1]) &&
+      point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0])
+      inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(point, polygon) {
+  return pointInRing(point, polygon[0]) &&
+    !polygon.slice(1).some((hole) => pointInRing(point, hole));
+}
+
+function pointInZone(point, geometry) {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates]
+    : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
+  return polygons.some((polygon) => pointInPolygon(point, polygon));
+}
+
+async function trashPickupRecords(parcel) {
+  const metadata = await cached("trash-pickup-metadata", () =>
+    fetchJson(`${LAYERS.trashPickup}?f=pjson`, { timeout: 8000 }), 3600);
+  const dayField = metadata.fields?.find((field) => field.name === "trash_day");
+  const dayNames = new Map(dayField?.domain?.codedValues?.map(({ code, name }) =>
+    [String(code), String(name)]) ?? []);
+  if (metadata.error || metadata.geometryType !== "esriGeometryPolygon" || !dayNames.size)
+    throw new SourceError("City trash pickup layer has no verified day codes or polygon geometry");
+
+  const [addresses, zones] = await Promise.all([
+    arcgis(LAYERS.addresses, {
+      ...polygonParams(parcel),
+      outFields: "objectid,house_number,full_street_name,street_name,suffix_type,unit",
+      returnGeometry: "true",
+      outSR: "4326",
+      resultRecordCount: "101",
+    }),
+    arcgis(LAYERS.trashPickup, {
+      ...polygonParams(parcel),
+      outFields: "objectid,trash_day",
+      returnGeometry: "true",
+      outSR: "4326",
+      resultRecordCount: "21",
+    }),
+  ]);
+  for (const data of [addresses, zones]) {
+    const wkid = data.spatialReference?.latestWkid ?? data.spatialReference?.wkid;
+    if (wkid && wkid !== 4326)
+      throw new SourceError("City address or pickup zone geometry was not returned in longitude and latitude");
+  }
+  if (zones.exceededTransferLimit || (zones.features?.length ?? 0) > 20)
+    return result("trash-pickup", [], {
+      partial: true,
+      warning: "The City returned more than 20 pickup zones for this parcel; no day was assigned.",
+    });
+  const zoneRows = (zones.features ?? []).map((row) => ({
+    id: row.attributes?.objectid,
+    code: row.attributes?.trash_day,
+    geometry: arcgisToGeoJSON(row.geometry),
+  }));
+  if (zoneRows.some(({ id, geometry }) => id == null ||
+    !["Polygon", "MultiPolygon"].includes(geometry?.type)))
+    throw new SourceError("City pickup zone geometry or identifier was not returned");
+
+  const edited = metadata.editingInfo?.dataLastEditDate ??
+    metadata.editingInfo?.lastEditDate ?? null;
+  const sourceLastEdited = Number.isFinite(edited) && edited > 0
+    ? new Date(edited).toISOString().slice(0, 10) : null;
+  const items = [];
+  let unmatched = 0;
+  let ambiguous = 0;
+  let invalid = 0;
+  for (const row of (addresses.features ?? []).slice(0, 100)) {
+    const a = row.attributes ?? {};
+    const point = [row.geometry?.x, row.geometry?.y];
+    const street = a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`.trim();
+    const address = `${a.house_number ?? ""} ${street}`.trim();
+    if (a.objectid == null || !address || !point.every(Number.isFinite)) {
+      invalid++;
+      continue;
+    }
+    const matches = zoneRows.filter(({ geometry }) => pointInZone(point, geometry));
+    if (!matches.length) {
+      unmatched++;
+      continue;
+    }
+    if (matches.length > 1) {
+      ambiguous++;
+      continue;
+    }
+    const zone = matches[0];
+    const day = dayNames.get(String(zone.code));
+    if (!day) {
+      invalid++;
+      continue;
+    }
+    items.push(record(`address:${a.objectid}:zone:${zone.id}`, "trash-pickup", {
+      address,
+      unit: a.unit ?? null,
+      address_point_objectid: a.objectid,
+      zone_objectid: zone.id,
+      trash_day_code: zone.code,
+      trash_day: day,
+      source_last_edited: sourceLastEdited,
+    }, {
+      match: {
+        method: "address-point-zone-intersection",
+        address_point_objectid: a.objectid,
+        zone_objectid: zone.id,
+      },
+      note: "City address point inside a City trash pickup zone. This does not establish collection eligibility for a business or account for holiday changes.",
+    }));
+  }
+  const truncatedAddresses = Boolean(addresses.exceededTransferLimit) ||
+    (addresses.features?.length ?? 0) > 100;
+  const warnings = [
+    !(addresses.features?.length) ? "No City address point was returned inside this parcel; no pickup day can be assigned." : null,
+    truncatedAddresses ? "More than 100 City address points were returned; only the first 100 were checked." : null,
+    unmatched ? `${unmatched} address point(s) did not fall inside a returned pickup zone.` : null,
+    ambiguous ? `${ambiguous} address point(s) fell inside multiple pickup zones; no day was assigned to them.` : null,
+    invalid ? `${invalid} address point(s) or day codes could not be read.` : null,
+    !sourceLastEdited ? "The City layer did not report a data edit date." : null,
+  ].filter(Boolean);
+  return result("trash-pickup", items, {
+    partial: Boolean(warnings.length),
+    warning: warnings.join(" ") || null,
+  });
 }
 
 function assessorSaleDate(value) {
@@ -1033,6 +1174,7 @@ async function managedLotRecords(parcel) {
 const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
   addresses: addressRecords,
+  "trash-pickup": trashPickupRecords,
   assessor: assessorRecord,
   "assessor-subareas": assessorSubareaRecords,
   "assessor-sales": assessorSalesRecords,
