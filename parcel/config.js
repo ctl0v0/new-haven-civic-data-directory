@@ -89,6 +89,15 @@ export const SOURCES = Object.freeze([
       "City address points intersecting this parcel are matched to the City's published trash pickup day polygons. The source edit date is shown per record. A mapped zone does not establish City collection eligibility for a business or account for holiday changes.",
   },
   {
+    id: "school-attendance",
+    group: "property",
+    title: "NHPS address attendance-zone schools",
+    url: "https://www.newhavenmagnetschools.com/index.php/enrollment/find-schools-in-your-attendance-zone",
+    mode: "gap",
+    coverage:
+      "NHPS publishes K–8 and high school attendance-zone schools by street and house-number range, but its live site blocks server requests. The City's Board of Education District 1 and 2 GIS polygons are election districts and do not identify assigned schools. No school is inferred from them or from a cached street table.",
+  },
+  {
     id: "zoning",
     group: "geography",
     title: "City zoning polygons",

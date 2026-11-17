@@ -103,6 +103,9 @@ test("private access fails closed and signed cookies cannot be forged", async ()
   assert.equal(allowed.status, 200);
   const coverage = await allowed.json();
   assert.ok(coverage.sources.some((x) => x.id === "municity"));
+  const attendance = coverage.sources.find((x) => x.id === "school-attendance");
+  assert.equal(attendance.mode, "gap");
+  assert.match(attendance.url, /newhavenmagnetschools\.com/);
   assert.equal(coverage.groups.length, 6);
   assert.equal("context_sources" in coverage, false);
   assert.ok(coverage.sources.every((source) => ![

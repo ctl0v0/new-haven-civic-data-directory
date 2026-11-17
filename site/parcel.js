@@ -11,6 +11,7 @@ const sourceNames = {
   parcels: "City parcel layer",
   addresses: "City address points",
   "trash-pickup": "City trash pickup zones",
+  "school-attendance": "NHPS attendance-zone schools",
   assessor: "Assessor card",
   "assessor-sales": "Assessor ownership history",
   "assessor-valuations": "Assessor valuation history",
