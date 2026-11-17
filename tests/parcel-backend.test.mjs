@@ -1340,7 +1340,6 @@ test("map context keeps official parcel and nearby layers separate with REST and
   const id = 999051;
   const center = [-72.925, 41.305];
   const point = (x, y, attributes) => ({ attributes, geometry: { x, y, spatialReference: { wkid: 4326 } } });
-  const line = (points, attributes) => ({ attributes, geometry: { paths: [points], spatialReference: { wkid: 4326 } } });
   const zone = { attributes: { OBJECTID: 70, zone_code: "BA", district_category: "Business" }, geometry: polygon };
   globalThis.fetch = async (input) => {
     const url = new URL(input);
@@ -1352,19 +1351,10 @@ test("map context keeps official parcel and nearby layers separate with REST and
       return response({ features: [point(...center, { objectid: 22, house_number: "165", full_street_name: "CHURCH ST" })], spatialReference: { wkid: 4326 } });
     if (url.pathname.includes("Zoning_"))
       return response({ features: [zone], spatialReference: { wkid: 4326 } });
-    if (url.pathname.includes("New_Haven_Local_Historic_Districts"))
-      return response({ features: [], spatialReference: { wkid: 4326 } });
-    if (url.pathname.includes("New_Haven_State_Historic_Districts"))
-      return new Response("unavailable", { status: 503 });
     if (url.pathname.includes("CT_Transit_New_Haven_Bus_Stops"))
       return response({ features: [
         point(...center, { OBJECTID: 1, StopName: "Church Street", InService: 1 }),
         point(-72.90, 41.32, { OBJECTID: 2, StopName: "Far away" }),
-      ], spatialReference: { wkid: 4326 } });
-    if (url.pathname.includes("Greenways_Status"))
-      return response({ features: [
-        line([[-72.926, 41.304], [-72.924, 41.306]], { OBJECTID: 3, Name: "Canal route", Status: "Planned" }),
-        line([[-72.90, 41.32], [-72.89, 41.33]], { OBJECTID: 4, Name: "Far route", Status: "Existing" }),
       ], spatialReference: { wkid: 4326 } });
     throw Error(`Unexpected map source: ${url.pathname}`);
   };
@@ -1375,12 +1365,9 @@ test("map context keeps official parcel and nearby layers separate with REST and
   assert.equal(rest.status, 200);
   const context = await rest.json();
   assert.equal(context.nearby_radius_m, 400);
-  assert.equal(context.layers.length, 6);
+  assert.deepEqual(context.layers.map((layer) => layer.id), ["parcel-addresses", "zoning", "transit-stops"]);
   assert.equal(context.layers.find((layer) => layer.id === "parcel-addresses").features[0].properties.house_number, "165");
   assert.equal(context.layers.find((layer) => layer.id === "transit-stops").features.length, 1);
-  assert.equal(context.layers.find((layer) => layer.id === "greenways").features[0].properties.Status, "Planned");
-  assert.equal(context.layers.find((layer) => layer.id === "local-historic").status, "no_records");
-  assert.equal(context.layers.find((layer) => layer.id === "state-historic").status, "unavailable");
   assert.equal(context.layers.find((layer) => layer.id === "zoning").source_updated_at, "2026-04-15");
   assert.ok(context.gaps.some((gap) => gap.id === "loading-zones"));
   assert.doesNotMatch(JSON.stringify(context.layers), /loading.zone|parking.available/i);

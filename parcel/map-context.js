@@ -12,10 +12,7 @@ const CITY_MAPS = "https://www.newhavenct.gov/government/departments-divisions/t
 export const MAP_LAYERS = Object.freeze([
   { id: "parcel-addresses", title: "City address points on this parcel", scope: "parcel", url: LAYERS.addresses, kind: "point", fields: ["house_number", "full_street_name", "unit"] },
   { id: "zoning", title: "City zoning districts intersecting this parcel", scope: "parcel", url: LAYERS.zoning, kind: "polygon", fields: ["zone_code", "district_category", "district"] },
-  { id: "local-historic", title: "Local historic districts intersecting this parcel", scope: "parcel", url: LAYERS.localHistoricDistricts, kind: "polygon", fields: ["HistoricDistrict", "historicdistrict"] },
-  { id: "state-historic", title: "State historic districts intersecting this parcel", scope: "parcel", url: LAYERS.stateHistoricDistricts, kind: "polygon", fields: ["HistoricDistrict", "historicdistrict"] },
   { id: "transit-stops", title: "City hosted CT Transit stops nearby", scope: "nearby", url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0", kind: "point", fields: ["StopId", "StopName", "OnStreet", "AtStreet", "InService"] },
-  { id: "greenways", title: "City greenway segments nearby", scope: "nearby", url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/Greenways_Status/FeatureServer/2", kind: "line", fields: ["Name", "Greenway", "Status"] },
 ]);
 
 export const MAP_SOURCE_GAPS = Object.freeze([
@@ -61,25 +58,9 @@ function metersFromCenter(point, center) {
   return [longitude * EARTH_RADIUS * Math.cos(center[1] * Math.PI / 180), latitude * EARTH_RADIUS];
 }
 
-function segmentDistance(a, b) {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const fraction = dx || dy ? Math.max(0, Math.min(1, -(a[0] * dx + a[1] * dy) / (dx * dx + dy * dy))) : 0;
-  return Math.hypot(a[0] + fraction * dx, a[1] + fraction * dy);
-}
-
 function nearby(geometry, center) {
   if (geometry.type === "Point")
     return Math.hypot(...metersFromCenter(geometry.coordinates, center)) <= RADIUS_METERS;
-  if (geometry.type === "LineString" || geometry.type === "MultiLineString") {
-    const lines = geometry.type === "LineString" ? [geometry.coordinates] : geometry.coordinates;
-    return lines.some((line) => {
-      const points = line.map((point) => metersFromCenter(point, center));
-      return points.some((point, index) =>
-        index === 0 ? Math.hypot(...point) <= RADIUS_METERS :
-          segmentDistance(points[index - 1], point) <= RADIUS_METERS);
-    });
-  }
   return false;
 }
 
@@ -176,7 +157,7 @@ export async function parcelMapContext(id, objectid = null) {
     (feature.bbox[0] + feature.bbox[2]) / 2,
     (feature.bbox[1] + feature.bbox[3]) / 2,
   ];
-  return cached(`map-context:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, async () => ({
+  return cached(`map-context:v2:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, async () => ({
     parcel: {
       parcel_id: parcel.attributes.parcel_id,
       objectid: parcel.attributes.objectid,

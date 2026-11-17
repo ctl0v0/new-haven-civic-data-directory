@@ -54,10 +54,7 @@ const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Orth
 const MAP_COLORS = {
   "parcel-addresses": "#dc5c32",
   zoning: "#195e9d",
-  "local-historic": "#ac5592",
-  "state-historic": "#7d5ac7",
   "transit-stops": "#2476ba",
-  greenways: "#23865d",
 };
 async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
@@ -708,10 +705,7 @@ function mapFeatureTitle(feature, layerId) {
   const p = feature.properties ?? {};
   if (layerId === "parcel-addresses") return `${p.house_number ?? ""} ${p.full_street_name ?? ""}`.trim() || "City address point";
   if (layerId === "zoning") return p.zone_code ? `Zoning ${p.zone_code}` : "City zoning district";
-  if (layerId === "local-historic" || layerId === "state-historic")
-    return p.HistoricDistrict ?? p.historicdistrict ?? "Historic district";
   if (layerId === "transit-stops") return p.StopName ?? "CT Transit stop";
-  if (layerId === "greenways") return p.Name ?? p.Greenway ?? "Greenway segment";
   return "Mapped feature";
 }
 function mapFeaturePopup(feature, layer) {
@@ -732,10 +726,9 @@ function mapFeaturePopup(feature, layer) {
 function mapFeatureLayer(layer) {
   const color = MAP_COLORS[layer.id] ?? "#315e4e";
   return window.L.geoJSON({ type: "FeatureCollection", features: layer.features }, {
-    style: (feature) => ({
-      color: layer.id === "greenways" && feature.properties?.Status === "Planned" ? "#a35e2e" : color,
-      weight: layer.id === "greenways" ? 4 : 3,
-      dashArray: layer.id === "greenways" && feature.properties?.Status !== "Existing" ? "5 5" : null,
+    style: () => ({
+      color,
+      weight: 3,
       fillOpacity: 0.04,
     }),
     pointToLayer: (_feature, latlng) => window.L.circleMarker(latlng, {
@@ -783,7 +776,7 @@ async function loadMapContext(map, qs, version) {
     }
     const notes = $("map-context-notes");
     notes.replaceChildren();
-    notes.append(el("p", `Nearby layers cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.`, "meta"));
+    notes.append(el("p", `Nearby transit stops cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.`, "meta"));
     const gaps = el("p", null, "meta");
     gaps.append(document.createTextNode("Loading zones and current parking availability are not mapped: no verified City or State GIS feed has been connected. "));
     gaps.append(link(context.gaps?.[0]?.source_url, "See City parking maps"));
