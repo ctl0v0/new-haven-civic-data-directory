@@ -130,6 +130,12 @@ function recordTitle(item) {
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   if (item.source_id === "assessor-subareas")
     return `${a.description_as_published ?? "Building subarea"}${a.code ? ` (${a.code})` : ""}`;
+  if (item.source_id === "alders") {
+    const ward = a.ward_label
+      ? /^ward\b/i.test(a.ward_label) ? a.ward_label : `Ward ${a.ward_label}`
+      : a.ward ? `Ward ${a.ward}` : "Ward not listed";
+    return `${ward} · ${a.alder_name ?? "Alder not listed"}`;
+  }
   if (item.source_id === "zoning")
     return a.zone_code ? `Zoning district ${a.zone_code}` : "City zoning polygon";
   if (item.source_id === "assessor") return "Assessor building and land facts";
@@ -149,6 +155,7 @@ function recordTitle(item) {
 }
 function recordDescription(item) {
   const a = item.attributes ?? {};
+  if (item.source_id === "alders") return null;
   if (item.source_id === "trash-pickup") {
     const ids = a.address_point_objectids ?? [a.address_point_objectid];
     return `City address point${ids.length === 1 ? "" : "s"} ${ids.join(", ")} · pickup zone ${a.zone_objectid}${a.source_last_edited ? ` · source last edited ${shortDate(a.source_last_edited)}` : ""}`;
@@ -254,7 +261,13 @@ function appendRecord(parent, item) {
     body.append(el("p", `${fieldLabel(item.attributes.table_section ?? "valuation")} row`, "record-meta"));
     body.append(valuationAmounts(item.attributes, "valuation-values valuation-record-values"));
   }
-  const preview = item.source_id === "cmt-contacts"
+  const preview = item.source_id === "alders"
+    ? [
+      ["Email", item.attributes.email ?? "Not listed"],
+      ["Phone", item.attributes.phone ?? "Not listed"],
+      ["Published mailing address", [item.attributes.address, item.attributes.city, item.attributes.state, item.attributes.zip_code].filter(Boolean).join(", ") || "Not listed"],
+    ]
+    : item.source_id === "cmt-contacts"
     ? [
       ["District manager", item.attributes.district_manager ?? "Not published"],
       ["Manager email", item.attributes.dm_email],

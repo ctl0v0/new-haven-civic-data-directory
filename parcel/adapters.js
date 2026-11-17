@@ -795,19 +795,33 @@ async function alderRecords(parcel) {
   const fallback = () => {
     if (
       !wardContacts.length ||
-      new Set(wardContacts.map((item) => text(item.alder_name))).size !== 1
+      new Set(wardContacts.map((item) => JSON.stringify([
+        text(item.alder_name), text(item.email), text(item.phone), text(item.address),
+      ]))).size !== 1
     )
       return unavailable(
         "alders",
         "Board roster is unavailable and the ward layer has no unambiguous alder contact.",
       );
+    const contact = wardContacts[0];
     return result(
       "alders",
       [
-        record(numbers[0], "alders", wardContacts[0], {
-          match: "city-ward-layer",
-          sourceUrl: LAYERS.wards,
-          note: "City ward-layer contact. Verify current officeholding with the Board of Alders.",
+        record(numbers[0], "alders", {
+          ward: numbers[0],
+          ward_label: text(contact.formal_name),
+          alder_name: text(contact.alder_name),
+          email: text(contact.email),
+          phone: text(contact.phone),
+          address: text(contact.address),
+          city: text(contact.city),
+          state: text(contact.state),
+          zip_code: text(contact.zipcode),
+          ward_layer_objectid: contact.objectid ?? null,
+        }, {
+          match: { method: "city-ward-layer", ward_layer_objectid: contact.objectid ?? null },
+          sourceUrl: contact.objectid != null ? `${LAYERS.wards}/${contact.objectid}` : LAYERS.wards,
+          note: "Contact fields published in the City ward layer. The Board roster could not be checked for this request.",
         }),
       ],
       {
@@ -825,10 +839,8 @@ async function alderRecords(parcel) {
   if (!html) return fallback();
   const $ = load(html);
   for (const table of $("table").toArray()) {
-    const rows = $(table)
-      .find("tr")
-      .toArray()
-      .map((row) =>
+    const rowElements = $(table).find("tr").toArray();
+    const rows = rowElements.map((row) =>
         $(row)
           .find("th,td")
           .toArray()
@@ -844,20 +856,47 @@ async function alderRecords(parcel) {
     if (headingIndex < 0) continue;
     const heads = rows[headingIndex].map((h) => h.toLowerCase());
     const wi = heads.indexOf("ward");
+    const ni = heads.findIndex((h) => /^(name|alder|alder name|representative)$/i.test(h));
     const records = rows
       .slice(headingIndex + 1)
-      .filter((row) => row[wi])
-      .map((row) => ({
+      .map((row, index) => ({
+        element: rowElements[headingIndex + 1 + index],
         ward: Number(
           row[wi].match(/^(?:ward\s*)?(\d{1,2})(?:\s*-\s*[a-z]+)?$/i)?.[1],
         ),
         fields: Object.fromEntries(heads.map((key, i) => [key, row[i] ?? ""])),
-      }));
+      }))
+      .filter((item) => item.fields[heads[wi]]);
     const selected = records.filter((item) => item.ward === numbers[0]);
     if (selected.length !== 1) return fallback();
+    const row = selected[0].fields;
+    const nameCell = $(selected[0].element).find("th,td").eq(ni);
+    const nameCopy = nameCell.clone();
+    nameCopy.find("br").replaceWith(" ");
+    const publishedName = text(nameCopy.text()) ?? "";
+    const visibleEmail = publishedName.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? null;
+    const email = visibleEmail ?? nameCell.find('a[href^="mailto:"]').first().attr("href")
+      ?.match(/^mailto:([^?]+)/i)?.[1] ?? null;
+    row[heads[ni]] = publishedName;
+    const alderName = text(visibleEmail ? publishedName.replace(visibleEmail, "") : publishedName);
+    if (!alderName) return fallback();
+    const published = (pattern) => {
+      const key = heads.find((head) => pattern.test(head));
+      return key ? text(row[key]) : null;
+    };
     return result("alders", [
-      record(numbers[0], "alders", selected[0].fields, {
-        note: "Roster officeholding and election changes require independent confirmation.",
+      record(numbers[0], "alders", {
+        ward: numbers[0],
+        ward_label: text(row[heads[wi]]),
+        alder_name: alderName,
+        email,
+        phone: published(/^(telephone\s*#?|phone)$/i),
+        address: published(/^address$/i),
+        zip_code: published(/^zip\s*code$/i),
+        roster_fields_as_published: row,
+      }, {
+        match: { method: "ward-roster-number", ward: numbers[0] },
+        note: "Contact fields published on the City Board of Alders roster.",
       }),
     ]);
   }

@@ -982,6 +982,7 @@ test("ward-layer alder contact remains visible when the roster blocks requests",
               ward: 7,
               alder_name: "Test Alder",
               email: "ward7@example.com",
+              phone: "203-555-0107",
             },
           },
         ],
@@ -997,7 +998,42 @@ test("ward-layer alder contact remains visible when the roster blocks requests",
     out.items.find((item) => item.source_id === "alders").attributes.alder_name,
     "Test Alder",
   );
+  assert.equal(out.items.find((item) => item.source_id === "alders").attributes.email, "ward7@example.com");
+  assert.equal(out.items.find((item) => item.source_id === "alders").attributes.phone, "203-555-0107");
+  assert.equal(out.items.find((item) => item.source_id === "alders").attributes.ward, 7);
+  assert.match(out.items.find((item) => item.source_id === "alders").source_url, /FeatureServer\/0\/5$/);
   assert.match(alder.warning, /ward layer/);
+});
+
+test("official Alder roster exposes the name and contact fields for a matched ward", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Wards_"))
+      return response({ features: [{ attributes: { objectid: 5, ward: 7 } }] });
+    if (u.pathname.includes("list-of-alders"))
+      return new Response(`<table><tr><th>WARD</th><th></th><th>NAME</th><th>ADDRESS</th><th>ZIP CODE</th><th>Telephone #</th></tr>
+        <tr><td>7-D</td><td></td><td>Christine Kim<br><a href="mailto:ward7@newhavenct.gov">Ward7@newhavenct.gov</a></td>
+        <td>406 Humphrey St</td><td>06511-3924</td><td>203-208-9715</td></tr></table>`,
+      { headers: { "content-type": "text/html" } });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("alders", parcel(999066));
+  assert.equal(out.status, "ok");
+  assert.deepEqual({
+    ward: out.items[0].attributes.ward,
+    ward_label: out.items[0].attributes.ward_label,
+    alder_name: out.items[0].attributes.alder_name,
+    email: out.items[0].attributes.email,
+    phone: out.items[0].attributes.phone,
+  }, {
+    ward: 7,
+    ward_label: "7-D",
+    alder_name: "Christine Kim",
+    email: "Ward7@newhavenct.gov",
+    phone: "203-208-9715",
+  });
+  assert.equal(out.items[0].match.method, "ward-roster-number");
+  assert.match(out.items[0].source_url, /list-of-alders$/);
 });
 
 test("CMT districts come from live parcel intersections and contacts stay provisional", async () => {
