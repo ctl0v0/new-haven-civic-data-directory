@@ -27,6 +27,11 @@ export default {
       $limit: "6",
     });
     const matches = await checked(fetchJson(`https://data.ct.gov/resource/${datasets.master}.json?${query}`, { timeout: 16000 }));
+    const search = await checked(fetchJson(`https://data.ct.gov/resource/${datasets.master}.json?${new URLSearchParams({
+      $select: "id,name,accountnumber,business_type,status,billingstreet,billingcity,billingpostalcode",
+      $q: owner.replace(/\b(?:LLC|L L C|INC|CORP|CORPORATION|LTD)\b/gi, "").trim(),
+      $limit: "25",
+    })}`, { timeout: 16000 }));
     const id = matches.ok && matches.value.length === 1 ? matches.value[0].id : null;
     const related = id ? await Promise.all([datasets.principals, datasets.agents].map(async (dataset, index) => {
       const where = `${index === 0 ? "business_id" : "business_key"} = '${id.replaceAll("'", "''")}'`;
@@ -42,6 +47,7 @@ export default {
       state_name_query: owner,
       master_match: matches.ok ? matches.value.map(({ id, name, accountnumber, business_type, status, billingstreet, billingcity, billingpostalcode }) =>
         ({ id, name, accountnumber, business_type, status, billingstreet, billingcity, billingpostalcode })) : matches,
+      master_search: search.ok ? search.value : search,
       principals: related?.[0]?.ok ? related[0].value.map(({ business_id, name__c, designation, business_street_address_1, business_city, business_state }) =>
         ({ business_id, name__c, designation, business_street_address_1, business_city, business_state })) : related?.[0] ?? null,
       agents: related?.[1]?.ok ? related[1].value.map(({ business_key, name__c, type, agent_phone, email, business_address }) =>
