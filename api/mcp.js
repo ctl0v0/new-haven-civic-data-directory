@@ -9,6 +9,7 @@ import {
   parcelMapContext,
   parcelOverview,
   parcelRecords,
+  parcelTrashPickup,
   parcelFeed,
   sourceCoverage,
 } from "../parcel/service.js";
@@ -129,6 +130,18 @@ export function createServer() {
     }),
     ({ parcel_id, objectid, cursor, limit, query_address }) =>
       parcelFeed(parcel_id, { objectid, cursor, limit, query_address }),
+  );
+  tool(
+    server,
+    "get_parcel_trash_pickup",
+    "Get address trash pickup zones",
+    "Return the City trash pickup day zone for each City address point on the selected parcel. A zone does not establish collection eligibility or holiday service.",
+    z.object({
+      ...common,
+      query_address: z.string().min(1).max(160).optional(),
+    }),
+    ({ parcel_id, objectid, query_address }) =>
+      parcelTrashPickup(parcel_id, { objectid, query_address }),
   );
   tool(
     server,

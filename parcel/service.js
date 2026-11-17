@@ -86,6 +86,23 @@ export async function parcelRecords(
   };
 }
 
+export async function parcelTrashPickup(
+  id,
+  { objectid = null, query_address = null } = {},
+) {
+  const queryAddress = checkedQueryAddress(query_address);
+  const feature = await loadParcel(id, objectid);
+  const { items, ...source } = await getSourceRecords("trash-pickup", feature);
+  return {
+    parcel_id: Number(feature.attributes.parcel_id),
+    source: { ...source, count: items.length },
+    total: items.length,
+    partial: ["partial", "unavailable"].includes(source.status),
+    ...(queryAddress ? { query_address: queryAddress } : {}),
+    items: markAddressEvidence(items, queryAddress),
+  };
+}
+
 export async function parcelFeed(
   id,
   { objectid = null, cursor = null, limit = 25, query_address = null } = {},

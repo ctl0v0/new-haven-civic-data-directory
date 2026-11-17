@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
+import { parcelRecords, parcelTrashPickup, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
 import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
@@ -11,6 +11,7 @@ import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
+import trashPickupRoute from "../api/v1/trash-pickup.js";
 import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
@@ -769,6 +770,7 @@ test("City pickup zones join to individual parcel address points and retain sour
         editingInfo: { lastEditDate: 1751566162283 },
         fields: [{ name: "trash_day", domain: { codedValues: [
           { code: "M", name: "Monday" }, { code: "F", name: "Friday" },
+          { code: "TH", name: "Thursday" },
         ] } }],
       });
     if (u.pathname.includes("Trash_Pickup_Day"))
@@ -823,6 +825,54 @@ test("overlapping City pickup zones do not assign an address a day", async () =>
   assert.equal(out.status, "partial");
   assert.equal(out.items.length, 0);
   assert.match(out.warning, /multiple pickup zones/);
+});
+
+test("pickup records have matching REST and MCP responses with address focus", async () => {
+  const id = 999063;
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(id)], spatialReference: { wkid: 4326 } });
+    if (u.pathname.includes("Trash_Pickup_Day") && !u.pathname.endsWith("/query"))
+      return response({ geometryType: "esriGeometryPolygon",
+        editingInfo: { lastEditDate: 1751566162283 },
+        fields: [{ name: "trash_day", domain: { codedValues: [{ code: "TH", name: "Thursday" }] } }],
+      });
+    if (u.pathname.includes("Trash_Pickup_Day"))
+      return response({ features: [{ attributes: { objectid: 11, trash_day: "TH" },
+        geometry: { rings: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] },
+      }] });
+    if (u.pathname.includes("Addresses_"))
+      return response({ features: [{ attributes: {
+        objectid: 20, house_number: "3", full_street_name: "EDWARDS ST",
+      }, geometry: { x: 0.5, y: 0.5 } }] });
+    throw Error("Unexpected source");
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await trashPickupRoute.fetch(new Request(
+    `https://example.com/api/v1/trash-pickup?parcel_id=${id}&query_address=3%20Edwards%20St`,
+    { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const records = await rest.json();
+  assert.deepEqual(records, await parcelTrashPickup(id, { query_address: "3 Edwards St" }));
+  assert.equal(records.source.source_id, "trash-pickup");
+  assert.equal(records.items[0].attributes.trash_day, "Thursday");
+  assert.equal(records.items[0].address_evidence.matches_query, true);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/call",
+      params: { name: "get_parcel_trash_pickup", arguments: {
+        parcel_id: String(id), query_address: "3 Edwards St",
+      } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, records);
+  const denied = await trashPickupRoute.fetch(new Request(`https://example.com/api/v1/trash-pickup?parcel_id=${id}`));
+  assert.equal(denied.status, 401);
 });
 
 test("parcel geography preserves all intersecting zoning records", async () => {

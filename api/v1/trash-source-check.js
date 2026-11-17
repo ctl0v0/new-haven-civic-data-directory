@@ -1,9 +1,54 @@
 const SOURCE = "https://gis.newhavenct.gov/server/rest/services/Hosted/Trash_Pickup_Day_%28View%29/FeatureServer";
+const GIS = "https://gis.newhavenct.gov/server/rest/services/Hosted";
+const SCHOOL_SOURCES = [
+  `${GIS}/BM_AD_Board_Of_Education_Districts/FeatureServer`,
+  `${GIS}/Board_of_Education_Districts_view/FeatureServer`,
+];
 
 export default async function handler(request, response) {
   if (request.method !== "GET") return response.status(405).json({ error: "Method not allowed" });
   if (process.env.VERCEL_ENV !== "preview") return response.status(404).json({ error: "Not found" });
   try {
+    const check = new URL(request.url, "https://preview.invalid").searchParams.get("check");
+    if (check === "trash-join") {
+      const [{ loadParcel }, { getSourceRecords }] = await Promise.all([
+        import("../../parcel/resolve.js"), import("../../parcel/adapters.js"),
+      ]);
+      const parcel = await loadParcel(10386);
+      const source = await getSourceRecords("trash-pickup", parcel);
+      return response.status(200).json({
+        source_status: source.status,
+        warning: source.warning,
+        items: source.items.map((item) => ({ attributes: item.attributes, match: item.match })),
+      });
+    }
+    if (check === "schools") {
+      const describe = async (source) => {
+        try {
+          const service = await (await fetch(`${source}?f=json`, { signal: AbortSignal.timeout(8000) })).json();
+          const layers = await Promise.all((service.layers ?? []).map(async ({ id }) => {
+            const url = `${source}/${id}`;
+            const layer = await (await fetch(`${url}?f=json`, { signal: AbortSignal.timeout(8000) })).json();
+            const query = new URL(`${url}/query`);
+            query.search = new URLSearchParams({ f: "json", where: "1=1", outFields: "*", returnGeometry: "false", resultRecordCount: "2" });
+            const sample = await (await fetch(query, { signal: AbortSignal.timeout(8000) })).json();
+            return { id, name: layer.name, description: layer.description,
+              fields: layer.fields?.map(({ name, alias, type, domain }) => ({ name, alias, type, domain })),
+              editing_info: layer.editingInfo, sample: sample.features?.map((item) => item.attributes),
+              error: layer.error ?? sample.error ?? null };
+          }));
+          return { source, service_layers: service.layers, layers, error: service.error ?? null };
+        } catch (error) { return { source, error: error.message }; }
+      };
+      const [directory, ...sources] = await Promise.all([
+        fetch(`${GIS}?f=json`, { signal: AbortSignal.timeout(8000) })
+          .then((res) => res.json())
+          .then((data) => (data.services ?? []).filter((service) => /school|education|attendance|nhps/i.test(service.name)))
+          .catch(() => null),
+        ...SCHOOL_SOURCES.map(describe),
+      ]);
+      return response.status(200).json({ directory, sources });
+    }
     const serviceResponse = await fetch(`${SOURCE}?f=json`, { signal: AbortSignal.timeout(8000) });
     const service = await serviceResponse.json();
     const layerId = service.layers?.[0]?.id;
