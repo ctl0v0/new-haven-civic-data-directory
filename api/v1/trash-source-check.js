@@ -22,6 +22,34 @@ export default async function handler(request, response) {
         items: source.items.map((item) => ({ attributes: item.attributes, match: item.match })),
       });
     }
+    if (check === "cmt") {
+      const [{ loadParcel }, { getSourceRecords }] = await Promise.all([
+        import("../../parcel/resolve.js"), import("../../parcel/adapters.js"),
+      ]);
+      const parcel = await loadParcel(10386);
+      const source = await getSourceRecords("cmt-contacts", parcel);
+      const cityPage = await fetch("https://www.newhavenct.gov/government/community-management-team", {
+        signal: AbortSignal.timeout(8000),
+      }).then((result) => ({ status: result.status, length: result.headers.get("content-length") })).catch((error) => ({ error: error.message }));
+      return response.status(200).json({ source_status: source.status, items: source.items.map((item) => item.attributes), cityPage });
+    }
+    if (check === "attendance") {
+      const url = "https://www.newhavenmagnetschools.com/index.php/enrollment/find-schools-in-your-attendance-zone";
+      const upstream = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const html = await upstream.text();
+      const { load } = await import("cheerio");
+      const $ = load(html);
+      return response.status(200).json({
+        status: upstream.status,
+        length: html.length,
+        forms: $("form").toArray().map((form) => ({ action: $(form).attr("action"), method: $(form).attr("method"),
+          inputs: $(form).find("input").toArray().map((input) => ({ name: $(input).attr("name"), type: $(input).attr("type"), value: $(input).attr("value") })).filter((input) => input.name),
+        })),
+        tables: $("table").toArray().map((table) => ({ class: $(table).attr("class"), id: $(table).attr("id"), text: $(table).text().replace(/\s+/g, " ").slice(0, 500) })).slice(0, 8),
+        scripts: $("script[src]").toArray().map((script) => $(script).attr("src")).filter((src) => /joodb|search/i.test(src)),
+        relevant_html: html.slice(Math.max(0, html.indexOf("STREET NAME") - 1000), html.indexOf("STREET NAME") + 3000),
+      });
+    }
     if (check === "schools") {
       const describe = async (source) => {
         try {

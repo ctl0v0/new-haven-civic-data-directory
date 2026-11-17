@@ -132,6 +132,8 @@ function recordTitle(item) {
   if (item.source_id === "zoning")
     return a.zone_code ? `Zoning district ${a.zone_code}` : "City zoning polygon";
   if (item.source_id === "assessor") return "Assessor building and land facts";
+  if (item.source_id === "cmt-contacts")
+    return `CMT contacts · ${a.district_name ?? a.district_num ?? item.source_record_id}`;
   if (item.source_id === "ct-brownfields") return a.site_name ?? "DEEP inventory site";
   if (["local-historic-districts", "state-historic-districts"].includes(item.source_id))
     return a.HistoricDistrict ?? a.historicdistrict ?? "Historic district boundary";
@@ -236,9 +238,21 @@ function appendRecord(parent, item) {
   if (item.attributes?.period) body.append(el("p", item.attributes.period, "record-meta"));
   const description = recordDescription(item);
   if (description) body.append(el("p", description, "record-description"));
-  const preview = sourceFields(item.attributes)
-    .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
-    .slice(0, 4);
+  const preview = item.source_id === "cmt-contacts"
+    ? [
+      ["District manager", item.attributes.district_manager ?? "Not published"],
+      ["Manager email", item.attributes.dm_email],
+      ["Manager phone", item.attributes.dm_phone],
+      ["Neighborhood specialist", item.attributes.neighborhood_specialist ?? "Not published"],
+      ["Specialist email", item.attributes.ns_email],
+      ["Specialist phone", item.attributes.ns_phone],
+      ["CMT chair", item.attributes.cmt_chair ?? "Not published"],
+      ["CMT email", item.attributes.cmt_email],
+      ["CMT phone", item.attributes.cmt_phone],
+    ].filter(([, value]) => value != null && value !== "")
+    : sourceFields(item.attributes)
+      .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
+      .slice(0, 4);
   if (preview.length) body.append(fieldList(preview));
   if (item.address_evidence)
     body.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "record-note"));
