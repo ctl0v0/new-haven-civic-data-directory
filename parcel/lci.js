@@ -22,7 +22,9 @@ export function parseLciProperty(html, parcel, propertyUrl) {
   const $ = load(html);
   $("script,style,noscript").remove();
   const pid = Number(parcel.attributes.parcel_id);
-  const publishedPid = $("body").text().match(/PID\s+(\d{1,12})\b/i)?.[1];
+  const publishedPid = $("body").find("p,span,td,dd").toArray()
+    .map((element) => clean($(element).text()).match(/^PID\s+(\d{1,12})$/i)?.[1])
+    .find(Boolean) ?? $("body").text().match(/PID\s+(\d{1,12})\b/i)?.[1];
   if (!publishedPid || Number(publishedPid) !== pid)
     throw new SourceError("LCI page did not confirm the assessor PID");
   const expectedAddress = normalizeAddress(parcel.attributes.property_address);
@@ -31,7 +33,7 @@ export function parseLciProperty(html, parcel, propertyUrl) {
     throw new SourceError("LCI page did not confirm the parcel address");
 
   let section = null;
-  let caseTables = 0;
+  const confirmedSections = new Set();
   let truncated = false;
   const fines = new Map();
   const cases = [];
@@ -47,6 +49,9 @@ export function parseLciProperty(html, parcel, propertyUrl) {
           : /money owed to the city/i.test(heading)
             ? "listed_fines"
             : null;
+      if (section && section !== "listed_fines" &&
+          /(?:\b0\s+(?:cases?\s+)?on file\b|\b0\s+cases?\b|\bno\s+cases?\s+on file\b)/i.test(heading))
+        confirmedSections.add(section);
       return;
     }
     if (!section) return;
@@ -56,13 +61,13 @@ export function parseLciProperty(html, parcel, propertyUrl) {
       .find("th,td")
       .toArray()
       .map((cell) => clean($(cell).text()).toLowerCase());
-    const numberIndex = headers.findIndex((h) => /^(case|case #)$/.test(h));
+    const numberIndex = headers.findIndex((h) => /^(case(?:\s*(?:#|number|no\.?|id))?)$/.test(h));
     if (numberIndex < 0) return;
-    const statusIndex = headers.indexOf("status");
-    const dateIndex = headers.indexOf("date filed");
+    const statusIndex = headers.findIndex((h) => /^(?:case )?status$/.test(h));
+    const dateIndex = headers.findIndex((h) => /^(?:date filed|filed date|filed)$/.test(h));
     const amountIndex = headers.indexOf("amount");
     if (section !== "listed_fines" && statusIndex >= 0 && dateIndex >= 0)
-      caseTables++;
+      confirmedSections.add(section);
     if (rows.length > 501) truncated = true;
     for (const row of rows.slice(1, 501)) {
       const cells = $(row).find("th,td").toArray();
@@ -87,13 +92,16 @@ export function parseLciProperty(html, parcel, propertyUrl) {
       }
     }
   });
-  if (!caseTables)
-    throw new SourceError("LCI page did not expose a recognized case table");
+  if (!confirmedSections.size)
+    throw new SourceError("LCI page did not confirm a case section or an explicit empty result");
   return {
     cases: cases.slice(0, 200).map((item) => ({
       ...item,
       listed_fine_usd: fines.get(item.case_number) ?? null,
     })),
     truncated: truncated || cases.length > 200,
+    missing_sections: ["housing_code", "anti_blight"].filter(
+      (name) => !confirmedSections.has(name),
+    ),
   };
 }

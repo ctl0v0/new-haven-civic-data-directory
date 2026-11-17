@@ -150,6 +150,13 @@ function recordDescription(item) {
     return [a.occupancy_type, a.recorded_address, a.inactive === true ? "Marked inactive" : null].filter(Boolean).join(" · ");
   return brief(a.Description ?? a.description ?? a.complaint_type ?? a.document_type ?? a.PermitType ?? a.ApplicationType ?? a.section ?? "", 190);
 }
+function matchEvidence(item) {
+  const match = item.match;
+  if (match?.method !== "exact" || !match.parcel_field || !match.source_field || !match.value)
+    return null;
+  const fields = `${match.parcel_field.toUpperCase()} = source ${match.source_field} ${match.value}`;
+  return match.address_confirmed ? `Parcel match: ${fields}; property address also matches` : `Parcel match: ${fields}`;
+}
 function appendRecord(parent, item) {
   const card = el("article", null, "record-card");
   const head = el("div", null, "record-head");
@@ -160,6 +167,8 @@ function appendRecord(parent, item) {
   card.append(el("p", [item.category, sourceName(item.source_id), item.attributes?.period, item.event_date ? shortDate(item.event_date) : null].filter(Boolean).join(" · "), "record-meta"));
   const description = recordDescription(item);
   if (description) card.append(el("p", description, "record-description"));
+  const evidence = matchEvidence(item);
+  if (evidence) card.append(el("p", evidence, "record-note"));
   if (item.note) card.append(el("p", item.note, "record-note"));
   const actions = el("div", null, "record-actions");
   if (item.source_url) actions.append(link(item.source_url, item.category === "Document" && item.source_url.includes("municitymedia.com") ? "Open document" : "Open source"));
@@ -189,7 +198,7 @@ function sourceLine(parent, source) {
       el(
         "p",
         Object.entries(source.category_counts)
-          .map(([category, count]) => `${category} ${count}`)
+          .map(([category, count]) => `${category} ${count == null ? "not returned" : source.truncated_categories?.includes(category) ? `${count} shown; truncated` : count}`)
           .join(" · "),
         "category-counts",
       ),
@@ -472,8 +481,9 @@ async function loadGroup(id, section, qs, version, cursor = null) {
         if (municipal?.category_counts) {
           const categories = el("div", null, "category-strip");
           for (const [kind, count] of Object.entries(municipal.category_counts)) {
-            const missing = municipal.missing_categories?.includes(kind);
-            categories.append(el("span", `${kind}: ${missing ? "not returned" : count}`, missing ? "category-missing" : ""));
+            const missing = count == null;
+            const truncated = municipal.truncated_categories?.includes(kind);
+            categories.append(el("span", `${kind}: ${missing ? "not returned" : truncated ? `${count} shown; truncated` : count}`, missing || truncated ? "category-missing" : ""));
           }
           section.append(categories);
         }

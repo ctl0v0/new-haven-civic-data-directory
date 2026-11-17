@@ -86,6 +86,7 @@ export function createServer() {
       group: z.enum([
         "property",
         "geography",
+        "environment",
         "representation",
         "activity",
         "business",

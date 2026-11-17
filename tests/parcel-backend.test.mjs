@@ -8,6 +8,7 @@ import { parseLciProperty } from "../parcel/lci.js";
 import { getSourceRecords } from "../parcel/adapters.js";
 import { arcgis } from "../parcel/http.js";
 import sourcesRoute from "../api/v1/sources.js";
+import recordsRoute from "../api/v1/records.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -138,6 +139,7 @@ test("LCI parser returns case metadata and listed fines, never complaint details
     <div>Complaint narrative with a tenant name that must never leave the source</div></body>`;
   const out = parseLciProperty(html, parcel(999006), "https://lci.city/public/property/999006");
   assert.equal(out.cases.length, 1);
+  assert.deepEqual(out.missing_sections, ["anti_blight"]);
   assert.deepEqual(out.cases[0], {
     case_number: "HC-2026-123",
     case_type: "housing_code",
@@ -153,6 +155,51 @@ test("LCI parser returns case metadata and listed fines, never complaint details
   assert.throws(() =>
     parseLciProperty(html.replace("165 CHURCH ST", "311 BLAKE ST"), parcel(999006), "https://lci.city/public/property/999006"),
   );
+});
+
+test("LCI accepts an explicit empty case section but never guesses from absent markup", () => {
+  const url = "https://lci.city/public/property/999040";
+  const identity = "<body><h1>165 CHURCH ST</h1><p>PID 999040</p>";
+  const empty = `${identity}<h2>Housing Code Cases · 0 on file</h2><h2>Anti-Blight Cases · 0 on file</h2>`;
+  assert.deepEqual(parseLciProperty(empty, parcel(999040), url), {
+    cases: [], truncated: false, missing_sections: [],
+  });
+  assert.throws(() => parseLciProperty(identity, parcel(999040), url));
+  const alternate = `${identity}<h2>Housing Code Cases</h2>
+    <table><tr><th>Case Number</th><th>Case Status</th><th>Filed Date</th></tr>
+    <tr><td><a href="/public/case/HC-2026-123">HC-2026-123</a></td><td>Open</td><td>2026-11-09</td></tr></table>
+    <h2>Anti-Blight Cases · 0 on file</h2>`;
+  const parsed = parseLciProperty(alternate, parcel(999040), url);
+  assert.equal(parsed.cases[0].case_number, "HC-2026-123");
+  assert.deepEqual(parsed.missing_sections, []);
+});
+
+test("LCI source status and record match preserve the verified PID and address", async () => {
+  globalThis.fetch = async () => new Response(`<body><h1>165 CHURCH ST</h1><p>PID 999043</p>
+    <h2>Housing Code Cases</h2><table><tr><th>Case #</th><th>Status</th><th>Date Filed</th></tr>
+    <tr><td>HC-2026-123</td><td>Open</td><td>2026-11-09</td></tr></table>
+    <h2>Anti-Blight Cases · 0 on file</h2></body>`, {
+    headers: { "content-type": "text/html" },
+  });
+  const found = await getSourceRecords("lci-cases", parcel(999043));
+  assert.equal(found.status, "ok");
+  assert.deepEqual(found.items[0].match, {
+    method: "exact", parcel_field: "parcel_id", source_field: "PID",
+    value: "999043", address_confirmed: true,
+  });
+  globalThis.fetch = async () => new Response(`<body><h1>165 CHURCH ST</h1><p>PID 999044</p>
+    <h2>Housing Code Cases · 0 on file</h2><h2>Anti-Blight Cases · 0 on file</h2></body>`, {
+    headers: { "content-type": "text/html" },
+  });
+  const empty = await getSourceRecords("lci-cases", parcel(999044));
+  assert.equal(empty.status, "no_records");
+  globalThis.fetch = async () => new Response(`<body><h1>165 CHURCH ST</h1><p>PID 999045</p>
+    <h2>Housing Code Cases · 0 on file</h2></body>`, {
+    headers: { "content-type": "text/html" },
+  });
+  const partial = await getSourceRecords("lci-cases", parcel(999045));
+  assert.equal(partial.status, "partial");
+  assert.deepEqual(partial.items, []);
 });
 
 test("pilot login creates a private page session", async () => {
@@ -486,6 +533,12 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
   assert.equal(out.category_counts.License, 0);
   assert.equal(out.category_counts.Permit, 0);
   assert.equal(out.category_counts.Occupant, 0);
+  assert.equal(out.category_counts.Certificate, 0);
+  assert.deepEqual(out.missing_categories, []);
+  assert.deepEqual(out.items[0].match, {
+    method: "exact", parcel_field: "mblu", source_field: "PrintKey",
+    value: "12 34", vendor_parcel_id: 99873,
+  });
   assert.equal(out.items.find((x) => x.category === "Document").source_url,
     "https://www.municitymedia.com/public/plan.pdf");
   assert.equal(out.items.find((x) => x.category === "Complaint").attributes.complaint_number,
@@ -508,6 +561,28 @@ test("missing municipal License category is reported as partial", async () => {
   assert.equal(out.status, "partial");
   assert.equal(out.items.length, 0);
   assert.match(out.warning, /omitted its License category/);
+  const municipal = await getSourceRecords("municity", parcel(999018));
+  assert.equal(municipal.category_counts.License, null);
+  assert.equal(municipal.category_counts.Permit, 0);
+  assert.ok(municipal.missing_categories.includes("Certificate"));
+});
+
+test("municipal counts label returned rows separately from a truncated category", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99873 }] });
+    if (u.pathname.endsWith("/Children"))
+      return response({ Permit: Array.from({ length: 501 }, (_, index) => ({
+        Permit_ID: index + 1, Parcel_ID: 99873,
+      })) });
+    throw Error("Unexpected source");
+  };
+  const out = await getSourceRecords("municity", parcel(999041));
+  assert.equal(out.status, "partial");
+  assert.equal(out.category_counts.Permit, 500);
+  assert.ok(out.truncated_categories.includes("Permit"));
+  assert.equal(out.category_counts.Complaint, null);
 });
 
 test("Cask Republic remains in the original municipal work record on 181 Crown", async () => {
@@ -945,5 +1020,48 @@ test("MCP requires pilot auth and lists bounded read tools", async () => {
   assert.equal(listed.status, 200);
   const toolsList = await listed.text();
   assert.match(toolsList, /get_parcel_overview/);
+  assert.match(toolsList, /"environment"/);
   assert.doesNotMatch(toolsList, /get_parcel_context/);
+});
+
+test("REST and MCP return the same environmental parcel group", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(999046)] });
+    if (u.pathname.includes("Brownfields_Final_2025"))
+      return response({ features: [] });
+    throw Error("Unexpected source");
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await recordsRoute.fetch(new Request(
+    "https://example.com/api/v1/records?parcel_id=999046&group=environment",
+    { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const restData = await rest.json();
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: {
+      ...auth,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 3, method: "tools/call",
+      params: {
+        name: "get_parcel_records",
+        arguments: { parcel_id: "999046", group: "environment" },
+      },
+    }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const mcpData = JSON.parse(
+    mcpText.startsWith("event:")
+      ? mcpText.match(/^data: (.+)$/m)?.[1]
+      : mcpText,
+  );
+  assert.equal(mcpData.result.structuredContent.group, "environment");
+  assert.deepEqual(mcpData.result.structuredContent, restData);
 });

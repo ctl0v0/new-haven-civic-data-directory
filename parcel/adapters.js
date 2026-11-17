@@ -24,7 +24,7 @@ const record = (
   source_record_id: String(id),
   event_date: eventDate,
   attributes,
-  match: { method: match },
+  match: typeof match === "string" ? { method: match } : match,
   note,
   source_url: sourceUrl ?? source(sourceId)?.url ?? null,
   retrieved_at: ISO(),
@@ -422,15 +422,26 @@ async function lciCaseRecords(parcel) {
           {
             eventDate: item.filed_date,
             sourceUrl: item.source_url,
+            match: {
+              method: "exact",
+              parcel_field: "parcel_id",
+              source_field: "PID",
+              value: String(id),
+              address_confirmed: true,
+            },
             note: "Public LCI case metadata. Listed fines and case status require confirmation at the source; complaint details are omitted.",
           },
         ),
       ),
       {
-        partial: parsed.truncated,
-        warning: parsed.truncated
-          ? "LCI case list was truncated at 200 records."
-          : "Only case metadata and listed case fines are returned; licensing status is not checked.",
+        partial: parsed.truncated || parsed.missing_sections.length > 0,
+        warning: [
+          parsed.truncated ? "LCI case list was truncated at 200 records." : null,
+          parsed.missing_sections.length
+            ? `LCI did not confirm these case sections: ${parsed.missing_sections.join(", ")}.`
+            : null,
+          "Only case metadata and listed case fines are returned; licensing status is not checked.",
+        ].filter(Boolean).join(" "),
       },
     ),
     source_url: url,
@@ -816,10 +827,10 @@ async function municityRecords(parcel) {
   const parcelUrl = `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Parcel/${Number(vendor.Parcel_ID)}`;
   const items = [];
   const categoryCounts = Object.fromEntries(
-    MUNICIPAL_CATEGORIES.map((kind) => [kind, 0]),
+    MUNICIPAL_CATEGORIES.map((kind) => [kind, null]),
   );
   const missingCategories = MUNICIPAL_CATEGORIES.filter(
-    (kind) => kind !== "Certificate" && children[kind] == null,
+    (kind) => children[kind] == null,
   );
   const truncatedCategories = [];
   for (const [kind, idKey, dateKeys] of [
@@ -836,6 +847,7 @@ async function municityRecords(parcel) {
     if (rows == null) continue;
     if (!Array.isArray(rows))
       throw new SourceError(`Vendor ${kind} records are malformed`);
+    categoryCounts[kind] = 0;
     if (rows.length > 500) truncatedCategories.push(kind);
     for (const [index, row] of rows.slice(0, 500).entries()) {
       if (
@@ -869,6 +881,13 @@ async function municityRecords(parcel) {
             {
               eventDate,
               sourceUrl,
+              match: {
+                method: "exact",
+                parcel_field: "mblu",
+                source_field: "PrintKey",
+                value: key,
+                vendor_parcel_id: Number(vendor.Parcel_ID),
+              },
               note:
                 kind === "Complaint"
                   ? "Municipal complaint case metadata; narrative and personal contact fields are omitted."
@@ -936,7 +955,7 @@ async function municipalBusinessRecords(parcel) {
         },
         {
           eventDate: item.event_date,
-          match: "exact",
+          match: item.match,
           sourceUrl: item.source_url,
           note: "Municipal license linked by verified parcel MBLU. Its recorded address and status do not prove where or whether the business currently operates.",
         },
@@ -967,6 +986,7 @@ async function municipalOccupantRecords(parcel) {
     .map((item) =>
       record(item.source_record_id, "municipal-occupants", item.attributes, {
         eventDate: item.event_date,
+        match: item.match,
         sourceUrl: item.source_url,
         note: "Municipal occupant row attached to the verified parcel. The source name and inactive flag do not establish a current tenant or business operation.",
       }),
