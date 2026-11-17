@@ -44,21 +44,14 @@ export async function findOfficialOwnerEntity(city) {
       clean(city.mail_state).toUpperCase() !== "CT")
     return { entity: null, reason: "The City parcel lacks a complete Connecticut owner mailing address for the registry join." };
 
-  // Equality queries are fast when the City and State punctuation agrees. The
-  // indexed text search covers common punctuation differences, such as ", LLC".
+  // Query literal legal-name variants. Broad registry text search is too slow
+  // to serve a parcel request reliably, and the mailing fields still must match.
   const variants = [name, name.replace(/\s+LLC\.?$/i, ", LLC")];
   const where = [...new Set(variants)].map((item) => `name = '${soql(item)}'`).join(" OR ");
-  const query = name.replace(/\b(?:LLC|L L C)\b/gi, "").trim();
-  const [exactRows, rows] = await Promise.all([
-    masterRows({ $where: where, $limit: "51" }),
-    masterRows({ $q: query, $limit: "51" }, 16000),
-  ]);
-  // Require the discovered entity to survive both the indexed discovery
-  // search and a literal State name lookup. This also rejects a stale index.
-  const exactIds = new Set(exactRows.map((row) => row.id));
-  if (rows.length >= 51 || exactRows.length >= 51)
+  const rows = await masterRows({ $where: where, $limit: "51" });
+  if (rows.length >= 51)
     return { entity: null, reason: "The State registry search exceeded the 50-row review limit; no entity was linked." };
-  const matches = rows.filter((row) => officialOwnerMatch(city, row) && exactIds.has(row.id));
+  const matches = rows.filter((row) => officialOwnerMatch(city, row));
   if (matches.length !== 1)
     return { entity: null, reason: matches.length
       ? "More than one State entity matches the City owner and mailing address."

@@ -785,7 +785,6 @@ test("matched official owner entity joins State principals and agent without lab
       '<span id="MainContent_lblPid">999050</span><span id="MainContent_lblOwner">990 STATE STREET ASSOCIATES LLC</span>',
       { headers: { "content-type": "text/html" } });
     if (url.pathname.endsWith("n7gp-d28j.json")) {
-      if (url.searchParams.has("$q")) return response([master]);
       assert.match(url.searchParams.get("$where"), /name = '990 STATE STREET ASSOCIATES, LLC'/);
       return response([master]);
     }
@@ -812,7 +811,7 @@ test("matched official owner entity joins State principals and agent without lab
   assert.match(principals.items[0].note, /not necessarily a beneficial owner/);
   assert.equal(agents.items[0].attributes.agent_phone, "2034940995");
   assert.match(agents.items[0].note, /not identified as a property owner/);
-  assert.equal(requested.filter((url) => url.pathname.endsWith("n7gp-d28j.json")).length, 2);
+  assert.equal(requested.filter((url) => url.pathname.endsWith("n7gp-d28j.json")).length, 1);
   assert(requested.some((url) => url.pathname.endsWith("qh2m-n44y.json") &&
     url.searchParams.get("$where") === "business_key = 'state-entity-1'"));
 });

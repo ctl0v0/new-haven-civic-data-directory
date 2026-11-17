@@ -261,7 +261,7 @@ export const SOURCES = Object.freeze([
     url: "https://data.ct.gov/Business/Connecticut-Business-Registry-Business-Master/n7gp-d28j",
     mode: "live",
     coverage:
-      "A State LLC is linked only when its legal name and billing street, city and ZIP match the City parcel's owner name and mailing address, with a unique registry result. A conflicting assessor owner blocks the link. No broader LLC affiliations or beneficial owners are inferred.",
+      "A State LLC is linked only when its legal name and billing street, city and ZIP match the City parcel's owner name and mailing address, with one result among literal legal-name variants. A conflicting assessor owner blocks the link. No broader LLC affiliations or beneficial owners are inferred.",
   },
   {
     id: "business-principals",
