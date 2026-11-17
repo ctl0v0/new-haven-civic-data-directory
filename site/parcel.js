@@ -40,7 +40,7 @@ let selected = null;
 let viewVersion = 0;
 let searchedAddress = "";
 const groupResponses = new Map();
-const activityTargets = new WeakMap();
+const displayTargets = new WeakMap();
 const municipalCategoryTitles = {
   Document: "Documents",
   Application: "Applications",
@@ -117,7 +117,7 @@ function recordStatus(item) {
   const a = item.attributes ?? {};
   if (item.source_id === "municipal-occupants")
     return a.inactive == null ? null : `Inactive flag: ${a.inactive ? "Yes" : "No"}`;
-  return a.status ?? a.Status ?? a.record_status ?? a.PermStatus ?? a.PermitApplicationStatus ?? a.CompStatus ?? null;
+  return a.status ?? a.Status ?? a.record_status ?? a.PermStatus ?? a.PermitApplicationStatus ?? a.ApplicationStatus ?? a.CompStatus ?? a.registry_status ?? null;
 }
 function recordTitle(item) {
   const a = item.attributes ?? {};
@@ -357,46 +357,43 @@ function sourceLine(parent, source) {
   row.append(info);
   parent.append(row);
 }
-function activitySubgroup(parent, key, title, countLabel) {
-  const section = el("section", null, "activity-subgroup");
-  const heading = el("div", null, "activity-subgroup-heading");
-  heading.append(el("h3", title));
-  heading.append(el("span", countLabel, "group-count"));
-  section.append(heading);
-  const list = el("div", null, "record-list");
-  section.append(list);
-  parent.append(section);
-  activityTargets.get(parent).set(key, list);
-  return list;
+function prepareDisplayGroups(parent, data) {
+  displayTargets.set(parent, {
+    definitions: new Map((data.display_groups ?? []).map((entry) => [entry.key, entry])),
+    counts: data.display_group_counts ?? {},
+    sections: new Map(),
+  });
 }
-function prepareActivitySubgroups(parent, sources) {
-  activityTargets.set(parent, new Map());
-  const municipal = sources.find((source) => source.source_id === "municity");
-  if (municipal?.category_counts) {
-    for (const [kind, count] of Object.entries(municipal.category_counts)) {
-      const truncated = municipal.truncated_categories?.includes(kind);
-      const label = count == null
-        ? "Not returned by source"
-        : truncated
-          ? `${count} shown · source truncated`
-          : `${count} returned`;
-      activitySubgroup(parent, `municity:${kind}`, municipalCategoryTitles[kind] ?? kind, label);
-    }
-  } else if (municipal) {
-    parent.append(el("p", "City parcel categories unavailable. See source coverage above.", "empty-state"));
+function appendDisplayRecord(parent, item) {
+  const targets = displayTargets.get(parent);
+  const key = item.display_group?.key ?? "unclassified";
+  let section = targets.sections.get(key);
+  if (!section) {
+    const definition = targets.definitions.get(key);
+    const collapsed = ["older", "past", "unclassified"].includes(key);
+    const container = el(collapsed ? "details" : "section", null, `display-section display-${key}`);
+    const heading = el(collapsed ? "summary" : "div", null, "display-section-heading");
+    heading.append(el(collapsed ? "strong" : "h3", definition?.title ?? "Status not established"));
+    const count = targets.counts[key] ?? 0;
+    heading.append(el("span", `${count} ${count === 1 ? "record" : "records"}`, "group-count"));
+    container.append(heading);
+    if (definition?.description) container.append(el("p", definition.description, "display-section-description"));
+    parent.append(container);
+    section = { container, categories: new Map() };
+    targets.sections.set(key, section);
   }
-  for (const source of sources.filter((entry) => entry.source_id !== "municity" && entry.count > 0))
-    activitySubgroup(parent, source.source_id, sourceName(source.source_id), `${source.count} returned`);
-}
-function appendActivityRecord(parent, item) {
-  const key = item.source_id === "municity" ? `municity:${item.category}` : item.source_id;
-  const targets = activityTargets.get(parent);
-  const list = targets.get(key) ?? activitySubgroup(
-    parent,
-    key,
-    item.source_id === "municity" ? municipalCategoryTitles[item.category] ?? item.category ?? "Other City records" : sourceName(item.source_id),
-    "Returned by source",
-  );
+  const categoryKey = item.category ?? item.source_id;
+  let list = section.categories.get(categoryKey);
+  if (!list) {
+    const subgroup = el("section", null, "activity-subgroup");
+    const heading = el("div", null, "activity-subgroup-heading");
+    heading.append(el("h4", item.category ? municipalCategoryTitles[item.category] ?? item.category : sourceName(item.source_id)));
+    subgroup.append(heading);
+    list = el("div", null, "record-list");
+    subgroup.append(list);
+    section.container.append(subgroup);
+    section.categories.set(categoryKey, list);
+  }
   appendRecord(list, item);
 }
 function normalizedAddress(value) {
@@ -525,15 +522,11 @@ function renderSnapshot() {
   const businesses = snapshotCard("Business names in records", "business");
   if (!business) businesses.append(el("p", "Loading business records…", "meta"));
   else {
+    const ownerEntity = business.items.find((item) => item.source_id === "business-master");
+    if (ownerEntity) businesses.append(el("p", `City-listed owner LLC: ${recordTitle(ownerEntity)}. State entity status: ${ownerEntity.attributes.registry_status ?? "not supplied"}.`, "meta"));
     const named = business.items
       .filter((item) => ["municipal-business-licenses", "municipal-occupants"].includes(item.source_id))
-      .filter((item) => item.attributes?.business_name || item.attributes?.occupant_name)
-      .sort((a, b) =>
-        Number(b.source_id === "municipal-business-licenses") -
-        Number(a.source_id === "municipal-business-licenses") ||
-        String(b.attributes?.expiration_date ?? b.event_date ?? "").localeCompare(
-          String(a.attributes?.expiration_date ?? a.event_date ?? ""),
-        ));
+      .filter((item) => item.attributes?.business_name || item.attributes?.occupant_name);
     if (!named.length) businesses.append(el("p", "No named business record was returned by checked sources."));
     else {
       businesses.append(el("p", `${named.length} named municipal business records returned. Names and inactive flags are shown as published.`, "meta"));
@@ -542,7 +535,7 @@ function renderSnapshot() {
         const row = el("li");
         row.append(el("strong", recordTitle(item)));
         const state = recordStatus(item);
-        if (state) row.append(el("span", state, "snapshot-state"));
+        row.append(el("span", [state, item.attributes?.expiration_date ? `Expires ${shortDate(item.attributes.expiration_date)}` : null].filter(Boolean).join(" · ") || "Status not established", "snapshot-state"));
         list.append(row);
       }
       businesses.append(list);
@@ -551,34 +544,29 @@ function renderSnapshot() {
   }
 
   const activity = groupResponses.get("activity");
-  const work = snapshotCard("Recent open or submitted records", "activity");
+  const work = snapshotCard("Recent work and applications", "activity");
   if (!activity) work.append(el("p", "Checking work records…", "meta"));
   else {
-    const cutoff = new Date();
-    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
-    const recentSince = cutoff.toISOString().slice(0, 10);
     const issuedPermitNumbers = new Set(activity.items
       .filter((item) => item.category === "Permit")
       .map((item) => item.attributes?.PermitNo ?? item.attributes?.PermitNumber)
       .filter(Boolean));
-    const open = activity.items
+    const recent = activity.items
       .filter((item) => ["Application", "Permit", "Complaint"].includes(item.category) || item.source_id === "lci-cases")
-      .filter((item) => /open|submitted|pending|in review|under review|assigned|scheduled/i.test(String(recordStatus(item) ?? "")))
-      .filter((item) => item.event_date && item.event_date >= recentSince)
-      .filter((item) => item.category !== "Application" || !issuedPermitNumbers.has(item.attributes?.ApplicationNumber))
-      .sort((a, b) => String(b.event_date ?? "").localeCompare(String(a.event_date ?? "")));
-    if (!open.length) work.append(el("p", "No recent open or submitted record surfaced in the returned records."));
+      .filter((item) => ["reported", "early"].includes(item.display_group?.key))
+      .filter((item) => item.category !== "Application" || !issuedPermitNumbers.has(item.attributes?.ApplicationNumber));
+    if (!recent.length) work.append(el("p", "No recent open, issued, draft or review-stage record surfaced in the returned records."));
     else {
       const list = el("ul", null, "snapshot-list");
-      for (const item of open.slice(0, 3)) {
+      for (const item of recent.slice(0, 3)) {
         const row = el("li");
         row.append(el("strong", recordTitle(item)));
-        row.append(el("span", `${recordStatus(item)}${item.event_date ? ` · ${shortDate(item.event_date)}` : ""}`, "snapshot-state"));
+        row.append(el("span", `${item.display_group.key === "early" ? "Draft or review stage · " : "Reported open or issued · "}${recordStatus(item) ?? "Status not supplied"}${item.event_date ? ` · ${shortDate(item.event_date)}` : ""}`, "snapshot-state"));
         list.append(row);
       }
       work.append(list);
     }
-    work.append(el("p", "A filed or open record does not confirm a future schedule or completed work.", "snapshot-caveat"));
+    work.append(el("p", "Published status does not confirm that work is happening now or has been completed.", "snapshot-caveat"));
   }
 
   const environment = groupResponses.get("environment");
@@ -841,16 +829,17 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       for (const source of data.sources) sourceLine(sourceList, source);
       coverage.append(sourceList);
       section.append(coverage);
-      const records = el("div", null, id === "activity" ? "activity-sections" : "record-list");
+      const grouped = id === "activity" || id === "business";
+      const records = el("div", null, grouped ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
       section.append(records);
-      if (id === "activity") prepareActivitySubgroups(records, data.sources);
+      if (grouped) prepareDisplayGroups(records, data);
       if (!data.items.length)
         section.append(el("p", "No records returned by the checked sources. Open source coverage to see any gaps.", "empty-state"));
     }
     const records = $(`records-${id}`);
     for (const item of data.items) {
-      if (id === "activity") appendActivityRecord(records, item);
+      if (id === "activity" || id === "business") appendDisplayRecord(records, item);
       else appendRecord(records, item);
     }
     if (data.next_cursor) {

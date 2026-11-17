@@ -1344,6 +1344,50 @@ test("REST and MCP return the same environmental parcel group", async () => {
   assert.deepEqual(mcpData.result.structuredContent, restData);
 });
 
+test("business group prioritizes issued licenses, separates voided licenses, and has REST/MCP parity", async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer")) return response({ features: [parcel(999054)] });
+    if (url.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 99553 }] });
+    if (url.pathname.endsWith("/Children")) return response({
+      License: [
+        { License_ID: 1, BusinessName: "Current license name", Status: "Issued",
+          IssueDate: today, ExpirationDate: "2099-12-31" },
+        { License_ID: 2, BusinessName: "Past license name", Status: "Void",
+          IssueDate: "2021-01-01", ExpirationDate: "2022-01-01" },
+      ],
+      Occupant: [{ Occupant_ID: 3, Name: "Listed occupant", InActive: false,
+        CreatedDate: today }],
+      Permit: [], Application: [], Complaint: [], Contact: [], Document: [], Certificate: [],
+    });
+    throw Error(`Unexpected source: ${url}`);
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await recordsRoute.fetch(new Request(
+    "https://example.com/api/v1/records?parcel_id=999054&group=business",
+    { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const data = await rest.json();
+  assert.deepEqual(data.items.map((item) => item.attributes.business_name ?? item.attributes.occupant_name),
+    ["Current license name", "Past license name", "Listed occupant"]);
+  assert.deepEqual(data.items.map((item) => item.display_group.key),
+    ["reported", "past", "unclassified"]);
+  assert.equal(data.display_group_counts.past, 1);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 37, method: "tools/call",
+      params: { name: "get_parcel_records", arguments: { parcel_id: "999054", group: "business" } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const body = await mcp.text();
+  const payload = JSON.parse(body.startsWith("event:") ? body.match(/^data: (.+)$/m)?.[1] : body);
+  assert.deepEqual(payload.result.structuredContent, data);
+});
+
 test("parcel geometry preserves holes and separate polygon parts", () => {
   const feature = parcel(999047);
   feature.geometry = {

@@ -5,6 +5,7 @@ import { parcelFeatureToGeoJSON } from "./geometry.js";
 import { parcelMapContext } from "./map-context.js";
 import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js";
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
+import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords } from "./record-state.js";
 
 export { resolveParcel };
 export { parcelMapContext };
@@ -77,10 +78,17 @@ export async function parcelRecords(
   const queryAddress = checkedQueryAddress(query_address);
   const feature = await loadParcel(id, objectid);
   const data = await getGroup(group, feature);
-  const page = pageItems(data.items, cursor, limit);
+  const ordered = orderDisplayRecords(data.items, group);
+  const page = pageItems(ordered, cursor, limit);
+  const displayGroups = DISPLAY_GROUPS.filter(({ key }) => group === "business" || key !== "owner_registry");
+  const counts = displayGroupCounts(ordered);
   return {
     ...data,
     ...page,
+    ...(["activity", "business"].includes(group) ? {
+      display_groups: displayGroups,
+      display_group_counts: Object.fromEntries(displayGroups.map(({ key }) => [key, counts[key]])),
+    } : {}),
     ...(queryAddress ? { query_address: queryAddress } : {}),
     items: markAddressEvidence(page.items, queryAddress),
   };
@@ -141,7 +149,9 @@ export async function parcelFeed(
     ...data,
     ...page,
     ...(queryAddress ? { query_address: queryAddress } : {}),
-    items: markAddressEvidence(page.items, queryAddress),
+    items: markAddressEvidence(page.items.map((item) =>
+      item.category || item.source_id === "lci-cases"
+        ? { ...item, display_group: displayGroup(item) } : item), queryAddress),
   };
 }
 

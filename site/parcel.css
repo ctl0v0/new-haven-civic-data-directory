@@ -334,6 +334,21 @@ main { max-width: 82rem; }
 .sources-panel > summary { padding: .6rem 0; }
 .source-list { padding: 0 0 .6rem; }
 .record-list { display: block; border-top: 1px solid #c4d4c8; }
+.display-section { margin: 1.5rem 0 2rem; border-top: 2px solid #b4c8bb; }
+.display-reported { border-top-color: #23704e; }
+.display-early { border-top-color: #b47d24; }
+.display-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: .8rem .1rem .2rem; }
+.display-section-heading h3, .display-section-heading strong { margin: 0; font-size: 1.08rem; font-weight: 750; }
+details.display-section > summary { cursor: pointer; }
+details.display-section > summary::before { content: "▸"; color: #426151; margin-right: .5rem; }
+details.display-section[open] > summary::before { content: "▾"; }
+details.display-section > summary:hover { background: #f1f6f1; }
+details.display-section > summary strong { margin-right: auto; }
+.display-section-description { max-width: 54rem; margin: .1rem .1rem 1rem; color: #4c655d; font-size: .86rem; }
+.display-section .activity-subgroup { margin: 1rem 0 1.35rem; }
+.display-section .activity-subgroup-heading { padding-bottom: .3rem; }
+.display-section .activity-subgroup-heading h4 { margin: 0; font-size: .9rem; }
+.display-section .activity-subgroup .record-list { border-top: 0; }
 .record-card { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 1.25rem; border: 0; border-bottom: 1px solid #dce6de; border-radius: 0; background: transparent; padding: 1.1rem .2rem; }
 .record-card:hover { background: #f1f6f1; }
 .record-aside { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; font-size: .78rem; color: #52675b; }
