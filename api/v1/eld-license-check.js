@@ -1,5 +1,6 @@
 import { resolveParcel, loadParcel } from "../../parcel/resolve.js";
 import { getSourceRecords } from "../../parcel/adapters.js";
+import { fetchJson } from "../../parcel/http.js";
 
 export default {
   async fetch(request) {
@@ -14,6 +15,11 @@ export default {
       getSourceRecords("municipal-business-licenses", parcel),
       getSourceRecords("municipal-occupants", parcel),
     ]);
+    const stateNameRows = await fetchJson(`https://data.ct.gov/resource/n7gp-d28j.json?${new URLSearchParams({
+      $where: "name = 'ALL DAY BAR LLC' OR name = 'ALL DAY BAR, LLC'",
+      $select: "id,name,accountnumber,business_type,status,billingstreet,billingcity,billingpostalcode",
+      $limit: "10",
+    })}`, { timeout: 12000 }).catch((error) => ({ error: error.message }));
     return Response.json({
       resolver: {
         status: resolved.status,
@@ -67,6 +73,7 @@ export default {
         warning: occupants.warning,
         items: occupants.items.slice(0, 40).map((item) => item.attributes),
       },
+      state_name_rows: stateNameRows,
     }, { headers: { "Cache-Control": "private, no-store" } });
   },
 };
