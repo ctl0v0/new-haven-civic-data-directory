@@ -245,8 +245,12 @@ test("pilot login creates a private page session", async () => {
   const html = await page.text();
   assert.match(html, /id="search-form"/);
   assert.match(html, /id="parcel-map"/);
+  assert.match(html, /id="browse-tab"/);
+  assert.match(html, /id="browse-map"/);
+  assert.match(html, /id="parcel-photo-image"/);
   assert.match(html, /\/leaflet\/leaflet\.js/);
   assert.match(page.headers.get("content-security-policy"), /img-src 'self' data: https:\/\/cteco\.uconn\.edu/);
+  assert.match(page.headers.get("content-security-policy"), /https:\/\/www\.municitymedia\.com/);
   assert.equal(
     (
       await pilotSession.fetch(

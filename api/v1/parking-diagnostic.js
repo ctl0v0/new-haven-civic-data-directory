@@ -33,6 +33,19 @@ export default {
     if (new URL(request.url).searchParams.get("mode") === "photo")
       return Response.json(await parcelPhoto("10386", "20011"),
         { headers: { "Cache-Control": "private, no-store" } });
+    if (new URL(request.url).searchParams.get("mode") === "basemaps") {
+      const sources = await Promise.all([
+        "https://gis.newhavenct.gov/server/rest/services?f=pjson",
+        "https://cteco.uconn.edu/ctraster/rest/services?f=pjson",
+      ].map(async (url) => {
+        try {
+          const data = await fetchJson(url, { timeout: 10000, maxBytes: 4_000_000 });
+          return { url, folders: data.folders, services: data.services?.filter((item) =>
+            /base|street|map|reference|road|transport/i.test(item.name)) };
+        } catch (error) { return { url, error: error.message }; }
+      }));
+      return Response.json({ sources }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     const id = "10386";
     const objectid = "20011";
     const parcel = await loadParcel(id, objectid);
