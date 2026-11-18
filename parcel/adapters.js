@@ -123,22 +123,34 @@ async function layerRecords(
   );
 }
 
+function cityParcelSourceUrl(parcel) {
+  return `${LAYERS.parcels}/query?${new URLSearchParams({
+    f: "json", objectIds: String(parcel.attributes.objectid),
+    outFields: "*", returnGeometry: "false",
+  })}`;
+}
+
 async function parcelRecord(parcel) {
   return result("parcels", [
     record(parcel.attributes.objectid, "parcels", parcel.attributes, {
-      eventDate: date(parcel.attributes.sale_date),
-      note: "This dated parcel-layer sale field is a single published attribute. Ownership History rows come from the assessor card when available.",
+      match: "city-parcel-record",
+      sourceUrl: cityParcelSourceUrl(parcel),
+      note: "All published fields of the selected City parcel feature. Sale fields are shown separately in Ownership; source codes and dates are not independently interpreted here.",
     }),
   ]);
 }
 
 async function parcelOwnerRecords(parcel) {
   const a = parcel.attributes;
-  if (!text(a.owner_name_1))
+  const firstOwner = text(a.owner_name_1);
+  const secondOwner = text(a.owwner_name_2);
+  if (!firstOwner && !secondOwner)
     return unavailable("parcel-owner", "The selected City parcel did not publish an owner name.");
   return result("parcel-owner", [record(a.objectid, "parcel-owner", {
-    owner_name_1: text(a.owner_name_1),
-    owner_name_2: text(a.owner_name_2),
+    owner_name_1: firstOwner,
+    owner_name_2: secondOwner,
+    owner_name_2_source_field: "owwner_name_2",
+    care_of_line: text(a.co_line),
     mailing_street: text(a.mail_address),
     mailing_city: text(a.mail_city),
     mailing_state: text(a.mail_state),
@@ -147,8 +159,52 @@ async function parcelOwnerRecords(parcel) {
     parcel_id: a.parcel_id,
   }, {
     match: "city-parcel-record",
-    sourceUrl: `${LAYERS.parcels}/query?${new URLSearchParams({ f: "json", objectIds: String(a.objectid), outFields: "*", returnGeometry: "false" })}`,
-    note: "Owner and mailing fields as published on the selected City GIS parcel; confirm title with the official land records.",
+    sourceUrl: cityParcelSourceUrl(parcel),
+    note: "Owner and mailing fields as published on the selected City GIS parcel. The source spells its second-owner field owwner_name_2; co_line is a care-of mailing line, not a co-owner. Confirm title with official land records.",
+  })]);
+}
+
+async function parcelAssessmentRecords(parcel) {
+  const a = parcel.attributes;
+  return result("parcel-assessment", [record(a.objectid, "parcel-assessment", {
+    parcel_id: a.parcel_id,
+    property_address: text(a.property_address),
+    use_code: text(a.use_code),
+    zone_as_published: text(a.zone),
+    year_building_built: a.year_building_built ?? null,
+    total_land_area_acres: a.total_land_area_acres ?? null,
+    units_commercial: text(a.units_commercial),
+    units_residential: text(a.units_residential),
+    units_condo: text(a.units_condo),
+    total_assessed_bldg_value: a.total_assessed_bldg_value ?? null,
+    total_assessed_bldg_xf_value: a.total_assessed_bldg_xf_value ?? null,
+    total_assessed_improvements: a.total_assessed_improvements ?? null,
+    total_assessed_land_value: a.total_assessed_land_value ?? null,
+    total_assessed_land_outbldg: a.total_assessed_land_outbldg ?? null,
+    total_assessed_extra_features: a.total_assessed_extra_features ?? null,
+    total_assessed_parcel_value_x: a.total_assessed_parcel_value_x ?? null,
+    total_assessed_parcel_value_y: a.total_assessed_parcel_value_y ?? null,
+  }, {
+    match: "city-parcel-record", sourceUrl: cityParcelSourceUrl(parcel),
+    note: "City parcel assessment fields as published. The layer supplies two parcel-value columns with x/y suffixes; neither is selected as a canonical total. Valuation year and tax balance are not established by this row. Its zone field is not a City zoning determination.",
+  })]);
+}
+
+async function parcelSaleRecords(parcel) {
+  const a = parcel.attributes;
+  const saleDate = date(a.sale_date);
+  if (!text(a.sale_date) && a.price == null && !text(a.book) && !text(a.page))
+    return result("parcel-sale", []);
+  return result("parcel-sale", [record(a.objectid, "parcel-sale", {
+    parcel_id: a.parcel_id,
+    sale_date_as_published: text(a.sale_date),
+    price: a.price ?? null,
+    book: text(a.book),
+    page: text(a.page),
+  }, {
+    eventDate: saleDate,
+    match: "city-parcel-record", sourceUrl: cityParcelSourceUrl(parcel),
+    note: "One sale field set on the selected City GIS parcel. A price of zero is preserved as published; this is not a complete deed or ownership history. Compare the separate assessor Ownership History rows.",
   })]);
 }
 
@@ -1527,6 +1583,8 @@ async function registryChildRecords(parcel, sourceId, dataset, joinField) {
 const ADAPTERS = Object.freeze({
   parcels: parcelRecord,
   "parcel-owner": parcelOwnerRecords,
+  "parcel-assessment": parcelAssessmentRecords,
+  "parcel-sale": parcelSaleRecords,
   addresses: addressRecords,
   "trash-pickup": trashPickupRecords,
   assessor: assessorRecord,

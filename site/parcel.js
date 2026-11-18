@@ -1,7 +1,9 @@
 const $ = (id) => document.getElementById(id);
+// Keep the future summary scaffold hidden while the source-by-source review defines it.
+const SHOW_SNAPSHOT = false;
 const groups = [
-  ["property", "Building and addresses", "City parcel facts, assessment details, valuation rows, and address points on the parcel."],
-  ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, matched State LLC entity roles, and published assessor ownership history."],
+  ["property", "Building and addresses", "City parcel fields, assessment details, valuation rows, and address points on the parcel."],
+  ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
   ["business", "Businesses and occupants in records", "Municipal license and occupant rows associated with this parcel. The same LLC can also be named as owner; a license does not confirm that it occupies the building."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
@@ -11,6 +13,8 @@ const groups = [
 const sourceNames = {
   parcels: "City parcel layer",
   "parcel-owner": "City parcel owner fields",
+  "parcel-assessment": "City parcel assessed fields",
+  "parcel-sale": "City parcel sale fields",
   addresses: "City address points",
   "trash-pickup": "City trash pickup zones",
   "school-attendance": "NHPS attendance-zone schools",
@@ -136,6 +140,9 @@ function recordTitle(item) {
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   if (item.source_id === "assessor-subareas")
     return `${a.description_as_published ?? "Building subarea"}${a.code ? ` (${a.code})` : ""}`;
+  if (item.source_id === "parcels") return a.property_address ?? `City parcel ${a.parcel_id ?? ""}`;
+  if (item.source_id === "parcel-assessment") return "City parcel building and assessed fields";
+  if (item.source_id === "parcel-sale") return "City parcel sale field set";
   if (item.source_id === "assessor-land") return "Assessor land use and measures";
   if (item.source_id === "assessor-buildings")
     return a.heading_as_published ?? `Building section ${a.section_id ?? ""}`;
@@ -152,7 +159,7 @@ function recordTitle(item) {
   if (item.source_id === "zoning")
     return a.zone_code ? `Zoning district ${a.zone_code}` : "City zoning polygon";
   if (item.source_id === "assessor") return "Assessor building and land facts";
-  if (item.source_id === "parcel-owner") return a.owner_name_1 ?? "City parcel owner name";
+  if (item.source_id === "parcel-owner") return a.owner_name_1 ?? a.owner_name_2 ?? "City parcel owner name";
   if (item.source_id === "assessor-owner") return a.owner_name ?? a.co_owner_name ?? "Assessor owner name";
   if (item.source_id === "cmt-contacts")
     return `CMT contacts · ${a.district_name ?? a.district_num ?? item.source_record_id}`;
@@ -180,12 +187,23 @@ function recordDescription(item) {
   }
   if (item.source_id === "parcels") {
     const facts = [
-      a.year_building_built ? `Built ${a.year_building_built}` : null,
-      a.units_commercial ? `${a.units_commercial} commercial units listed` : null,
-      a.use_code ? `Assessor use code ${a.use_code}` : null,
+      a.mblu ? `MBLU ${a.mblu}` : null,
+      a.account_number ? `Account ${a.account_number}` : null,
+      a.nh_ward != null ? `Ward field ${a.nh_ward}` : null,
     ];
     return facts.filter(Boolean).join(" · ");
   }
+  if (item.source_id === "parcel-assessment")
+    return [a.use_code ? `Use code ${a.use_code}` : null,
+      a.year_building_built != null ? `Building year ${a.year_building_built}` : null,
+      a.total_land_area_acres != null ? `${a.total_land_area_acres} acres listed` : null,
+      a.zone_as_published ? `Parcel zone field ${a.zone_as_published}` : null]
+      .filter(Boolean).join(" · ");
+  if (item.source_id === "parcel-sale")
+    return [a.sale_date_as_published ? `Sale date field ${a.sale_date_as_published}` : null,
+      a.price != null ? `Price field ${a.price}` : null,
+      a.book ? `Book ${a.book}` : null, a.page ? `Page ${a.page}` : null]
+      .filter(Boolean).join(" · ");
   if (item.source_id === "assessor-sales")
     return [a.sale_price ? `Sale price listed: ${a.sale_price}` : null, a.book_page ? `Book and page ${a.book_page}` : null, a.instrument ? `Instrument ${a.instrument}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "assessor-valuations") return null;
@@ -318,6 +336,36 @@ function appendRecord(parent, item) {
       ["CMT chair", item.attributes.cmt_chair ?? "Not published"],
       ["CMT email", item.attributes.cmt_email],
       ["CMT phone", item.attributes.cmt_phone],
+    ].filter(([, value]) => value != null && value !== "")
+    : item.source_id === "parcels" ? [
+      ["Published address", item.attributes.property_address],
+      ["MBLU", item.attributes.mblu],
+      ["Account number", item.attributes.account_number],
+      ["Ward field", item.attributes.nh_ward],
+    ].filter(([, value]) => value != null && value !== "")
+    : item.source_id === "parcel-owner" ? [
+      ["Owner 1", item.attributes.owner_name_1],
+      ["Owner 2 (City source field owwner_name_2)", item.attributes.owner_name_2],
+      ["Care-of mailing line", item.attributes.care_of_line],
+      ["Mailing street", item.attributes.mailing_street],
+      ["Mailing city", item.attributes.mailing_city],
+      ["Mailing state", item.attributes.mailing_state],
+      ["Mailing ZIP", item.attributes.mailing_zip],
+    ].filter(([, value]) => value)
+    : item.source_id === "parcel-assessment" ? [
+      ["Commercial units field", item.attributes.units_commercial],
+      ["Residential units field", item.attributes.units_residential],
+      ["Condo units field", item.attributes.units_condo],
+      ["Assessed improvements", item.attributes.total_assessed_improvements],
+      ["Assessed land", item.attributes.total_assessed_land_value],
+      ["Parcel value x field", item.attributes.total_assessed_parcel_value_x],
+      ["Parcel value y field", item.attributes.total_assessed_parcel_value_y],
+    ].filter(([, value]) => value != null && value !== "")
+    : item.source_id === "parcel-sale" ? [
+      ["Sale date as published", item.attributes.sale_date_as_published],
+      ["Price field", item.attributes.price],
+      ["Book", item.attributes.book],
+      ["Page", item.attributes.page],
     ].filter(([, value]) => value != null && value !== "")
     : item.source_id === "assessor-owner" ? [
       ["Owner", item.attributes.owner_name],
@@ -702,7 +750,7 @@ async function choose(item, searchedQuery = null) {
     const summary = await api(`/api/v1/parcel?${qs}`);
     if (version !== viewVersion) return;
     $("parcel-summary").hidden = false;
-    $("snapshot").hidden = false;
+    $("snapshot").hidden = !SHOW_SNAPSHOT;
     $("parcel-title").textContent =
       summary.parcel.address ?? `Parcel ${summary.parcel.parcel_id}`;
     $("parcel-identifiers").textContent =
@@ -720,7 +768,7 @@ async function choose(item, searchedQuery = null) {
           : `Address focus: ${searchedAddress}. The selected City parcel lists this address. A badge below appears only when a record's own address field matches your search.`,
       ));
     }
-    renderSnapshot();
+    if (SHOW_SNAPSHOT) renderSnapshot();
     status("Records are loading by source.");
     $("group-nav").hidden = false;
     const timelineLink = el("a", "Timeline");
@@ -903,7 +951,7 @@ async function loadGroup(id, section, qs, version, cursor = null) {
     if (version !== viewVersion) return;
     if (!cursor) {
       groupResponses.set(id, data);
-      renderSnapshot();
+      if (SHOW_SNAPSHOT) renderSnapshot();
       const definition = groups.find((group) => group[0] === id);
       section.replaceChildren();
       const heading = el("div", null, "group-heading");
@@ -959,8 +1007,8 @@ function appendTimelineEvent(parent, item) {
       ? "Contact record updated"
       : item.category === "Occupant"
         ? "Occupant record created"
-      : item.source_id === "parcels"
-        ? "Sale date on parcel record"
+      : item.source_id === "parcel-sale"
+        ? "Sale date on City parcel record"
         : item.category ?? sourceName(item.source_id);
   content.append(el("p", kind, "timeline-type"));
   content.append(el("h3", recordTitle(item)));

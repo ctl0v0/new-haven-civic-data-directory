@@ -489,6 +489,38 @@ test("named municipal license appears in business records with historical status
   assert.doesNotMatch(JSON.stringify(out), /Unrelated vendor detail/);
 });
 
+test("City parcel second owner, sale, and assessed fields retain official source names and zero values", async () => {
+  const p = parcel(999058);
+  Object.assign(p.attributes, {
+    owner_name_1: "FIRST OWNER", owwner_name_2: "SECOND OWNER",
+    co_line: "C/O MAIL CONTACT", mail_address: "20 ELD ST",
+    price: 0, book: "10409", page: "55", units_residential: "3",
+    total_assessed_bldg_value: 280770,
+    total_assessed_parcel_value_x: 496090,
+    total_assessed_parcel_value_y: 496090,
+  });
+  const [raw, owner, assessment, sale] = await Promise.all([
+    getSourceRecords("parcels", p),
+    getSourceRecords("parcel-owner", p),
+    getSourceRecords("parcel-assessment", p),
+    getSourceRecords("parcel-sale", p),
+  ]);
+  assert.equal(raw.items[0].attributes.owwner_name_2, "SECOND OWNER");
+  assert.equal(raw.items[0].event_date, null);
+  assert.equal(owner.items[0].attributes.owner_name_2, "SECOND OWNER");
+  assert.equal(owner.items[0].attributes.owner_name_2_source_field, "owwner_name_2");
+  assert.equal(owner.items[0].attributes.care_of_line, "C/O MAIL CONTACT");
+  assert.equal(assessment.items[0].attributes.units_residential, "3");
+  assert.equal(assessment.items[0].attributes.total_assessed_bldg_value, 280770);
+  assert.equal(assessment.items[0].attributes.total_assessed_parcel_value_x, 496090);
+  assert.equal(assessment.items[0].attributes.total_assessed_parcel_value_y, 496090);
+  assert.equal(sale.items[0].attributes.price, 0);
+  assert.equal(sale.items[0].attributes.book, "10409");
+  assert.equal(sale.items[0].event_date, "2020-01-02");
+  assert.ok([raw, owner, assessment, sale].every((source) =>
+    source.items[0].source_url.includes("objectIds=999068")));
+});
+
 test("unnamed residential licenses stay in Activity and are counted in Business source coverage", async () => {
   globalThis.fetch = async (input) => {
     const url = new URL(input);
@@ -1318,7 +1350,7 @@ test("upstream permit failure is labeled partial while dated parcel facts remain
     "unavailable",
   );
   assert.equal(out.items[0].event_date, "2020-01-02");
-  assert.equal(out.items[0].source_id, "parcels");
+  assert.equal(out.items[0].source_id, "parcel-sale");
 });
 
 test("overview keeps source gaps and links visible without raw source fields", async () => {
@@ -1336,7 +1368,7 @@ test("overview keeps source gaps and links visible without raw source fields", a
   const property = out.groups.find((group) => group.id === "property");
   assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "unavailable");
   assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);
-  assert.equal(out.recent_events[0].source_id, "parcels");
+  assert.equal(out.recent_events[0].source_id, "parcel-sale");
   assert.doesNotMatch(JSON.stringify(out), /sale_date|property_address/);
 });
 
@@ -1353,7 +1385,7 @@ test("ArcGIS uses a form body for long spatial queries and source dates accept e
   assert.equal(seen.options.body.get("geometry").length, 3000);
   const feature = parcel(999004);
   feature.attributes.sale_date = 1577923200000;
-  const out = await getSourceRecords("parcels", feature);
+  const out = await getSourceRecords("parcel-sale", feature);
   assert.equal(out.items[0].event_date, "2020-01-02");
 });
 
@@ -1734,5 +1766,5 @@ test("address focus marks only municipal permit LegalAddress in the dated feed",
   assert.equal(permits.length, 2);
   assert.equal(permits[0].address_evidence.matches_query, true);
   assert.equal(permits[1].address_evidence, null);
-  assert.ok(feed.items.some((item) => item.source_id === "parcels"), "parcel-wide timeline entries remain");
+  assert.ok(feed.items.some((item) => item.source_id === "parcel-sale"), "parcel-wide sale entry remains");
 });

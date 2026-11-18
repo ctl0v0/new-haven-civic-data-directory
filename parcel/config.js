@@ -22,10 +22,20 @@ export const SOURCES = Object.freeze([
   {
     id: "parcels",
     group: "property",
-    title: "City parcel and assessment layer",
+    title: "City parcel feature and published fields",
     url: LAYERS.parcels,
     mode: "live",
-    coverage: "Citywide parcel records; valuation date is not established.",
+    coverage: "All published attributes of the selected City parcel feature are returned from the live layer. Source codes, edit dates and valuation year are not independently established by this feature.",
+    directoryId: "gis-parcels",
+  },
+  {
+    id: "parcel-assessment",
+    group: "property",
+    title: "City parcel building, use and assessed fields",
+    url: LAYERS.parcels,
+    mode: "live",
+    coverage:
+      "Published use code, building year, acreage, unit fields and each assessed-value column from the selected City parcel feature. The layer publishes two parcel-value columns with x/y suffixes; no canonical total, tax balance or valuation year is inferred.",
     directoryId: "gis-parcels",
   },
   {
@@ -35,7 +45,17 @@ export const SOURCES = Object.freeze([
     url: LAYERS.parcels,
     mode: "live",
     coverage:
-      "Owner and mailing fields published on the selected City GIS parcel. These are source fields, not an independent title determination.",
+      "First and second owner names, care-of line and mailing fields published on the selected City GIS parcel. The source spells its second-owner field owwner_name_2. These fields are not an independent title determination.",
+    directoryId: "gis-parcels",
+  },
+  {
+    id: "parcel-sale",
+    group: "ownership",
+    title: "City parcel sale fields",
+    url: LAYERS.parcels,
+    mode: "live",
+    coverage:
+      "One published sale date, price, book and page field set on the selected City parcel feature. It is not a complete transfer or title history; compare separate assessor Ownership History rows.",
     directoryId: "gis-parcels",
   },
   {

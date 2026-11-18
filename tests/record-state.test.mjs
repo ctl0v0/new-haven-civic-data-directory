@@ -46,6 +46,7 @@ test("owner names, State LLC roles and assessor sales stay in the ownership grou
   assert.equal(displayGroupCounts(ordered).owner_names, 2);
   assert.equal(displayGroupCounts(ordered).owner_registry, 3);
   assert.equal(displayGroupCounts(ordered).owner_history, 1);
+  assert.equal(displayGroup({ id: "city-sale", source_id: "parcel-sale", attributes: { price: 0 } }, asOf).key, "owner_history");
 });
 
 test("municipal business records sort by published status without including owner LLC roles", () => {

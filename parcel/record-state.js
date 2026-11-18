@@ -10,7 +10,7 @@ const pastWords = /\b(void|voided|cancelled|canceled|denied|rejected|withdrawn|e
 export const DISPLAY_GROUPS = Object.freeze([
   { key: "owner_names", title: "Owner names published for this parcel", description: "City GIS and assessor owner names are shown separately, with their own source links. A difference is left visible for review." },
   { key: "owner_registry", title: "State registry for the owner LLC", description: "Entity, principals and registered agent for a matched parcel owner LLC. An agent or principal is not identified here as the parcel's beneficial owner." },
-  { key: "owner_history", title: "Assessor ownership history", description: "Published transfer rows from the assessor card; these may not be a complete deed chain." },
+  { key: "owner_history", title: "Published sale and ownership history", description: "The City parcel's one sale field set and separate assessor Ownership History rows. Neither is a complete deed chain." },
   { key: "reported", title: "Recently reported active, open or issued", description: "These are source statuses. An issued permit does not prove work is underway, and a license does not prove a business is operating here." },
   { key: "early", title: "Recent drafts and records awaiting review", description: "These records have not been shown as issued or approved by the source." },
   { key: "older", title: "Older open, issued or draft records", description: "These records are more than two years old but still carry a nonterminal source status. Their present state needs source review." },
@@ -48,8 +48,8 @@ export function displayGroup(item, asOf = new Date()) {
     return { key: "owner_names", basis: item.source_id === "parcel-owner" ? "City GIS parcel owner fields" : "Verified assessor card owner field", as_of: checkedOn };
   if (ownerRegistry.has(item.source_id))
     return { key: "owner_registry", basis: "Matched State entity record", as_of: checkedOn };
-  if (item.source_id === "assessor-sales")
-    return { key: "owner_history", basis: "Published assessor ownership history row", as_of: checkedOn };
+  if (["assessor-sales", "parcel-sale"].includes(item.source_id))
+    return { key: "owner_history", basis: item.source_id === "parcel-sale" ? "Published City parcel sale fields" : "Published assessor ownership history row", as_of: checkedOn };
   const status = publishedStatus(item);
   const normalized = String(status ?? "").toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const a = item.attributes ?? {};

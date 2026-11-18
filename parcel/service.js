@@ -121,7 +121,7 @@ export async function parcelFeed(
   const key = `feed:${feature.attributes.parcel_id}:${feature.attributes.objectid}`;
   const data = await cached(key, async () => {
     const sources = await Promise.all(
-      ["parcels", "assessor-sales", "municity", "lci-cases", "managed-lots"].map(
+      ["parcel-sale", "assessor-sales", "municity", "lci-cases", "managed-lots"].map(
         (name) => getSourceRecords(name, feature),
       ),
     );
