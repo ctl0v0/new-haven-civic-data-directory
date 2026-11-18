@@ -6,6 +6,7 @@ import { parcelMapContext } from "./map-context.js";
 import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js";
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
 import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords } from "./record-state.js";
+import { permitDetails } from "./permit-details.js";
 
 export { resolveParcel };
 export { parcelMapContext };
@@ -110,6 +111,10 @@ export async function parcelTrashPickup(
     ...(queryAddress ? { query_address: queryAddress } : {}),
     items: markAddressEvidence(items, queryAddress),
   };
+}
+
+export async function parcelPermitDetails(id, permitId, objectid = null) {
+  return permitDetails(await loadParcel(id, objectid), permitId);
 }
 
 export async function parcelFeed(

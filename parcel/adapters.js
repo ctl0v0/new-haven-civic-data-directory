@@ -1314,7 +1314,9 @@ async function municityRecords(parcel) {
       const sourceUrl =
         kind === "Document"
           ? publicDocumentUrl(row) ?? parcelUrl
-          : parcelUrl;
+          : ["Permit", "Application"].includes(kind) && Number.isSafeInteger(Number(row?.[idKey]))
+            ? `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/${kind}/${Number(row[idKey])}`
+            : parcelUrl;
       items.push(
         {
           ...record(

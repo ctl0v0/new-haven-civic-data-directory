@@ -1,4 +1,6 @@
-import { fetchJson } from "../../parcel/http.js";
+import { arcgis, fetchJson } from "../../parcel/http.js";
+import { LAYERS } from "../../parcel/config.js";
+import { permitDetails } from "../../parcel/permit-details.js";
 
 const BASE = "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Permit/569338";
 const OPTIONS = { headers: { SourceId: "2" }, timeout: 12000, maxBytes: 8_000_000 };
@@ -20,6 +22,24 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "live") {
+      const city = await arcgis(LAYERS.parcels, {
+        where: "mblu = '352/1131/01800' OR mblu = '352 1131 01800'",
+        outFields: "*", resultRecordCount: "10",
+      });
+      const features = (city.features ?? []).filter((feature) =>
+        String(feature.attributes?.mblu ?? "").replaceAll("/", " ").trim() === "352 1131 01800");
+      if (features.length !== 1)
+        return Response.json({ matches: features.map((feature) => ({ parcel_id: feature.attributes.parcel_id, objectid: feature.attributes.objectid })) }, { headers: { "Cache-Control": "private, no-store" } });
+      const data = await permitDetails(features[0], "569338");
+      return Response.json({ parcel_id: data.parcel_id, permit_id: data.permit_id,
+        permit_number: data.permit.attributes.PermitNo, permit_field_count: Object.keys(data.permit.attributes).length,
+        application_id: data.application?.attributes.Application_ID ?? null,
+        application_field_count: data.application ? Object.keys(data.application.attributes).length : 0,
+        category_counts: data.category_counts, partial: data.partial, warnings: data.warnings,
+        linked_task_count: data.items.find((item) => item.category === "Task")?.linked_from.length ?? 0,
+      }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "values") {
       const data = await fetchJson(BASE + "/Children", OPTIONS);
       const keys = {

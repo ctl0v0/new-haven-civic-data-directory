@@ -8,6 +8,7 @@ import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getGroup, getSourceRecords } from "../parcel/adapters.js";
+import { permitDetails } from "../parcel/permit-details.js";
 import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import sourcesRoute from "../api/v1/sources.js";
@@ -16,6 +17,7 @@ import trashPickupRoute from "../api/v1/trash-pickup.js";
 import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
+import permitDetailsRoute from "../api/v1/permit-details.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -679,7 +681,70 @@ test("Cask Republic remains in the original municipal work record on 181 Crown",
   assert.equal(permit.attributes.PermitNo, "B-21-02020");
   assert.equal(permit.attributes.LegalAddress, "181 CROWN ST");
   assert.match(permit.attributes.Description, /Cask Republic/);
-  assert.equal(permit.source_url, "https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Parcel/99873");
+  assert.equal(permit.source_url, "https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/564534");
+});
+
+test("verified municipal permit details expose fees and reviews once with explicit application links", async () => {
+  const id = 999070;
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(id)], spatialReference: { wkid: 4326 } });
+    if (u.pathname.endsWith("/GetM5Data")) {
+      if (u.searchParams.get("entity") === "Parcel")
+        return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 22232 }] });
+      if (u.searchParams.get("entity") === "Permit")
+        return response({ rows: [{ Permit_ID: 569338, Parcel_ID: 22232, PrintKey: "12 34",
+          Application_ID: 22797, PermitNo: "P-22-00708", Department: "Plumbing", PermStatus: "Issued",
+          FullOnlyField: "official full row" }] });
+      if (u.searchParams.get("entity") === "Application")
+        return response({ rows: [{ Application_ID: 22797, Parcel_ID: 22232,
+          PrintKey: "12 34", ApplicaNo: "P-22-00708", ApplicationStatus: "Approved" }] });
+    }
+    if (u.pathname.endsWith("/Parcel/22232/Children"))
+      return response({ Permit: [{ Permit_ID: 569338, Application_ID: 22797, PermitNo: "P-22-00708" }],
+        Application: [{ Application_ID: 22797, ApplicaNo: "P-22-00708" }] });
+    if (u.pathname.endsWith("/Permit/569338/Children") || u.pathname.endsWith("/Application/22797/Children"))
+      return response({
+        Fee: [{ Fee_ID: 898882, Amount: "77.52", FeePaid: "Yes", FeeType: "Permit Fee",
+          Applicant: "omitted applicant", InternalNotes: "private fee notes" }],
+        Task: [{ Task_ID: 492284, TaskType: "Plumbing Review", ApprovalStatus: "Approved",
+          AssignedTo: "Plumbingreviews@newhavenct.gov", Entity: "Application", Entity_ID: 22797,
+          InternalNotes: "private review notes" }],
+        Document: [{ Document_ID: 327611, Name: "Public permit document", Public: true,
+          UrlExists: true, Url: "https://www.municitymedia.com/public/permit.pdf" },
+        { Document_ID: 327612, Name: "Private document", Public: false,
+          UrlExists: true, Url: "https://www.municitymedia.com/private/permit.pdf" }],
+        Contact: [{ Contact_ID: 639971, Fullname: "Example Owner", ContactRole: "Owner",
+          Phone: "555-0100", Email: "private@example.org" }],
+        Communication: [{ Communication_ID: 343495, Title: "Permit notice", Body: "private message" }],
+      });
+    throw Error(`Unexpected source: ${u}`);
+  };
+  const result = await permitDetails(parcel(id), "569338");
+  assert.equal(result.permit.attributes.FullOnlyField, "official full row");
+  assert.equal(result.application.attributes.ApplicationStatus, "Approved");
+  assert.equal(result.items.filter((item) => item.category === "Fee").length, 1);
+  assert.equal(result.items.find((item) => item.category === "Task").linked_from.length, 2);
+  assert.equal(result.category_counts.Document, 1);
+  assert.equal(result.items.find((item) => item.category === "Document").source_url,
+    "https://www.municitymedia.com/public/permit.pdf");
+  assert.doesNotMatch(JSON.stringify(result), /omitted applicant|private fee notes|private review notes|Private document|555-0100|private@example.org|private message/);
+  await assert.rejects(permitDetails(parcel(id), "777777"), { status: 404 });
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await permitDetailsRoute.fetch(new Request(
+    `https://example.com/api/v1/permit-details?parcel_id=${id}&permit_id=569338`, { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call",
+      params: { name: "get_permit_details", arguments: { parcel_id: String(id), permit_id: "569338" } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, await rest.json());
 });
 
 test("municipal occupants use only public fields attached to the verified parcel", async () => {

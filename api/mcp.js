@@ -10,6 +10,7 @@ import {
   parcelOverview,
   parcelRecords,
   parcelTrashPickup,
+  parcelPermitDetails,
   parcelFeed,
   sourceCoverage,
 } from "../parcel/service.js";
@@ -143,6 +144,14 @@ export function createServer() {
     }),
     ({ parcel_id, objectid, query_address }) =>
       parcelTrashPickup(parcel_id, { objectid, query_address }),
+  );
+  tool(
+    server,
+    "get_permit_details",
+    "Get municipal permit details",
+    "Return all published fields for a permit on the selected parcel, its explicitly linked application, and public fee, review task, document, contact-role and communication metadata. Child rows are deduplicated by source ID.",
+    z.object({ ...common, permit_id: z.string().regex(/^\d{1,12}$/) }),
+    ({ parcel_id, objectid, permit_id }) => parcelPermitDetails(parcel_id, permit_id, objectid),
   );
   tool(
     server,
