@@ -11,6 +11,7 @@ import {
   parcelRecords,
   parcelTrashPickup,
   parcelPermitDetails,
+  parcelApplicationDetails,
   parcelFeed,
   sourceCoverage,
 } from "../parcel/service.js";
@@ -152,6 +153,14 @@ export function createServer() {
     "Return all published fields for a permit on the selected parcel, its explicitly linked application, and public fee, review task, document, contact-role and communication metadata. Child rows are deduplicated by source ID.",
     z.object({ ...common, permit_id: z.string().regex(/^\d{1,12}$/) }),
     ({ parcel_id, objectid, permit_id }) => parcelPermitDetails(parcel_id, permit_id, objectid),
+  );
+  tool(
+    server,
+    "get_application_details",
+    "Get municipal application details",
+    "Return all published fields for an application on the selected parcel and its public fee, review task, document, contact-role and communication metadata. No permit is inferred from a shared number.",
+    z.object({ ...common, application_id: z.string().regex(/^\d{1,12}$/) }),
+    ({ parcel_id, objectid, application_id }) => parcelApplicationDetails(parcel_id, application_id, objectid),
   );
   tool(
     server,

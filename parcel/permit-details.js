@@ -83,21 +83,22 @@ function entityRecord(kind, row, match) {
   };
 }
 
-export async function permitDetails(parcel, permitId) {
-  const requestedId = id(permitId);
-  if (!requestedId) throw new SourceError("Invalid permit ID", 400);
+export async function municipalWorkDetails(parcel, kind, workId) {
+  if (!["Permit", "Application"].includes(kind)) throw new SourceError("Invalid municipal work type", 400);
+  const requestedId = id(workId);
+  if (!requestedId) throw new SourceError(`Invalid ${kind.toLowerCase()} ID`, 400);
   const vendor = await getSourceRecords("municity", parcel);
   if (vendor.status === "unavailable") throw new SourceError(vendor.warning ?? "Municipal parcel lookup unavailable");
-  const listed = vendor.items.find((item) => item.category === "Permit" && id(item.attributes.Permit_ID) === requestedId);
-  if (!listed) throw new SourceError("Permit is not in this verified parcel's public records", 404);
+  const listed = vendor.items.find((item) => item.category === kind && id(item.attributes[`${kind}_ID`]) === requestedId);
+  if (!listed) throw new SourceError(`${kind} is not in this verified parcel's public records`, 404);
   const vendorParcelId = id(listed.match?.vendor_parcel_id);
   const key = String(listed.match?.value ?? "").trim().toUpperCase();
-  if (!vendorParcelId || !key) throw new SourceError("Permit parcel association could not be verified");
-  const applicationId = id(listed.attributes.Application_ID);
+  if (!vendorParcelId || !key) throw new SourceError(`${kind} parcel association could not be verified`);
+  const applicationId = kind === "Permit" ? id(listed.attributes.Application_ID) : null;
   const listedApplication = applicationId ? vendor.items.find((item) =>
     item.category === "Application" && id(item.attributes.Application_ID) === applicationId) : null;
-  return cached(`permit-details:v2:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}:${requestedId}`, async () => {
-    const targets = [{ kind: "Permit", entityId: requestedId, listed }];
+  return cached(`work-details:v1:${kind}:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}:${requestedId}`, async () => {
+    const targets = [{ kind, entityId: requestedId, listed }];
     if (applicationId) targets.push({ kind: "Application", entityId: applicationId, listed: listedApplication });
     const checks = await Promise.all(targets.map(async (target) => {
       const [entity, children] = await Promise.allSettled([
@@ -117,7 +118,7 @@ export async function permitDetails(parcel, permitId) {
     }));
     const verifiedTargets = checks.filter((target) => target.row);
     const warnings = [];
-    if (!checks[0].full) warnings.push("Full permit fields were unavailable; the parcel child row is shown.");
+    if (!checks[0].full) warnings.push(`Full ${kind.toLowerCase()} fields were unavailable; the parcel child row is shown.`);
     if (applicationId && !checks[1].row) warnings.push("The linked application could not be verified on this parcel.");
     else if (applicationId && !checks[1].full) warnings.push("Full application fields were unavailable; the parcel child row is shown.");
     const counts = Object.fromEntries(CATEGORIES.map((kind) => [kind, null]));
@@ -166,10 +167,13 @@ export async function permitDetails(parcel, permitId) {
         }
       }
     }
-    const permit = entityRecord("Permit", checks[0].row, listed.match);
-    const application = checks[1]?.row ? entityRecord("Application", checks[1].row, listed.match) : null;
+    const permitRow = checks.find((target) => target.kind === "Permit")?.row;
+    const applicationRow = checks.find((target) => target.kind === "Application")?.row;
+    const permit = permitRow ? entityRecord("Permit", permitRow, listed.match) : null;
+    const application = applicationRow ? entityRecord("Application", applicationRow, listed.match) : null;
     return {
-      parcel_id: Number(parcel.attributes.parcel_id), permit_id: requestedId,
+      parcel_id: Number(parcel.attributes.parcel_id), entity: kind, entity_id: requestedId,
+      ...(kind === "Permit" ? { permit_id: requestedId } : { application_id: requestedId }),
       vendor_parcel_id: vendorParcelId, match: listed.match,
       permit, application, items: [...items.values()], category_counts: counts,
       partial: Boolean(warnings.length), warnings,
@@ -178,3 +182,6 @@ export async function permitDetails(parcel, permitId) {
     };
   });
 }
+
+export const permitDetails = (parcel, permitId) => municipalWorkDetails(parcel, "Permit", permitId);
+export const applicationDetails = (parcel, applicationId) => municipalWorkDetails(parcel, "Application", applicationId);

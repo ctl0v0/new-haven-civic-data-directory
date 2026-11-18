@@ -172,7 +172,7 @@ function recordTitle(item) {
   return brief(
     a.business_name ?? a.occupant_name ?? a.owner ?? a.BusinessName ?? a.name ?? a.document_name ??
       a.complaint_number ?? a.contact_name ?? a.title ?? a.PermitNo ??
-      a.PermitNumber ?? a.ApplicationNumber ?? a.LicenseNumber ??
+      a.PermitNumber ?? a.ApplicationNumber ?? a.ApplicaNo ?? a.LicenseNumber ??
       a.CertificateNumber ?? a.property_address ?? a.LegalAddress ??
       a.PermitType ?? a.ApplicationType ?? item.source_record_id,
     120,
@@ -299,27 +299,33 @@ function matchEvidence(item) {
 }
 function permitDetailTitle(item) {
   const a = item.attributes;
-  if (item.category === "Fee") return [a.FeeType ?? a.FeeCategory ?? "Fee", a.Amount != null ? `$${a.Amount}` : null].filter(Boolean).join(" · ");
+  if (item.category === "Fee") return [a.FeeType ?? a.FeeCategory ?? "Fee", a.Amount != null ? `Amount ${a.Amount}` : null].filter(Boolean).join(" · ");
   if (item.category === "Task") return [a.Subject ?? a.TaskType ?? "Review task", a.ApprovalStatus].filter(Boolean).join(" · ");
   if (item.category === "Document") return a.Name ?? "Public document";
   if (item.category === "Contact") return [a.Fullname ?? "Contact", a.ContactRole ?? a.ContactType].filter(Boolean).join(" · ");
   return a.Title ?? "Communication";
 }
-function renderPermitDetails(parent, data) {
+function renderWorkDetails(parent, data) {
   parent.replaceChildren();
   if (data.partial) parent.append(el("p", data.warnings.join(" "), "source-warning"));
-  parent.append(fieldList([
-    ["Permit number", data.permit.attributes.PermitNo],
-    ["Permit type", data.permit.attributes.PermitType],
-    ["Department (permit field)", data.permit.attributes.Department],
-    ["Status", data.permit.attributes.PermStatus],
-    ["Recorded address", data.permit.attributes.LegalAddress],
-  ].filter(([, value]) => value != null && value !== "")));
-  const permit = el("details", null, "permit-entity-fields");
-  permit.append(el("summary", "Full permit fields as published"));
-  permit.append(fieldList(sourceFields(data.permit.attributes), "record-fields all-fields"));
-  parent.append(permit);
-  if (data.application) {
+  const primary = data.entity === "Permit" ? data.permit : data.application;
+  const a = primary.attributes;
+  parent.append(fieldList((data.entity === "Permit" ? [
+    ["Permit number", a.PermitNo], ["Permit type", a.PermitType],
+    ["Department (permit field)", a.Department], ["Status", a.PermStatus],
+    ["Recorded address", a.LegalAddress],
+  ] : [
+    ["Application number", a.ApplicaNo ?? a.ApplicationNumber],
+    ["Application type", a.ApplicationType],
+    ["Department (application field)", a.Department],
+    ["Status", a.PermitApplicationStatus ?? a.ApplicationStatus],
+    ["Recorded address", a.LegalAddress],
+  ]).filter(([, value]) => value != null && value !== "")));
+  const fields = el("details", null, "permit-entity-fields");
+  fields.append(el("summary", `Full ${data.entity.toLowerCase()} fields as published`));
+  fields.append(fieldList(sourceFields(a), "record-fields all-fields"));
+  parent.append(fields);
+  if (data.entity === "Permit" && data.application) {
     const application = el("details", null, "permit-entity-fields");
     application.append(el("summary", `Linked application ${data.application.attributes.ApplicaNo ?? data.application.attributes.ApplicationNumber ?? data.application.source_record_id}`));
     application.append(link(data.application.source_url, "Open application source"));
@@ -491,7 +497,10 @@ function appendRecord(parent, item) {
       details.append(fieldList(sourceFields(item.attributes), "record-fields all-fields"));
   });
   actions.append(details);
-  if (item.source_id === "municity" && item.category === "Permit" && /^\d{1,12}$/.test(String(item.attributes?.Permit_ID ?? ""))) {
+  const workKind = item.source_id === "municity" && ["Permit", "Application"].includes(item.category)
+    ? item.category : null;
+  const workId = workKind ? item.attributes?.[`${workKind}_ID`] : null;
+  if (workKind && /^\d{1,12}$/.test(String(workId ?? ""))) {
     const permitDetails = el("details", null, "permit-details");
     permitDetails.append(el("summary", "Fees, reviews and related records"));
     const contents = el("div", null, "permit-details-content");
@@ -501,15 +510,16 @@ function appendRecord(parent, item) {
     permitDetails.addEventListener("toggle", async () => {
       if (!permitDetails.open || loaded || loading) return;
       loading = true;
-      contents.replaceChildren(el("p", "Loading official permit details…", "meta"));
+      contents.replaceChildren(el("p", `Loading official ${workKind.toLowerCase()} details…`, "meta"));
       try {
-        const qs = new URLSearchParams({ parcel_id: selected.parcel_id, permit_id: item.attributes.Permit_ID });
+        const qs = new URLSearchParams({ parcel_id: selected.parcel_id,
+          [workKind === "Permit" ? "permit_id" : "application_id"]: workId });
         if (selected.objectid) qs.set("objectid", selected.objectid);
-        const data = await api(`/api/v1/permit-details?${qs}`);
-        renderPermitDetails(contents, data);
+        const data = await api(`/api/v1/${workKind === "Permit" ? "permit" : "application"}-details?${qs}`);
+        renderWorkDetails(contents, data);
         loaded = true;
       } catch (error) {
-        contents.replaceChildren(el("p", `Could not load permit details: ${error.message}`, "source-warning"));
+        contents.replaceChildren(el("p", `Could not load ${workKind.toLowerCase()} details: ${error.message}`, "source-warning"));
       } finally {
         loading = false;
       }

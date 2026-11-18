@@ -8,7 +8,7 @@ import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getGroup, getSourceRecords } from "../parcel/adapters.js";
-import { permitDetails } from "../parcel/permit-details.js";
+import { permitDetails, applicationDetails } from "../parcel/permit-details.js";
 import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import sourcesRoute from "../api/v1/sources.js";
@@ -18,6 +18,7 @@ import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
 import permitDetailsRoute from "../api/v1/permit-details.js";
+import applicationDetailsRoute from "../api/v1/application-details.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -747,6 +748,23 @@ test("verified municipal permit details expose fees and reviews once with explic
   const mcpText = await mcp.text();
   const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
   assert.deepEqual(payload.result.structuredContent, await rest.json());
+  const standalone = await applicationDetails(parcel(id), "22797");
+  assert.equal(standalone.permit, null);
+  assert.equal(standalone.application.attributes.FullOnlyApplicationField, "full application row");
+  assert.equal(standalone.items.find((item) => item.category === "Task").linked_from.length, 1);
+  const applicationRest = await applicationDetailsRoute.fetch(new Request(
+    `https://example.com/api/v1/application-details?parcel_id=${id}&application_id=22797`, { headers: auth },
+  ));
+  assert.equal(applicationRest.status, 200);
+  const applicationMcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call",
+      params: { name: "get_application_details", arguments: { parcel_id: String(id), application_id: "22797" } } }),
+  }));
+  assert.equal(applicationMcp.status, 200);
+  const applicationMcpText = await applicationMcp.text();
+  const applicationPayload = JSON.parse(applicationMcpText.startsWith("event:") ? applicationMcpText.match(/^data: (.+)$/m)?.[1] : applicationMcpText);
+  assert.deepEqual(applicationPayload.result.structuredContent, await applicationRest.json());
 });
 
 test("a linked application search without parcel ID needs a matching parcel child", async () => {

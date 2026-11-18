@@ -259,7 +259,7 @@ export const SOURCES = Object.freeze([
     url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
     mode: "live",
     coverage:
-      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses, occupants and permits. Certificates are also returned. An on-demand permit detail lookup follows a verified permit and its explicitly linked application to public fee, review task, document, contact-role and communication metadata. Occupant personal contact fields, complaint narratives, contact phone/email/address, internal task notes and communication bodies are omitted. No complete historical or inspection coverage is claimed.",
+      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses, occupants and permits. Certificates are also returned. On-demand permit and application detail lookups follow verified source IDs to public fee, review task, document, contact-role and communication metadata; a permit's explicitly linked application is included. Occupant personal contact fields, complaint narratives, contact phone/email/address, internal task notes and communication bodies are omitted. No complete historical or inspection coverage is claimed.",
   },
   {
     id: "lci-cases",
