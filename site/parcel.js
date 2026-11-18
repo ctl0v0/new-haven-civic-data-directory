@@ -168,12 +168,15 @@ function showDataSection(id, updateUrl = true) {
   if (!(["overview", "timeline"].includes(id) || groups.some(([key]) => key === id))) id = "overview";
   activeDataSection = id;
   $("record-detail").hidden = true;
+  $("parcel-map-section").hidden = id !== "overview";
   $("snapshot").hidden = id !== "overview";
   $("feed-section").hidden = id !== "timeline";
   for (const [key] of groups) {
     const section = $(`group-${key}`);
     if (section) section.hidden = key !== id;
   }
+  if (id === "overview" && parcelMap && !document.body.classList.contains("browse-mode"))
+    requestAnimationFrame(() => parcelMap?.invalidateSize());
   for (const button of $("group-nav").querySelectorAll("button")) {
     const current = button.dataset.section === id;
     button.setAttribute("aria-current", current ? "page" : "false");
@@ -192,11 +195,22 @@ function showDataSection(id, updateUrl = true) {
 function renderDataNav() {
   const nav = $("group-nav");
   nav.replaceChildren();
+  nav.append(
+    el("p", "Explore this parcel", "eyebrow record-nav-label"),
+    el("h2", "Record sections", "record-nav-title"),
+    el("p", "Choose a section, then use its filters to narrow the returned records.", "record-nav-hint"),
+  );
   for (const [id, title] of [["overview", "Overview"], ["timeline", "Timeline"], ...groups.map(([id, title]) => [id, title])]) {
     const button = el("button", title, "data-nav-button");
     button.type = "button";
     button.dataset.section = id;
-    button.addEventListener("click", () => showDataSection(id));
+    button.addEventListener("click", () => {
+      showDataSection(id);
+      if (!document.body.classList.contains("browse-mode")) {
+        const target = id === "overview" ? $("parcel-summary") : id === "timeline" ? $("feed-section") : $(`group-${id}`);
+        requestAnimationFrame(() => target?.scrollIntoView({ behavior: "auto", block: "start" }));
+      }
+    });
     nav.append(button);
   }
   nav.hidden = false;
@@ -889,7 +903,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   }
 }
 async function loadMap(qs, version) {
-  $("parcel-map-section").hidden = false;
+  $("parcel-map-section").hidden = activeDataSection !== "overview";
   $("parcel-map-status").textContent = "Loading the City parcel boundary…";
   try {
     const feature = await api(`/api/v1/geometry?${qs}`);

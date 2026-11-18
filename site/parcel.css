@@ -564,3 +564,130 @@ body.browse-mode .overview-highlights, body.browse-mode .overview-group > .sourc
   .guide-content { border: 0; border-top: 1px solid #d7e3da; padding: 1rem 0; }
   .guide-example { border: 0; border-top: 1px solid #d7e3da; padding: 1rem 0; }
 }
+
+/* The search result uses the same left navigation pattern as the data guide. */
+.record-review-workspace {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  align-items: start;
+  margin-top: 1.1rem;
+  border-top: 1px solid #cbdacf;
+}
+.record-review-workspace #group-nav {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: .1rem;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0;
+  padding: 1.15rem .85rem 1rem 0;
+  border: 0;
+  border-right: 1px solid #d7e3da;
+  background: #f8faf8;
+}
+.record-nav-label { margin: 0 0 .2rem .55rem; }
+.record-nav-title { margin: 0 .55rem .3rem; font-size: 1.3rem; line-height: 1.2; }
+.record-nav-hint { margin: 0 .55rem .85rem; color: #52695d; font-size: .79rem; line-height: 1.4; }
+.record-review-workspace #group-nav .data-nav-button {
+  width: 100%;
+  min-height: 2.7rem;
+  padding: .5rem .55rem;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #2f5645;
+  font-size: .84rem;
+  text-align: left;
+  white-space: normal;
+}
+.record-review-workspace #group-nav .data-nav-button:hover { background: #e8f0e9; }
+.record-review-workspace #group-nav .data-nav-button[aria-current="page"] {
+  border-left-color: #0b624d;
+  background: #e1efe5;
+  color: #153f30;
+}
+.record-review-main { min-width: 0; padding: 1.1rem 0 2rem 1.4rem; }
+.record-review-main .parcel-hero { margin-top: 0; padding-top: .35rem; }
+.record-review-main #parcel-summary,
+.record-review-main #snapshot,
+.record-review-main #feed-section,
+.record-review-main .record-groups .panel,
+.record-review-main #record-detail { scroll-margin-top: 1rem; }
+body.browse-mode .record-review-workspace { display: block; margin: 0; border: 0; }
+body.browse-mode .record-review-main { padding: 0; }
+body.browse-mode .record-review-workspace #group-nav {
+  position: static;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .25rem;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0 0 1rem;
+  padding: .5rem 0;
+  border: 0;
+  border-bottom: 1px solid #d7e3da;
+}
+body.browse-mode .record-nav-label,
+body.browse-mode .record-nav-title,
+body.browse-mode .record-nav-hint { display: none; }
+body.browse-mode .record-review-workspace #group-nav .data-nav-button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 2.65rem;
+  padding: .45rem .65rem;
+  border: 1px solid transparent;
+  border-radius: .25rem;
+  white-space: nowrap;
+}
+body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-current="page"] { border-color: #aac7b1; }
+@media (max-width: 64rem) {
+  .record-review-workspace { grid-template-columns: 12.5rem minmax(0, 1fr); }
+  .record-review-main .map-workspace { grid-template-columns: minmax(0, 1fr); }
+  .record-review-main .map-layers { max-height: none; padding: .8rem 0 0; border-left: 0; border-top: 1px solid #cbdacf; }
+}
+@media (max-width: 48rem) {
+  .record-review-workspace { display: block; }
+  .record-review-workspace #group-nav {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: .2rem;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: .4rem 0;
+    border-right: 0;
+    border-bottom: 1px solid #d7e3da;
+  }
+  .record-review-workspace .record-nav-label,
+  .record-review-workspace .record-nav-title,
+  .record-review-workspace .record-nav-hint { display: none; }
+  .record-review-workspace #group-nav .data-nav-button {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 2.75rem;
+    padding: .5rem .65rem;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  .record-review-workspace #group-nav .data-nav-button[aria-current="page"] {
+    border-left-color: transparent;
+    border-bottom-color: #0b624d;
+  }
+  .record-review-main { padding: 1rem 0 2rem; }
+  .record-review-main #parcel-summary,
+  .record-review-main #snapshot,
+  .record-review-main #feed-section,
+  .record-review-main .record-groups .panel,
+  .record-review-main #record-detail { scroll-margin-top: 4rem; }
+  body.browse-mode .record-review-main { padding: 0; }
+}

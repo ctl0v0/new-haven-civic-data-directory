@@ -30,6 +30,9 @@ const app = `
   </section>
   <section id="candidates" class="panel" hidden><h2>Choose a parcel</h2><p>More than one city parcel may match an address. Review the listed address before choosing.</p><div id="candidate-list"></div></section>
   <div id="record-content-home"><div id="record-content" hidden>
+  <div class="record-review-workspace">
+    <nav id="group-nav" aria-label="Parcel data sections" hidden></nav>
+    <div class="record-review-main">
   <section id="parcel-summary" class="parcel-hero" hidden>
     <div class="parcel-hero-layout"><div class="parcel-hero-copy">
       <p class="eyebrow">City parcel record</p>
@@ -52,7 +55,6 @@ const app = `
     <div id="map-context-notes" class="map-context-notes"></div>
     <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Visual backgrounds: <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Esri street map</a> or <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. Backgrounds do not establish parcel facts or current conditions.</p>
   </section>
-  <nav id="group-nav" aria-label="Parcel data sections" hidden></nav>
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="snapshot-title">At a glance</h2></div><p>Plain-language facts from the records below.</p></div>
     <div id="overview-counts"></div>
@@ -66,7 +68,7 @@ const app = `
   </section>
   <div id="groups" class="record-groups"></div>
   <section id="record-detail" class="record-detail" hidden></section>
-  </div></div>
+  </div></div></div></div>
   </div>
   <section id="browse-view" role="tabpanel" aria-labelledby="browse-tab" hidden>
     <div class="browse-mobile-switch" role="group" aria-label="Browse view"><button id="mobile-map-tab" type="button" aria-pressed="true">Map</button><button id="mobile-records-tab" type="button" aria-pressed="false">Records</button></div>
