@@ -53,13 +53,27 @@ export default {
     const assessorImages = assessorVerified ? $("img").toArray().map((node) => ({
       id: $(node).attr("id") ?? null, alt: $(node).attr("alt") ?? null,
       src: $(node).attr("src") ?? null, parent_id: $(node).parent().attr("id") ?? null,
+      parent_href: $(node).parent().attr("href") ?? null,
     })).slice(0, 30) : [];
+    const photoSrc = assessorImages.find((item) => item.alt === "Building Photo")?.src;
+    const photoUrls = photoSrc ? [
+      new URL(photoSrc, "https://gis.vgsi.com").href,
+      `https://gis.vgsi.com${photoSrc.replaceAll("\\", "/")}`,
+      `https://gis.vgsi.com${photoSrc.replaceAll("\\", "%5C")}`,
+    ] : [];
+    const photoChecks = await Promise.all([...new Set(photoUrls)].map(async (url) => {
+      try {
+        const response = await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(8000) });
+        return { url, status: response.status, type: response.headers.get("content-type"),
+          location: response.headers.get("location") };
+      } catch (error) { return { url, error: error.message }; }
+    }));
     const parcelImageFields = Object.fromEntries(Object.entries(parcel.attributes)
       .filter(([key]) => /image|photo|picture|file/i.test(key)));
     return Response.json({ parcel: { id, objectid, address: parcel.attributes.property_address, bbox },
       center, counts, closest, layer: { status: layer.status, count: layer.features.length,
         warning: layer.warning, source_updated_at: layer.source_updated_at },
-      parcelImageFields, assessorVerified, assessorImages },
+      parcelImageFields, assessorVerified, assessorImages, photoChecks },
     { headers: { "Cache-Control": "private, no-store" } });
   },
 };
