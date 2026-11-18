@@ -150,7 +150,7 @@ async function parcelOwnerRecords(parcel) {
     owner_name_1: firstOwner,
     owner_name_2: secondOwner,
     owner_name_2_source_field: "owwner_name_2",
-    care_of_line: text(a.co_line),
+    co_line: text(a.co_line),
     mailing_street: text(a.mail_address),
     mailing_city: text(a.mail_city),
     mailing_state: text(a.mail_state),
@@ -160,7 +160,7 @@ async function parcelOwnerRecords(parcel) {
   }, {
     match: "city-parcel-record",
     sourceUrl: cityParcelSourceUrl(parcel),
-    note: "Owner and mailing fields as published on the selected City GIS parcel. The source spells its second-owner field owwner_name_2; co_line is a care-of mailing line, not a co-owner. Confirm title with official land records.",
+    note: "Owner and mailing fields as published on the selected City GIS parcel. The source spells its second-owner field owwner_name_2; co_line remains a separate source field and is not treated as an owner name. Confirm title with official land records.",
   })]);
 }
 

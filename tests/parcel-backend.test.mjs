@@ -509,7 +509,7 @@ test("City parcel second owner, sale, and assessed fields retain official source
   assert.equal(raw.items[0].event_date, null);
   assert.equal(owner.items[0].attributes.owner_name_2, "SECOND OWNER");
   assert.equal(owner.items[0].attributes.owner_name_2_source_field, "owwner_name_2");
-  assert.equal(owner.items[0].attributes.care_of_line, "C/O MAIL CONTACT");
+  assert.equal(owner.items[0].attributes.co_line, "C/O MAIL CONTACT");
   assert.equal(assessment.items[0].attributes.units_residential, "3");
   assert.equal(assessment.items[0].attributes.total_assessed_bldg_value, 280770);
   assert.equal(assessment.items[0].attributes.total_assessed_parcel_value_x, 496090);

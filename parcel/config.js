@@ -45,7 +45,7 @@ export const SOURCES = Object.freeze([
     url: LAYERS.parcels,
     mode: "live",
     coverage:
-      "First and second owner names, care-of line and mailing fields published on the selected City GIS parcel. The source spells its second-owner field owwner_name_2. These fields are not an independent title determination.",
+      "First and second owner names, CO_LINE and mailing fields published on the selected City GIS parcel. The source spells its second-owner field owwner_name_2; CO_LINE is kept separate from owner names. These fields are not an independent title determination.",
     directoryId: "gis-parcels",
   },
   {

@@ -346,7 +346,7 @@ function appendRecord(parent, item) {
     : item.source_id === "parcel-owner" ? [
       ["Owner 1", item.attributes.owner_name_1],
       ["Owner 2 (City source field owwner_name_2)", item.attributes.owner_name_2],
-      ["Care-of mailing line", item.attributes.care_of_line],
+      ["CO_LINE (City source field)", item.attributes.co_line],
       ["Mailing street", item.attributes.mailing_street],
       ["Mailing city", item.attributes.mailing_city],
       ["Mailing state", item.attributes.mailing_state],
