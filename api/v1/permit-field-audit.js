@@ -57,7 +57,10 @@ export default {
       const parcelApplication = (parcelChildren.Application ?? []).find((row) => Number(row.Application_ID) === appId);
       return Response.json({
         parent: Object.fromEntries(["Permit_ID", "Parcel_ID", "Application_ID", "ApplicationNumber", "ApplicaNo", "PermitNo", "Department", "PermStatus", "PermitType", "PermitDate", "ApplicaDate1", "PrintKey", "LegalAddress"].map((key) => [key, parent?.[key] ?? null])),
+        parent_field_count: parent ? Object.keys(parent).length : 0,
         parcel_permit_found: Boolean(parcelPermit), parcel_permit_field_count: parcelPermit ? Object.keys(parcelPermit).length : 0,
+        parcel_permit_missing_fields: parent && parcelPermit ? Object.keys(parent).filter((key) => !(key in parcelPermit)).sort() : null,
+        parcel_permit_missing_nonempty_fields: parent && parcelPermit ? Object.keys(parent).filter((key) => !(key in parcelPermit) && parent[key] != null && parent[key] !== "").sort() : null,
         parcel_application_found: Boolean(parcelApplication), parcel_application_field_count: parcelApplication ? Object.keys(parcelApplication).length : 0,
         application_children: appChildren ? describe(appChildren) : null,
         application_review_rows: (appChildren?.Task ?? []).slice(0, 10).map((row) => Object.fromEntries(["Task_ID", "Entity", "Entity_ID", "TaskType", "Subject", "ApprovalStatus", "DateCompleted", "Deleted"].map((key) => [key, row[key] ?? null]))),
