@@ -7,6 +7,7 @@ export const LAYERS = Object.freeze({
   zoning: GIS + "Zoning_(View)/FeatureServer/0",
   wards: GIS + "Wards_2022_(View)/FeatureServer/0",
   neighborhoods: GIS + "Neighborhoods_(View)/FeatureServer/0",
+  parkingSpaces: GIS + "Metered_Parking_Spaces/FeatureServer/0",
   cmt: GIS + "CMT_Districts_(View)/FeatureServer/0",
   managedLots: GIS + "LCI_Managed_Lots_(View)/FeatureServer/0",
   localHistoricDistricts:

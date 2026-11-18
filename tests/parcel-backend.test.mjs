@@ -1832,6 +1832,11 @@ test("map context keeps official parcel and nearby layers separate with REST and
         point(...center, { OBJECTID: 1, StopName: "Church Street", InService: 1 }),
         point(-72.90, 41.32, { OBJECTID: 2, StopName: "Far away" }),
       ], spatialReference: { wkid: 4326 } });
+    if (url.pathname.includes("Metered_Parking_Spaces"))
+      return response({ features: [
+        point(...center, { objectid: 301, facilityid: "TEST_0301", spacenum: 1, meterspec: "Source text" }),
+        point(-72.90, 41.32, { objectid: 302, facilityid: "FAR_0302" }),
+      ], spatialReference: { wkid: 4326 } });
     throw Error(`Unexpected map source: ${url.pathname}`);
   };
   const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
@@ -1841,9 +1846,16 @@ test("map context keeps official parcel and nearby layers separate with REST and
   assert.equal(rest.status, 200);
   const context = await rest.json();
   assert.equal(context.nearby_radius_m, 400);
-  assert.deepEqual(context.layers.map((layer) => layer.id), ["parcel-addresses", "zoning", "transit-stops"]);
+  assert.deepEqual(context.layers.map((layer) => layer.id), ["parcel-addresses", "zoning", "transit-stops", "metered-parking-spaces"]);
   assert.equal(context.layers.find((layer) => layer.id === "parcel-addresses").features[0].properties.house_number, "165");
   assert.equal(context.layers.find((layer) => layer.id === "transit-stops").features.length, 1);
+  const parking = context.layers.find((layer) => layer.id === "metered-parking-spaces");
+  assert.equal(parking.scope, "nearby");
+  assert.equal(parking.features.length, 1);
+  assert.equal(parking.features[0].properties.facilityid, "TEST_0301");
+  assert.equal(parking.features[0].properties.source_url,
+    "https://gis.newhavenct.gov/server/rest/services/Hosted/Metered_Parking_Spaces/FeatureServer/0/301");
+  assert.match(parking.note, /not an available-space feed/);
   assert.equal(context.layers.find((layer) => layer.id === "zoning").source_updated_at, "2026-04-15");
   assert.ok(context.gaps.some((gap) => gap.id === "loading-zones"));
   assert.doesNotMatch(JSON.stringify(context.layers), /loading.zone|parking.available/i);

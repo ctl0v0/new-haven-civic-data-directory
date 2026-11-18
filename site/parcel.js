@@ -68,6 +68,7 @@ const MAP_COLORS = {
   "parcel-addresses": "#dc5c32",
   zoning: "#195e9d",
   "transit-stops": "#2476ba",
+  "metered-parking-spaces": "#7550a4",
 };
 async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
@@ -965,17 +966,25 @@ function mapFeatureTitle(feature, layerId) {
   if (layerId === "parcel-addresses") return `${p.house_number ?? ""} ${p.full_street_name ?? ""}`.trim() || "City address point";
   if (layerId === "zoning") return p.zone_code ? `Zoning ${p.zone_code}` : "City zoning district";
   if (layerId === "transit-stops") return p.StopName ?? "CT Transit stop";
+  if (layerId === "metered-parking-spaces") return p.facilityid ? `Mapped meter ${p.facilityid}` : "Mapped metered space";
   return "Mapped feature";
 }
 function mapFeaturePopup(feature, layer) {
   const popup = el("div", null, "map-popup");
   popup.append(el("strong", mapFeatureTitle(feature, layer.id)));
-  const fields = Object.entries(feature.properties ?? {})
-    .filter(([key, value]) => !["source_id", "source_record_id", "source_url", "scope"].includes(key) && value != null && value !== "")
-    .slice(0, 5);
-  if (fields.length) popup.append(fieldList(fields.map(([key, value]) => [fieldLabel(key), String(value)])));
+  const fields = layer.id === "metered-parking-spaces"
+    ? [["Meter number", feature.properties?.meternum], ["Facility ID", feature.properties?.facilityid],
+      ["Post number", feature.properties?.post_num], ["Space number", feature.properties?.spacenum],
+      ["City zone field", feature.properties?.zone_], ["Meter specification as published", feature.properties?.meterspec]]
+      .filter(([, value]) => value != null && value !== "")
+    : Object.entries(feature.properties ?? {})
+      .filter(([key, value]) => !["source_id", "source_record_id", "source_url", "scope"].includes(key) && value != null && value !== "")
+      .slice(0, 5).map(([key, value]) => [fieldLabel(key), value]);
+  if (fields.length) popup.append(fieldList(fields.map(([key, value]) => [key, String(value)])));
   if (feature.properties?.source_url) popup.append(link(feature.properties.source_url, "Open City source"));
-  popup.append(el("p", layer.scope === "nearby"
+  popup.append(el("p", layer.id === "metered-parking-spaces"
+    ? "Nearby mapped meter inventory; not linked to the parcel or an open-space indicator. Check posted rules and rates."
+    : layer.scope === "nearby"
     ? "Nearby map context; not linked to the parcel."
     : layer.id === "parcel-addresses"
       ? "City address point; not a verified entrance."
@@ -991,7 +1000,7 @@ function mapFeatureLayer(layer) {
       fillOpacity: 0.04,
     }),
     pointToLayer: (_feature, latlng) => window.L.circleMarker(latlng, {
-      radius: layer.id === "parcel-addresses" ? 6 : 5,
+      radius: layer.id === "parcel-addresses" ? 6 : layer.id === "metered-parking-spaces" ? 4 : 5,
       color: "#fff", weight: 2, fillColor: color, fillOpacity: 1,
     }),
     onEachFeature: (feature, leafletLayer) => leafletLayer.bindPopup(mapFeaturePopup(feature, layer)),
@@ -1022,6 +1031,7 @@ async function loadMapContext(map, qs, version) {
       if (layer.source_updated_at)
         row.append(el("p", `Source data last edited ${shortDate(layer.source_updated_at)}`, "map-layer-meta"));
       else row.append(el("p", "Source update date unavailable", "map-layer-meta"));
+      if (layer.note) row.append(el("p", layer.note, "map-layer-meta"));
       if (layer.warning) row.append(el("p", layer.warning, "map-layer-warning"));
       row.append(link(layer.source_url, "Open City GIS layer"));
       list.append(row);
@@ -1035,9 +1045,9 @@ async function loadMapContext(map, qs, version) {
     }
     const notes = $("map-context-notes");
     notes.replaceChildren();
-    notes.append(el("p", `Nearby transit stops cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.`, "meta"));
+    notes.append(el("p", `Nearby transit stops and mapped metered spaces cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.`, "meta"));
     const gaps = el("p", null, "meta");
-    gaps.append(document.createTextNode("Loading zones and current parking availability are not mapped: no verified City or State GIS feed has been connected. "));
+    gaps.append(document.createTextNode("Mapped meters do not show current availability, rates, or restrictions. Loading zones and available spaces are not mapped. "));
     gaps.append(link(context.gaps?.[0]?.source_url, "See City parking maps"));
     notes.append(gaps);
   } catch (error) {

@@ -1,6 +1,7 @@
 import { arcgis, fetchJson } from "../../parcel/http.js";
 import { loadParcel } from "../../parcel/resolve.js";
 import { parcelFeatureToGeoJSON } from "../../parcel/geometry.js";
+import { parcelMapContext } from "../../parcel/map-context.js";
 
 const ROOT = "https://gis.newhavenct.gov/server/rest/services/Hosted/";
 const NAMES = ["Metered_Parking_Spaces_view", "Metered_Parking_Spaces"];
@@ -42,6 +43,15 @@ export default {
   async fetch(request) {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
+    if (new URL(request.url).searchParams.get("mode") === "context") {
+      const context = await parcelMapContext("11236", "979");
+      const layer = context.layers.find((entry) => entry.id === "metered-parking-spaces");
+      return Response.json({ parcel: context.parcel, layer: {
+        id: layer.id, status: layer.status, count: layer.features.length,
+        source_url: layer.source_url, source_updated_at: layer.source_updated_at,
+        warning: layer.warning, example: layer.features[0] ?? null,
+      } }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     const parcel = await loadParcel("11236", "979");
     const bbox = parcelFeatureToGeoJSON(parcel).bbox;
     const center = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
