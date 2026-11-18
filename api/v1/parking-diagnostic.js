@@ -35,13 +35,13 @@ export default {
         { headers: { "Cache-Control": "private, no-store" } });
     if (new URL(request.url).searchParams.get("mode") === "basemaps") {
       const sources = await Promise.all([
-        "https://gis.newhavenct.gov/server/rest/services?f=pjson",
-        "https://cteco.uconn.edu/ctraster/rest/services?f=pjson",
+        "https://gis.newhavenct.gov/server/rest/services/Basemapping?f=pjson",
+        "https://gis.newhavenct.gov/server/rest/services/Data_Basemapping?f=pjson",
+        "https://cteco.uconn.edu/ctraster/rest/services/maps?f=pjson",
       ].map(async (url) => {
         try {
           const data = await fetchJson(url, { timeout: 10000, maxBytes: 4_000_000 });
-          return { url, folders: data.folders, services: data.services?.filter((item) =>
-            /base|street|map|reference|road|transport/i.test(item.name)) };
+          return { url, folders: data.folders, services: data.services };
         } catch (error) { return { url, error: error.message }; }
       }));
       return Response.json({ sources }, { headers: { "Cache-Control": "private, no-store" } });
