@@ -64,6 +64,18 @@ export default {
         return Response.json({ error: error.message }, { headers: { "Cache-Control": "private, no-store" } });
       }
     }
+    if (mode === "application") {
+      const search = new URL("https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data");
+      for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT", entity: "Application", entity_id: "", fieldtype: "text", mapid: "", mapobject: "", module: "", numrecs: "5", operator: "=", pid: "", searchfield: "Application_ID", section: "", value: "22797" }))
+        search.searchParams.set(key, value);
+      const data = await fetchJson(search, OPTIONS);
+      return Response.json({ total: data.total, rows: Array.isArray(data.rows) ? data.rows.map((row) => ({
+        field_count: Object.keys(row).length,
+        Application_ID: row.Application_ID, Parcel_ID: row.Parcel_ID, PrintKey: row.PrintKey,
+        PrintKey_Parcel: row.PrintKey_Parcel, ApplicationNumber: row.ApplicationNumber,
+        ApplicaNo: row.ApplicaNo, keys: Object.keys(row).sort(),
+      })) : data.rows }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "links") {
       const search = new URL("https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data");
       for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT", entity: "Permit", entity_id: "", fieldtype: "text", mapid: "", mapobject: "", module: "", numrecs: "5", operator: "=", pid: "", searchfield: "Permit_ID", section: "", value: "569338" }))
