@@ -838,7 +838,7 @@ test("cross-source permit search distinguishes approved review tasks from applic
       return response({ Permit: [{ Permit_ID: 1001, Application_ID: 2001 }],
         Application: [{ Application_ID: 2001 }] });
     if (u.pathname.endsWith("/Permit/1001/Children") || u.pathname.endsWith("/Application/2001/Children"))
-      return response({ Fee: [], Document: [], Inspection: [], Flag: [], Communication: [],
+      return response({ Fee: [], Document: [], Communication: [],
         Task: [{ Task_ID: 77, Entity: "Application", Entity_ID: 2001, TaskType: "Plumbing Review",
           ApprovalStatus: "Approved", DateCompleted: "10/2/2026 8:05:30 AM" }],
         Contact: [{ Contact_ID: 88, Fullname: "Example Contractor", ContactRole: "Contractor",
@@ -851,6 +851,8 @@ test("cross-source permit search distinguishes approved review tasks from applic
     review_completed_from: "2026-09-01", contact_role: "Contractor" };
   const found = await searchMunicipalPermits(criteria);
   assert.equal(found.partial, false);
+  assert.equal(found.items[0].detail_partial, true);
+  assert.equal(found.items[0].query_detail_partial, false);
   assert.equal(found.coverage.municipal_type_rows_returned, 2);
   assert.equal(found.coverage.joined_parcel_candidates, 1);
   assert.equal(found.items.length, 1);

@@ -33,6 +33,12 @@ function checkedText(value, label, max = 100) {
 function checkedOptional(value, label, max = 100) {
   return value == null || value === "" ? null : checkedText(value, label, max);
 }
+function queryRelevantDetailWarnings(detail, { reviewStatus, reviewCompletedFrom, contactRole }) {
+  return detail.warnings.filter((warning) =>
+    /Full permit fields|Full application fields|linked application could not be verified|child records were unavailable/i.test(warning) ||
+    ((reviewStatus || reviewCompletedFrom) && /\bTask\b.*(not returned|malformed|limit)/i.test(warning)) ||
+    (contactRole && /\bContact\b.*(not returned|malformed|limit)/i.test(warning)));
+}
 
 async function vendorPermits(permitType) {
   return cached(`permit-type-search:v1:${normalized(permitType)}`, async () => {
@@ -144,17 +150,18 @@ export async function searchMunicipalPermits(input = {}) {
     const detail = await permitDetails(parcel, row.Permit_ID);
     const application = detail.application?.attributes ?? null;
     const linkedApplicationId = Number(application?.Application_ID);
+    const queryWarnings = queryRelevantDetailWarnings(detail, { reviewStatus, reviewCompletedFrom, contactRole });
     if (applicationStatus && !same(application?.PermitApplicationStatus ?? application?.ApplicationStatus, applicationStatus))
-      return null;
+      return { excluded: true, queryWarnings };
     const tasks = detail.items.filter((item) => item.category === "Task" &&
       item.attributes.Entity === "Application" &&
       Number(item.attributes.Entity_ID) === linkedApplicationId &&
       (!reviewStatus || same(item.attributes.ApprovalStatus, reviewStatus)) &&
       (!reviewCompletedFrom || (sourceDate(item.attributes.DateCompleted) ?? "") >= reviewCompletedFrom));
-    if ((reviewStatus || reviewCompletedFrom) && !tasks.length) return null;
+    if ((reviewStatus || reviewCompletedFrom) && !tasks.length) return { excluded: true, queryWarnings };
     const contacts = detail.items.filter((item) => item.category === "Contact" &&
       (!contactRole || same(item.attributes.ContactRole, contactRole)));
-    if (input.require_contact_role === true && !contacts.length) return null;
+    if (input.require_contact_role === true && !contacts.length) return { excluded: true, queryWarnings };
     return {
       city_parcel_id: Number(parcel.attributes.parcel_id),
       city_objectid: Number(parcel.attributes.objectid),
@@ -185,13 +192,19 @@ export async function searchMunicipalPermits(input = {}) {
         neighborhood: "City parcel polygon intersects City neighborhood polygon" },
       detail_partial: detail.partial,
       detail_warnings: detail.warnings,
+      query_detail_partial: queryWarnings.length > 0,
+      query_detail_warnings: queryWarnings,
       city_parcel_source_url: `${LAYERS.parcels}/query?f=json&objectIds=${Number(parcel.attributes.objectid)}&outFields=*`,
     };
   }));
   const failures = checks.filter((check) => check.status === "rejected").length;
-  const items = checks.flatMap((check) => check.status === "fulfilled" && check.value ? [check.value] : []);
+  const checked = checks.flatMap((check) => check.status === "fulfilled" && check.value ? [check.value] : []);
+  const items = checked.filter((item) => !item.excluded);
+  const excludedQueryWarnings = checked.filter((item) => item.excluded)
+    .flatMap((item) => item.queryWarnings);
   const partial = vendor.limit_reached || city.truncated || failures > 0 ||
-    ambiguousParcelJoins > 0 || items.some((item) => item.detail_partial);
+    ambiguousParcelJoins > 0 || excludedQueryWarnings.length > 0 ||
+    items.some((item) => item.query_detail_partial);
   return {
     criteria: { neighborhood, permit_type: permitType, permit_status: permitStatus,
       permit_date_from: permitDateFrom, permit_date_through: permitDateThrough,
@@ -209,9 +222,11 @@ export async function searchMunicipalPermits(input = {}) {
       joined_parcel_candidates: candidates.length,
       ambiguous_parcel_joins: ambiguousParcelJoins,
       detail_checks_failed: failures,
+      excluded_query_detail_warning_count: excludedQueryWarnings.length,
+      optional_detail_partial_count: items.filter((item) => item.detail_partial && !item.query_detail_partial).length,
       returned_count: items.length,
     },
     partial, items, retrieved_at: new Date().toISOString(),
-    note: "This search joins the municipal permit PrintKey to City parcel MBLU and City neighborhood geometry. An Approved review task is not the application status; both are reported separately. Contractor phone, email and address appear only where the municipal contact role is explicitly marked public. Results may be incomplete when partial is true.",
+    note: "This search joins the municipal permit PrintKey to City parcel MBLU and City neighborhood geometry. An Approved review task is not the application status; both are reported separately. Contractor phone, email and address appear only where the municipal contact role is explicitly marked public. The top-level partial flag covers the query criteria; optional child-detail gaps remain visible per item. Results may be incomplete when partial is true.",
   };
 }
