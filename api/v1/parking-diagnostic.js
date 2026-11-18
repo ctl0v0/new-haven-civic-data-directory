@@ -41,7 +41,8 @@ export default {
       ].map(async (url) => {
         try {
           const data = await fetchJson(url, { timeout: 10000, maxBytes: 4_000_000 });
-          return { url, folders: data.folders, services: data.services };
+          return { url, folders: data.folders, services: data.services, error: data.error,
+            keys: Object.keys(data) };
         } catch (error) { return { url, error: error.message }; }
       }));
       return Response.json({ sources }, { headers: { "Cache-Control": "private, no-store" } });

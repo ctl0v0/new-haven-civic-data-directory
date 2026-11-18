@@ -1,6 +1,5 @@
 const $ = (id) => document.getElementById(id);
-// Keep the future summary scaffold hidden while the source-by-source review defines it.
-const SHOW_SNAPSHOT = false;
+const SHOW_SNAPSHOT = true;
 const groups = [
   ["property", "Building and addresses", "City parcel fields, assessment details, valuation rows, and address points on the parcel."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
@@ -826,7 +825,7 @@ function renderSnapshot() {
   }
 
   const activity = groupResponses.get("activity");
-  const work = snapshotCard("Recent work and applications", "activity");
+  const work = snapshotCard("Work and applications in records", "activity");
   if (!activity) work.append(el("p", "Checking work records…", "meta"));
   else {
     const issuedPermitNumbers = new Set(activity.items
@@ -837,7 +836,7 @@ function renderSnapshot() {
       .filter((item) => ["Application", "Permit", "Complaint"].includes(item.category) || item.source_id === "lci-cases")
       .filter((item) => ["reported", "early"].includes(item.display_group?.key))
       .filter((item) => item.category !== "Application" || !issuedPermitNumbers.has(item.attributes?.ApplicationNumber));
-    if (!recent.length) work.append(el("p", "No recent open, issued, draft or review-stage record surfaced in the returned records."));
+    if (!recent.length) work.append(el("p", "No reported open, issued, draft or review-stage record surfaced in the returned records."));
     else {
       const list = el("ul", null, "snapshot-list");
       for (const item of recent.slice(0, 3)) {
@@ -864,7 +863,7 @@ function renderSnapshot() {
       environmental.append(el("p", "No DEEP brownfield row matched this parcel's published identifier."));
     if (source?.status === "unavailable" || source?.status === "partial")
       environmental.append(el("p", "The DEEP inventory check was incomplete. Review its source status below."));
-    environmental.append(el("p", "Inventory updated February 2026. A listing or missing row does not establish present site conditions.", "snapshot-caveat"));
+    environmental.append(el("p", "A listing or missing row does not establish present site conditions. Check the linked source for its update date.", "snapshot-caveat"));
   }
 }
 async function choose(item, searchedQuery = null) {
