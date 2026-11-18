@@ -36,12 +36,13 @@ export default {
       };
     }).filter((table) => table.id?.startsWith("MainContent_") || table.row_count > 3);
     const ownerRow = $("#MainContent_lblLabelCoOwner").closest("tr");
-    const selectedRows = Object.fromEntries(["MainContent_ctl02_grdCns", "MainContent_grdXf", "MainContent_grdOb"]
+    const selectedRows = Object.fromEntries(["MainContent_ctl02_tblBldg", "MainContent_ctl02_grdCns", "MainContent_tblLandUse", "MainContent_tblLand", "MainContent_grdXf", "MainContent_grdOb"]
       .map((id) => [id, $(`#${id}`).find("tr").toArray().slice(0, 60)
         .map((row) => $(row).children("th,td").toArray().map((cell) => clean($(cell).text())))]));
     return Response.json({ pid, address: allowed.get(pid), verified_pid: clean($("#MainContent_lblPid").text()),
       field_count: fields.length, fields: fields.slice(0, 500), tables: tables.slice(0, 100),
-      co_owner_row_html: $.html(ownerRow).slice(0, 3000), selected_rows: selectedRows },
+      co_owner_row_html: $.html(ownerRow).slice(0, 3000),
+      address_html: $.html($("#MainContent_lblAddr1")).slice(0, 1500), selected_rows: selectedRows },
       { headers: { "Cache-Control": "private, no-store" } });
   },
 };
