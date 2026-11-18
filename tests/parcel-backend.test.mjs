@@ -1909,6 +1909,7 @@ test("photo preview requires the selected City parcel and matching assessor PID"
       `<span id="MainContent_lblPid">${id}</span><img id="MainContent_ctl02_imgPhoto" alt="Building Photo" src="/photos/NewhavenCTPhotos/00/05/61/23.jpg">`,
       { headers: { "content-type": "text/html" } },
     );
+    if (url.pathname.endsWith("/GetM5Data")) return response({ rows: [] });
     if (url.pathname.includes("Parcel_Viewer"))
       return response({ features: [parcel(id)], spatialReference: { wkid: 4326 } });
     throw Error(`Unexpected preview source: ${url.href}`);
@@ -1920,8 +1921,48 @@ test("photo preview requires the selected City parcel and matching assessor PID"
   assert.equal(result.status, 200);
   const data = await result.json();
   assert.equal(data.status, "ok");
+  assert.equal(data.photo_source_id, "assessor");
   assert.equal(data.photo_url, "https://gis.vgsi.com/photos/NewhavenCTPhotos/00/05/61/23.jpg");
   assert.equal(data.source_url, `https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${id}`);
+});
+
+test("municipal street-view photo requires one exact PrintKey and a published JPEG", async () => {
+  const id = 999093;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(id)], spatialReference: { wkid: 4326 } });
+    if (url.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 13303 }] });
+    if (url.hostname === "www.municitymedia.com") {
+      assert.equal(url.pathname, "/NewHavenCityCT/Parcel/13303/streetview.jpg");
+      return new Response(null, { status: 200, headers: {
+        "content-type": "image/jpeg", "content-length": "61165",
+      } });
+    }
+    throw Error(`Unexpected municipal photo source: ${url.href}`);
+  };
+  const result = await parcelPhotoRoute.fetch(new Request(
+    `https://example.com/api/v1/parcel-photo?parcel_id=${id}&objectid=${id + 10}`,
+    { headers: { authorization: "Bearer " + process.env.PILOT_API_TOKEN } },
+  ));
+  assert.equal(result.status, 200);
+  const data = await result.json();
+  assert.equal(data.status, "ok");
+  assert.equal(data.photo_source_id, "municity");
+  assert.equal(data.municipal_parcel_id, 13303);
+  assert.equal(data.photo_url, "https://www.municitymedia.com/NewHavenCityCT/Parcel/13303/streetview.jpg");
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { authorization: "Bearer " + process.env.PILOT_API_TOKEN,
+      "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call",
+      params: { name: "get_parcel_photo", arguments: { parcel_id: String(id), objectid: String(id + 10) } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const text = await mcp.text();
+  const payload = JSON.parse(text.startsWith("event:") ? text.match(/^data: (.+)$/m)?.[1] : text);
+  assert.deepEqual(payload.result.structuredContent, data);
 });
 
 test("address focus uses explicit full source addresses, not descriptions or parcel-only links", () => {

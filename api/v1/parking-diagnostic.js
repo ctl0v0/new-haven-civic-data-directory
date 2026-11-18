@@ -4,6 +4,7 @@ import { arcgis, fetchBounded, fetchJson } from "../../parcel/http.js";
 import { LAYERS } from "../../parcel/config.js";
 import { parcelMapContext } from "../../parcel/map-context.js";
 import { browseParcels } from "../../parcel/browse.js";
+import { parcelPhoto } from "../../parcel/photo.js";
 import { load } from "cheerio";
 
 const envelope = (center, metres) => {
@@ -29,6 +30,9 @@ export default {
         warning: data.warning, first: data.features[0]?.properties ?? null },
       { headers: { "Cache-Control": "private, no-store" } });
     }
+    if (new URL(request.url).searchParams.get("mode") === "photo")
+      return Response.json(await parcelPhoto("10386", "20011"),
+        { headers: { "Cache-Control": "private, no-store" } });
     const id = "10386";
     const objectid = "20011";
     const parcel = await loadParcel(id, objectid);

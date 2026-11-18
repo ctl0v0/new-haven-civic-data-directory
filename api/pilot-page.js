@@ -36,8 +36,8 @@ const app = `
       <p id="parcel-match" class="match-note" hidden></p>
       <p class="small">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
     </div><figure id="parcel-photo" class="parcel-photo" hidden>
-      <img id="parcel-photo-image" alt="Building photo from the verified City assessor card">
-      <figcaption>Assessor building photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View assessor card</a></figcaption>
+      <img id="parcel-photo-image" alt="Verified parcel photo">
+      <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>
     </figure></div>
   </section>
   <section id="parcel-map-section" class="map-panel" aria-labelledby="parcel-map-title" hidden>
@@ -69,7 +69,7 @@ const app = `
       <aside id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and assessor building photo.</p></aside>
     </div>
     <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
-    <p class="meta">Parcel boundaries and labels come from the live City GIS parcel layer. Background aerial imagery is from CT ECO. A building photo is shown only when the assessor card confirms the selected parcel ID. Neither source establishes current conditions.</p>
+    <p class="meta">Parcel boundaries and labels come from the live City GIS parcel layer. Background aerial imagery is from CT ECO. A municipal street-view or assessor building photo is shown only after an exact official parcel match. Neither image establishes current conditions.</p>
   </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
@@ -101,7 +101,7 @@ export default {
           "Cache-Control": "private, no-store",
           "X-Frame-Options": "DENY",
           "Content-Security-Policy":
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cteco.uconn.edu https://gis.vgsi.com; base-uri 'none'; form-action 'self'",
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cteco.uconn.edu https://gis.vgsi.com https://www.municitymedia.com; base-uri 'none'; form-action 'self'",
         },
       },
     );

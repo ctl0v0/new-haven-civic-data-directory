@@ -4,7 +4,8 @@ import { loadParcel, resolveParcel } from "./resolve.js";
 import { parcelFeatureToGeoJSON } from "./geometry.js";
 import { parcelMapContext } from "./map-context.js";
 import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js";
-import { assessorPhotoForParcel, getGroup, getSourceRecords, pageItems } from "./adapters.js";
+import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
+import { parcelPhoto as photoForParcel } from "./photo.js";
 import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords } from "./record-state.js";
 import { permitDetails, applicationDetails } from "./permit-details.js";
 import { searchMunicipalPermits } from "./permit-search.js";
@@ -18,7 +19,7 @@ export async function parcelGeometry(id, objectid = null) {
 }
 
 export async function parcelPhoto(id, objectid = null) {
-  return assessorPhotoForParcel(await loadParcel(id, objectid));
+  return photoForParcel(id, objectid);
 }
 
 export async function parcelSummary(id, objectid = null) {

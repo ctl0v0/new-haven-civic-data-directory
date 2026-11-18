@@ -117,14 +117,25 @@ function resetMap() {
   $("map-layer-list").replaceChildren();
   $("map-context-notes").replaceChildren();
 }
-function setAssessorPhoto(figure, image, sourceLink, data) {
+function setVerifiedPhoto(figure, image, sourceLink, data) {
   figure.hidden = true;
   image.removeAttribute("src");
   if (data?.status !== "ok" || !data.photo_url || !data.source_url) return false;
   try {
     const photo = new URL(data.photo_url);
     const source = new URL(data.source_url);
-    if (photo.origin !== "https://gis.vgsi.com" || source.origin !== photo.origin) return false;
+    const municipal = data.photo_source_id === "municity" &&
+      photo.origin === "https://www.municitymedia.com" &&
+      source.origin === "https://www.municityconnect.com";
+    const assessor = data.photo_source_id === "assessor" &&
+      photo.origin === "https://gis.vgsi.com" && source.origin === photo.origin;
+    if (!municipal && !assessor) return false;
+    const label = municipal ? "Municipal street-view photo" : "Assessor building photo";
+    image.alt = `${label} for the selected City parcel`;
+    sourceLink.textContent = municipal ? "View municipal parcel" : "View assessor card";
+    figure.querySelector("figcaption")?.replaceChildren(
+      document.createTextNode(`${label} · date not published. `), sourceLink,
+    );
     image.onerror = () => { figure.hidden = true; };
     image.src = photo.href;
     sourceLink.href = source.href;
@@ -137,7 +148,7 @@ async function loadHeroPhoto(qs, version) {
   try {
     const data = await api(`/api/v1/parcel-photo?${qs}`);
     if (version !== viewVersion) return;
-    setAssessorPhoto(figure, $("parcel-photo-image"), $("parcel-photo-source"), data);
+    setVerifiedPhoto(figure, $("parcel-photo-image"), $("parcel-photo-source"), data);
   } catch { if (version === viewVersion) figure.hidden = true; }
 }
 function shortDate(value) {
@@ -1130,7 +1141,7 @@ async function selectBrowseParcel(feature) {
   const title = p.address?.trim() || `City parcel ${p.parcel_id}`;
   aside.replaceChildren(el("p", "Selected City parcel", "eyebrow"), el("h2", title),
     el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "meta"),
-    el("p", "Checking the verified assessor card for a building photo…", "meta"));
+    el("p", "Checking official parcel photo sources…", "meta"));
   aside.append(link(p.source_url, "Open City parcel source"));
   const button = el("button", "Request parcel data");
   button.type = "button";
@@ -1146,23 +1157,23 @@ async function selectBrowseParcel(feature) {
     if (version !== browseSelectionVersion) return;
     aside.querySelector(".meta:last-of-type")?.remove();
     if (data.status !== "ok") {
-      aside.insertBefore(el("p", "The verified assessor card has no building photo for this parcel.", "meta"), button);
+      aside.insertBefore(el("p", "No verified municipal or assessor photo was returned for this parcel.", "meta"), button);
       return;
     }
     const figure = el("figure", null, "parcel-photo");
     const image = document.createElement("img");
-    image.alt = "Building photo from the verified City assessor card";
-    const caption = el("figcaption", "Assessor building photo · date not published. ");
-    const source = el("a", "View assessor card");
+    image.alt = "Verified parcel photo";
+    const caption = el("figcaption", "Official parcel photo · date not published. ");
+    const source = el("a", "View source");
     source.target = "_blank";
     source.rel = "noopener noreferrer";
     caption.append(source);
     figure.append(image, caption);
-    if (setAssessorPhoto(figure, image, source, data)) aside.insertBefore(figure, button);
+    if (setVerifiedPhoto(figure, image, source, data)) aside.insertBefore(figure, button);
   } catch {
     if (version === browseSelectionVersion) {
       aside.querySelector(".meta:last-of-type")?.remove();
-      aside.insertBefore(el("p", "Assessor photo unavailable; the City parcel selection remains available.", "meta"), button);
+      aside.insertBefore(el("p", "Photo sources unavailable; the City parcel selection remains available.", "meta"), button);
     }
   }
 }

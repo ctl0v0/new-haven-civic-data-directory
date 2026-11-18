@@ -6,6 +6,7 @@ import {
   resolveParcel,
   parcelSummary,
   parcelGeometry,
+  parcelPhoto,
   parcelMapContext,
   parcelOverview,
   parcelRecords,
@@ -89,6 +90,14 @@ export function createServer() {
     "Return the selected City parcel boundary as GeoJSON, with source and parcel identifiers. The boundary is not a building footprint.",
     z.object(common),
     ({ parcel_id, objectid }) => parcelGeometry(parcel_id, objectid),
+  );
+  tool(
+    server,
+    "get_parcel_photo",
+    "Get verified parcel photo",
+    "Return an official municipal street-view photo URL after an exact parcel MBLU match, or a building photo URL from a matching City assessor card. Photo dates and current conditions are not established.",
+    z.object(common),
+    ({ parcel_id, objectid }) => parcelPhoto(parcel_id, objectid),
   );
   tool(
     server,
