@@ -49,8 +49,16 @@ const sourceNames = {
 let selected = null;
 let viewVersion = 0;
 let searchedAddress = "";
-const groupResponses = new Map();
 const displayTargets = new WeakMap();
+const groupFilters = new Map();
+const groupLoadVersions = new Map();
+const loadedGroups = new Set();
+let feedLoaded = false;
+let timelineFilters = { category: [], record_type: [], source_id: [], source_status: [], event_date_from: "", event_date_to: "", address_match: false };
+let feedLoadVersion = 0;
+let activeDataSection = "overview";
+let activeRecordGroup = null;
+let guideData = null;
 const municipalCategoryTitles = {
   Document: "Documents",
   Application: "Applications",
@@ -135,6 +143,102 @@ function selectedQuery() {
 function placeRecordContent(browsing) {
   (browsing ? $("browse-data-slot") : $("record-content-home"))
     .append($("record-content"));
+}
+const filterKeys = ["category", "record_type", "source_id", "display_group", "source_status", "event_date_from", "event_date_to", "address_match"];
+function saveDataUrl() {
+  if (!selected) return;
+  const url = new URL(location.href);
+  if (activeDataSection === "overview") url.searchParams.delete("section");
+  else url.searchParams.set("section", activeDataSection);
+  for (const key of filterKeys) url.searchParams.delete(key);
+  const filters = activeDataSection === "timeline" ? timelineFilters : groupFilters.get(activeDataSection);
+  if (filters) addFilterParams(url.searchParams, filters);
+  history.replaceState(null, "", `${url.pathname}${url.search}`);
+}
+function restoredFilters(params) {
+  return {
+    category: params.getAll("category"), record_type: params.getAll("record_type"), source_id: params.getAll("source_id"),
+    display_group: params.getAll("display_group"), source_status: params.getAll("source_status"),
+    event_date_from: params.get("event_date_from") ?? "",
+    event_date_to: params.get("event_date_to") ?? "",
+    address_match: params.get("address_match") === "true",
+  };
+}
+function showDataSection(id, updateUrl = true) {
+  if (!(["overview", "timeline"].includes(id) || groups.some(([key]) => key === id))) id = "overview";
+  activeDataSection = id;
+  $("record-detail").hidden = true;
+  $("snapshot").hidden = id !== "overview";
+  $("feed-section").hidden = id !== "timeline";
+  for (const [key] of groups) {
+    const section = $(`group-${key}`);
+    if (section) section.hidden = key !== id;
+  }
+  for (const button of $("group-nav").querySelectorAll("button")) {
+    const current = button.dataset.section === id;
+    button.setAttribute("aria-current", current ? "page" : "false");
+  }
+  if (updateUrl) saveDataUrl();
+  if (selected && requestedParcelKey === parcelKey(selected)) {
+    if (id === "timeline" && !feedLoaded) {
+      feedLoaded = true;
+      void loadFeed(selectedQuery(), viewVersion);
+    } else if (groups.some(([key]) => key === id) && !loadedGroups.has(id)) {
+      loadedGroups.add(id);
+      void loadGroup(id, $(`group-${id}`), selectedQuery(), viewVersion);
+    }
+  }
+}
+function renderDataNav() {
+  const nav = $("group-nav");
+  nav.replaceChildren();
+  for (const [id, title] of [["overview", "Overview"], ["timeline", "Timeline"], ...groups.map(([id, title]) => [id, title])]) {
+    const button = el("button", title, "data-nav-button");
+    button.type = "button";
+    button.dataset.section = id;
+    button.addEventListener("click", () => showDataSection(id));
+    nav.append(button);
+  }
+  nav.hidden = false;
+  showDataSection(activeDataSection, false);
+}
+async function loadOverview(qs, version) {
+  try {
+    const data = await api(`/api/v1/overview?${qs}`);
+    if (version !== viewVersion) return;
+    const counts = $("overview-counts");
+    counts.replaceChildren();
+    const total = data.groups.reduce((sum, group) => sum + group.record_count, 0);
+    counts.append(el("p", `${total} returned rows across ${data.groups.length} groups${data.partial ? " · some source checks incomplete" : ""}. Counts describe this response, and a record may appear in more than one group.`, "overview-summary"));
+    const grid = $("snapshot-grid");
+    grid.replaceChildren();
+    for (const [id, title] of groups) {
+      const group = data.groups.find((entry) => entry.id === id);
+      const section = el("section", null, "overview-group");
+      const heading = el("div", null, "overview-group-heading");
+      const open = el("button", title, "overview-link");
+      open.type = "button";
+      open.addEventListener("click", () => showDataSection(id));
+      heading.append(open, el("span", `${group?.record_count ?? 0} returned`, "group-count"));
+      section.append(heading);
+      if (group?.sources.some((source) => ["partial", "unavailable"].includes(source.status)))
+        section.append(el("p", "Some source checks were incomplete; review coverage in this group.", "source-warning"));
+      const items = data.highlights?.[id] ?? [];
+      if (items.length) {
+        const list = el("ul", null, "overview-highlights");
+        for (const item of items) {
+          const row = el("li");
+          row.append(el("span", `${item.label}${item.event_date ? ` · ${shortDate(item.event_date)}` : ""}`));
+          if (item.source_url) row.append(link(item.source_url, sourceName(item.source_id)));
+          list.append(row);
+        }
+        section.append(list);
+      } else section.append(el("p", "No highlight row returned by the checked sources.", "meta"));
+      grid.append(section);
+    }
+  } catch (error) {
+    if (version === viewVersion) $("overview-counts").replaceChildren(el("p", `Overview unavailable: ${error.message}`, "source-warning"));
+  }
 }
 function clearBrowseDataMap() {
   if (browseMap) {
@@ -443,6 +547,56 @@ function renderWorkDetails(parent, data) {
   }
   parent.append(el("p", data.note, "record-note"));
 }
+async function openRecordDetail(item, trigger) {
+  const version = viewVersion;
+  activeRecordGroup = activeDataSection;
+  for (const [id] of groups) $(`group-${id}`).hidden = true;
+  $("snapshot").hidden = true;
+  $("feed-section").hidden = true;
+  const detail = $("record-detail");
+  detail.replaceChildren();
+  detail.hidden = false;
+  if (document.body.classList.contains("browse-mode")) {
+    document.body.classList.add("browse-expanded");
+    $("browse-panel-toggle").setAttribute("aria-expanded", "true");
+    $("browse-panel-toggle").textContent = "Narrow panel";
+    requestAnimationFrame(() => browseMap?.invalidateSize());
+  }
+  const back = el("button", `← Back to ${groups.find(([id]) => id === activeRecordGroup)?.[1] ?? "records"}`, "detail-back secondary");
+  back.type = "button";
+  back.onclick = () => {
+    showDataSection(activeRecordGroup);
+    if (trigger.isConnected) trigger.focus();
+  };
+  detail.append(back, el("p", `${item.category ?? sourceName(item.source_id)} · ${sourceName(item.source_id)}`, "record-kind"), el("h2", recordTitle(item)));
+  const state = recordStatus(item);
+  if (state) detail.append(el("p", `Published status: ${state}`, "record-meta"));
+  if (item.event_date) detail.append(el("p", `Source event date: ${shortDate(item.event_date)}`, "record-meta"));
+  if (item.address_evidence?.matches_query)
+    detail.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "address-badge"));
+  if (item.source_url) detail.append(link(item.source_url, "Open official record"));
+  const contents = el("div", null, "focused-record-content");
+  detail.append(contents);
+  const kind = item.category;
+  const id = item.attributes?.[`${kind}_ID`];
+  if (!["Permit", "Application"].includes(kind) || !/^\d{1,12}$/.test(String(id ?? ""))) {
+    contents.append(fieldList(sourceFields(item.attributes), "record-fields all-fields"));
+    back.focus();
+    return;
+  }
+  contents.append(el("p", `Loading official ${kind.toLowerCase()} details…`, "meta"));
+  back.focus();
+  try {
+    const qs = new URLSearchParams({ parcel_id: selected.parcel_id,
+      [kind === "Permit" ? "permit_id" : "application_id"]: id });
+    if (selected.objectid) qs.set("objectid", selected.objectid);
+    const data = await api(`/api/v1/${kind === "Permit" ? "permit" : "application"}-details?${qs}`);
+    if (version === viewVersion && !detail.hidden) renderWorkDetails(contents, data);
+  } catch (error) {
+    if (version === viewVersion && !detail.hidden)
+      contents.replaceChildren(el("p", `Could not load ${kind.toLowerCase()} details: ${error.message}`, "source-warning"));
+  }
+}
 function appendRecord(parent, item) {
   const card = el("article", null, "record-card");
   const aside = el("div", null, "record-aside");
@@ -586,30 +740,10 @@ function appendRecord(parent, item) {
     ? item.category : null;
   const workId = workKind ? item.attributes?.[`${workKind}_ID`] : null;
   if (workKind && /^\d{1,12}$/.test(String(workId ?? ""))) {
-    const permitDetails = el("details", null, "permit-details");
-    permitDetails.append(el("summary", "Fees, reviews and related records"));
-    const contents = el("div", null, "permit-details-content");
-    permitDetails.append(contents);
-    let loaded = false;
-    let loading = false;
-    permitDetails.addEventListener("toggle", async () => {
-      if (!permitDetails.open || loaded || loading) return;
-      loading = true;
-      contents.replaceChildren(el("p", `Loading official ${workKind.toLowerCase()} details…`, "meta"));
-      try {
-        const qs = new URLSearchParams({ parcel_id: selected.parcel_id,
-          [workKind === "Permit" ? "permit_id" : "application_id"]: workId });
-        if (selected.objectid) qs.set("objectid", selected.objectid);
-        const data = await api(`/api/v1/${workKind === "Permit" ? "permit" : "application"}-details?${qs}`);
-        renderWorkDetails(contents, data);
-        loaded = true;
-      } catch (error) {
-        contents.replaceChildren(el("p", `Could not load ${workKind.toLowerCase()} details: ${error.message}`, "source-warning"));
-      } finally {
-        loading = false;
-      }
-    });
-    actions.append(permitDetails);
+    const open = el("button", `Open full ${workKind.toLowerCase()}`, "detail-open secondary");
+    open.type = "button";
+    open.addEventListener("click", () => { void openRecordDetail(item, open); });
+    actions.append(open);
   }
   body.append(actions);
   card.append(body);
@@ -635,7 +769,7 @@ function sourceLine(parent, source) {
       ),
     );
   if (source.source_id === "municipal-business-licenses" && source.unnamed_license_count > 0)
-    row.append(el("p", `${source.unnamed_license_count} other City License ${source.unnamed_license_count === 1 ? "row does" : "rows do"} not name a business. See Activity → Licenses; historical sections may be collapsed.`, "category-counts"));
+    row.append(el("p", `${source.unnamed_license_count} other City License ${source.unnamed_license_count === 1 ? "row does" : "rows do"} not name a business. See Activity → Licenses.`, "category-counts"));
   const info = el("details", null, "source-coverage");
   info.append(el("summary", "Coverage and source"));
   info.append(el("p", source.coverage, "meta"));
@@ -646,45 +780,6 @@ function sourceLine(parent, source) {
   row.append(info);
   parent.append(row);
 }
-function prepareDisplayGroups(parent, data) {
-  displayTargets.set(parent, {
-    definitions: new Map((data.display_groups ?? []).map((entry) => [entry.key, entry])),
-    counts: data.display_group_counts ?? {},
-    sections: new Map(),
-  });
-}
-function appendDisplayRecord(parent, item) {
-  const targets = displayTargets.get(parent);
-  const key = item.display_group?.key ?? "unclassified";
-  let section = targets.sections.get(key);
-  if (!section) {
-    const definition = targets.definitions.get(key);
-    const collapsed = ["owner_history", "older", "past", "unclassified"].includes(key);
-    const container = el(collapsed ? "details" : "section", null, `display-section display-${key}`);
-    const heading = el(collapsed ? "summary" : "div", null, "display-section-heading");
-    heading.append(el(collapsed ? "strong" : "h3", definition?.title ?? "Status not established"));
-    const count = targets.counts[key] ?? 0;
-    heading.append(el("span", `${count} ${count === 1 ? "record" : "records"}`, "group-count"));
-    container.append(heading);
-    if (definition?.description) container.append(el("p", definition.description, "display-section-description"));
-    parent.append(container);
-    section = { container, categories: new Map() };
-    targets.sections.set(key, section);
-  }
-  const categoryKey = item.category ?? item.source_id;
-  let list = section.categories.get(categoryKey);
-  if (!list) {
-    const subgroup = el("section", null, "activity-subgroup");
-    const heading = el("div", null, "activity-subgroup-heading");
-    heading.append(el("h4", item.category ? municipalCategoryTitles[item.category] ?? item.category : sourceName(item.source_id)));
-    subgroup.append(heading);
-    list = el("div", null, "record-list");
-    subgroup.append(list);
-    section.container.append(subgroup);
-    section.categories.set(categoryKey, list);
-  }
-  appendRecord(list, item);
-}
 function normalizedAddress(value) {
   return String(value ?? "")
     .toUpperCase()
@@ -694,223 +789,9 @@ function normalizedAddress(value) {
     .replace(/\s+/g, " ")
     .trim();
 }
-function snapshotCard(title, id) {
-  const card = el("article", null, "snapshot-card");
-  card.append(el("h3", title));
-  const body = el("div", null, "snapshot-body");
-  card.append(body);
-  const jump = el("a", "Review records →", "snapshot-link");
-  jump.href = `#group-${id}`;
-  card.append(jump);
-  $("snapshot-grid").append(card);
-  return body;
-}
-function renderSnapshot() {
-  $("snapshot-grid").replaceChildren();
-  const property = groupResponses.get("property");
-  const building = snapshotCard("The building record", "property");
-  if (!property) building.append(el("p", "Loading building facts…", "meta"));
-  else {
-    const parcel = property.items.find((item) => item.source_id === "parcels")?.attributes ?? {};
-    const facts = [
-      parcel.year_building_built ? `Built ${parcel.year_building_built}` : null,
-      parcel.units_commercial ? `${parcel.units_commercial} commercial units listed` : null,
-      parcel.use_code ? `Assessor use code ${parcel.use_code}` : null,
-    ].filter(Boolean);
-    building.append(el("p", facts.length ? facts.join(" · ") : "The city parcel record did not return a building description."));
-    const zoningCodes = [...new Set((groupResponses.get("geography")?.items ?? [])
-      .filter((item) => item.source_id === "zoning")
-      .map((item) => item.attributes?.zone_code)
-      .filter(Boolean))];
-    if (zoningCodes.length) {
-      building.append(el("p", "City mapped zoning", "snapshot-label"));
-      building.append(el("p", zoningCodes.join(" · ")));
-    }
-    const assessorFacts = property.items.find((item) => item.source_id === "assessor")?.attributes?.building_facts ?? {};
-    const assessorLines = [
-      assessorFacts.building_count != null ? `${assessorFacts.building_count} buildings listed` : null,
-      assessorFacts.year_built ? `Year built ${assessorFacts.year_built}` : null,
-      assessorFacts.living_area_sq_ft != null ? `${Number(assessorFacts.living_area_sq_ft).toLocaleString()} sq ft living area` : null,
-      assessorFacts.land_size_acres != null ? `${assessorFacts.land_size_acres} acres listed` : null,
-      assessorFacts.land_use_code ? `Land use code ${assessorFacts.land_use_code}` : null,
-    ].filter(Boolean);
-    if (assessorLines.length) {
-      building.append(el("p", "Assessor card", "snapshot-label"));
-      building.append(el("p", assessorLines.join(" · ")));
-    }
-    const subareas = property.items.filter((item) => item.source_id === "assessor-subareas");
-    if (subareas.length) {
-      building.append(el("p", "Assessor building subareas", "snapshot-label"));
-      const list = el("ul", null, "snapshot-list");
-      for (const item of subareas.slice(0, 8)) {
-        const a = item.attributes;
-        const row = el("li");
-        row.append(el("strong", recordTitle(item)));
-        row.append(el("span", [a.gross_area_sq_ft != null ? `${Number(a.gross_area_sq_ft).toLocaleString()} gross sq ft` : null,
-          a.living_area_sq_ft != null ? `${Number(a.living_area_sq_ft).toLocaleString()} living sq ft` : null].filter(Boolean).join(" · "), "snapshot-state"));
-        list.append(row);
-      }
-      building.append(list);
-      if (subareas.length > 8) building.append(el("p", `And ${subareas.length - 8} more returned subarea rows below.`, "meta"));
-      building.append(el("p", "Assessment subareas do not establish retail lease area or permitted use.", "snapshot-caveat"));
-    }
-    const currentValues = property.items
-      .filter((item) => item.source_id === "assessor-valuations" && item.attributes?.table_section === "current")
-      .sort((a, b) => String(b.attributes?.valuation_year ?? "").localeCompare(String(a.attributes?.valuation_year ?? "")));
-    if (currentValues.length) {
-      building.append(el("p", "Current assessor valuation rows", "snapshot-label"));
-      const list = el("ul", null, "snapshot-list valuation-list");
-      for (const item of currentValues) {
-        const a = item.attributes;
-        const row = el("li");
-        row.append(el("strong", `${a.valuation_year ?? "Year not listed"} · ${fieldLabel(a.valuation_type ?? "valuation")}`));
-        row.append(valuationAmounts(a));
-        list.append(row);
-      }
-      building.append(list);
-    }
-    const addresses = [...new Set(property.items
-      .filter((item) => item.source_id === "addresses")
-      .map((item) => recordTitle(item))
-      .filter(Boolean))];
-    addresses.sort((a, b) =>
-      Number(normalizedAddress(b) === normalizedAddress(searchedAddress)) -
-      Number(normalizedAddress(a) === normalizedAddress(searchedAddress)));
-    if (addresses.length) {
-      building.append(el("p", "City address points on this parcel", "snapshot-label"));
-      const list = el("ul", null, "address-list");
-      for (const address of addresses.slice(0, 12)) list.append(el("li", address));
-      building.append(list);
-      if (addresses.length > 12) building.append(el("p", `And ${addresses.length - 12} more in Building and addresses.`, "meta"));
-    }
-    const pickupZones = property.items
-      .filter((item) => item.source_id === "trash-pickup")
-      .sort((a, b) => Number(normalizedAddress(b.attributes.address) === normalizedAddress(searchedAddress)) -
-        Number(normalizedAddress(a.attributes.address) === normalizedAddress(searchedAddress)));
-    if (pickupZones.length) {
-      building.append(el("p", "City trash pickup zones at address points", "snapshot-label"));
-      const list = el("ul", null, "snapshot-list");
-      for (const item of pickupZones.slice(0, 4)) list.append(el("li", recordTitle(item)));
-      building.append(list);
-      if (pickupZones.length > 4) building.append(el("p", `And ${pickupZones.length - 4} more pickup zone rows below.`, "meta"));
-      building.append(el("p", `City layer last edited ${shortDate(pickupZones[0].attributes.source_last_edited) || "date unavailable"}. A mapped zone does not establish commercial collection eligibility.`, "snapshot-caveat"));
-    }
-    building.append(el("p", "Address points are spatial links; occupancy is not verified.", "snapshot-caveat"));
-  }
-
-  const ownership = groupResponses.get("ownership");
-  const owner = snapshotCard("Parcel owner in records", "ownership");
-  if (!ownership) owner.append(el("p", "Checking City, assessor, and State owner records…", "meta"));
-  else {
-    const cityOwner = ownership.items.find((item) => item.source_id === "parcel-owner");
-    const assessorOwner = ownership.items.find((item) => item.source_id === "assessor-owner");
-    const ownerEntity = ownership.items.find((item) => item.source_id === "business-master");
-    const sales = ownership.items.filter((item) => item.source_id === "assessor-sales");
-    if (cityOwner) {
-      owner.append(el("p", "City GIS parcel owner", "snapshot-label"));
-      owner.append(el("p", cityOwner.attributes.owner_name_1));
-      if (cityOwner.attributes.owner_name_2)
-        owner.append(el("p", `City GIS second owner: ${cityOwner.attributes.owner_name_2}`));
-    }
-    if (assessorOwner) {
-      owner.append(el("p", "Assessor card owner", "snapshot-label"));
-      if (assessorOwner.attributes.owner_name)
-        owner.append(el("p", assessorOwner.attributes.owner_name));
-      if (assessorOwner.attributes.co_owner_name)
-        owner.append(el("p", `Co-owner: ${assessorOwner.attributes.co_owner_name}`));
-    }
-    if (ownerEntity) {
-      owner.append(el("p", "Matched State LLC", "snapshot-label"));
-      owner.append(el("p", `${ownerEntity.attributes.legal_name} · registry status ${ownerEntity.attributes.registry_status ?? "not supplied"}`));
-    }
-    if (sales.length) {
-      const latest = sales[0];
-      owner.append(el("p", "Latest published ownership row", "snapshot-label"));
-      owner.append(el("p", [latest.attributes.owner, latest.event_date ? shortDate(latest.event_date) : null, latest.attributes.sale_price].filter(Boolean).join(" · ")));
-      owner.append(el("p", `${ownership.display_group_counts?.owner_history ?? sales.length} assessor ownership history rows returned.`, "meta"));
-    }
-    if (!cityOwner && !assessorOwner && !ownerEntity && !sales.length)
-      owner.append(el("p", "No owner row was returned by the checked sources. Review source coverage below."));
-    owner.append(el("p", "An LLC principal or registered agent is a State registry role, not proof of direct real estate ownership.", "snapshot-caveat"));
-  }
-
-  const business = groupResponses.get("business");
-  const businesses = snapshotCard("Municipal license and occupant names", "business");
-  if (!business) businesses.append(el("p", "Loading business records…", "meta"));
-  else {
-    const named = business.items
-      .filter((item) => ["municipal-business-licenses", "municipal-occupants"].includes(item.source_id))
-      .filter((item) => item.attributes?.business_name || item.attributes?.occupant_name);
-    const licenseCount = named.filter((item) => item.source_id === "municipal-business-licenses").length;
-    const occupantCount = named.filter((item) => item.source_id === "municipal-occupants").length;
-    if (!named.length) businesses.append(el("p", "No municipal business or occupant name was returned by checked sources."));
-    else {
-      businesses.append(el("p", `${licenseCount} ${licenseCount === 1 ? "license" : "licenses"} naming a business · ${occupantCount} ${occupantCount === 1 ? "occupant row" : "occupant rows"}. Names and inactive flags are shown as published.`, "meta"));
-      const list = el("ul", null, "snapshot-list");
-      for (const item of named.slice(0, 4)) {
-        const row = el("li");
-        row.append(el("strong", `${item.source_id === "municipal-occupants" ? "Occupant" : "License"} · ${recordTitle(item)}`));
-        const state = recordStatus(item);
-        row.append(el("span", [state, item.attributes?.expiration_date ? `Expires ${shortDate(item.attributes.expiration_date)}` : null].filter(Boolean).join(" · ") || "Status not established", "snapshot-state"));
-        list.append(row);
-      }
-      businesses.append(list);
-    }
-    const unnamed = business.sources.find((source) => source.source_id === "municipal-business-licenses")?.unnamed_license_count ?? 0;
-    if (unnamed > 0) {
-      const note = el("p", `${unnamed} other City License ${unnamed === 1 ? "row does" : "rows do"} not name a business. See `, "snapshot-caveat");
-      const activityLink = el("a", "Activity → Licenses");
-      activityLink.href = "#group-activity";
-      note.append(activityLink, "; expand historical sections to see older records.");
-      businesses.append(note);
-    }
-    businesses.append(el("p", "A municipal occupant row or license does not establish a current storefront.", "snapshot-caveat"));
-  }
-
-  const activity = groupResponses.get("activity");
-  const work = snapshotCard("Work and applications in records", "activity");
-  if (!activity) work.append(el("p", "Checking work records…", "meta"));
-  else {
-    const issuedPermitNumbers = new Set(activity.items
-      .filter((item) => item.category === "Permit")
-      .map((item) => item.attributes?.PermitNo ?? item.attributes?.PermitNumber)
-      .filter(Boolean));
-    const recent = activity.items
-      .filter((item) => ["Application", "Permit", "Complaint"].includes(item.category) || item.source_id === "lci-cases")
-      .filter((item) => ["reported", "early"].includes(item.display_group?.key))
-      .filter((item) => item.category !== "Application" || !issuedPermitNumbers.has(item.attributes?.ApplicationNumber));
-    if (!recent.length) work.append(el("p", "No reported open, issued, draft or review-stage record surfaced in the returned records."));
-    else {
-      const list = el("ul", null, "snapshot-list");
-      for (const item of recent.slice(0, 3)) {
-        const row = el("li");
-        row.append(el("strong", recordTitle(item)));
-        row.append(el("span", `${item.display_group.key === "early" ? "Draft or review stage · " : "Reported open or issued · "}${recordStatus(item) ?? "Status not supplied"}${item.event_date ? ` · ${shortDate(item.event_date)}` : ""}`, "snapshot-state"));
-        list.append(row);
-      }
-      work.append(list);
-    }
-    work.append(el("p", "Published status does not confirm that work is happening now or has been completed.", "snapshot-caveat"));
-  }
-
-  const environment = groupResponses.get("environment");
-  const environmental = snapshotCard("Environmental inventory", "environment");
-  if (!environment) environmental.append(el("p", "Checking the State inventory…", "meta"));
-  else {
-    const source = environment.sources.find((item) => item.source_id === "ct-brownfields");
-    if (environment.items.length) {
-      const list = el("ul", null, "snapshot-list");
-      for (const item of environment.items.slice(0, 3)) list.append(el("li", recordTitle(item)));
-      environmental.append(list);
-    } else if (source?.status !== "unavailable" && source?.status !== "partial")
-      environmental.append(el("p", "No DEEP brownfield row matched this parcel's published identifier."));
-    if (source?.status === "unavailable" || source?.status === "partial")
-      environmental.append(el("p", "The DEEP inventory check was incomplete. Review its source status below."));
-    environmental.append(el("p", "A listing or missing row does not establish present site conditions. Check the linked source for its update date.", "snapshot-caveat"));
-  }
-}
-async function choose(item, searchedQuery = null, viewer = "records") {
+async function choose(item, searchedQuery = null, viewer = "records", restoreState = false) {
   const version = ++viewVersion;
+  const priorParams = restoreState ? new URL(location.href).searchParams : null;
   const browsing = viewer === "browse";
   resetMap();
   clearBrowseDataMap();
@@ -920,18 +801,42 @@ async function choose(item, searchedQuery = null, viewer = "records") {
   $("parcel-photo-image").removeAttribute("src");
   selected = item;
   requestedParcelKey = null;
+  activeDataSection = "overview";
+  groupFilters.clear();
+  groupLoadVersions.clear();
+  loadedGroups.clear();
+  feedLoaded = false;
+  timelineFilters = { category: [], record_type: [], source_id: [], source_status: [], event_date_from: "", event_date_to: "", address_match: false };
+  ++feedLoadVersion;
   searchedAddress = searchedQuery &&
     ["parcel-address", "address-point-intersection"].includes(item.match?.method)
     ? searchedQuery.trim() : "";
-  groupResponses.clear();
+  if (priorParams) {
+    const savedSection = priorParams.get("section");
+    if (savedSection === "timeline") {
+      activeDataSection = "timeline";
+      timelineFilters = restoredFilters(priorParams);
+    } else if (groups.some(([key]) => key === savedSection)) {
+      activeDataSection = savedSection;
+      groupFilters.set(savedSection, restoredFilters(priorParams));
+    }
+    if (!searchedAddress) {
+      timelineFilters.address_match = false;
+      for (const filters of groupFilters.values()) filters.address_match = false;
+    }
+  }
   $("candidates").hidden = true;
   history.replaceState(
     null,
     "",
     `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}${searchedAddress ? `&query_address=${encodeURIComponent(searchedAddress)}` : ""}${browsing ? "&view=map" : ""}`,
   );
+  saveDataUrl();
   $("groups").replaceChildren();
   $("group-nav").replaceChildren();
+  $("record-detail").hidden = true;
+  $("overview-counts").replaceChildren();
+  $("snapshot-grid").replaceChildren(el("p", "Loading source-linked overview…", "meta"));
   $("feed").replaceChildren();
   $("parcel-summary").hidden = true;
   $("snapshot").hidden = true;
@@ -964,29 +869,21 @@ async function choose(item, searchedQuery = null, viewer = "records") {
           : `Address focus: ${searchedAddress}. The selected City parcel lists this address. A badge below appears only when a record's own address field matches your search.`,
       ));
     }
-    if (SHOW_SNAPSHOT) renderSnapshot();
     status("Records are loading by source.");
-    $("group-nav").hidden = false;
-    const timelineLink = el("a", "Timeline");
-    timelineLink.href = "#feed-section";
-    $("group-nav").append(timelineLink);
     const tasks = [];
     if (!browsing) tasks.push(loadHeroPhoto(qs, version));
     tasks.push(browsing ? loadBrowseSelectedMap(qs, version) : loadMap(qs, version));
+    tasks.push(loadOverview(qs, version));
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
       section.id = `group-${id}`;
       section.append(el("h2", title));
       section.append(el("p", "Loading…", "meta"));
       $("groups").append(section);
-      const a = el("a", title);
-      a.href = `#group-${id}`;
-      $("group-nav").append(a);
-      tasks.push(loadGroup(id, section, qs, version));
     }
-    tasks.push(loadFeed(qs, version));
+    renderDataNav();
     await Promise.allSettled(tasks);
-    if (version === viewVersion) status("Records loaded. Open a record to inspect its source fields.");
+    if (version === viewVersion) status("Overview loaded. Choose a group to request and inspect its records.");
   } catch (error) {
     if (version === viewVersion) status(error.message);
   }
@@ -1194,16 +1091,21 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
 }
 function showExplorerTab(tab) {
   const browsing = tab === "browse";
+  const guiding = tab === "guide";
   document.body.classList.toggle("browse-mode", browsing);
   const url = new URL(location.href);
   if (browsing) url.searchParams.set("view", "map");
+  else if (guiding) url.searchParams.set("view", "guide");
   else url.searchParams.delete("view");
   history.replaceState(null, "", `${url.pathname}${url.search}`);
-  $("records-view").hidden = browsing;
+  $("records-view").hidden = browsing || guiding;
   $("browse-view").hidden = !browsing;
-  placeRecordContent(browsing);
-  $("records-tab").setAttribute("aria-selected", String(!browsing));
+  $("guide-view").hidden = !guiding;
+  if (!guiding) placeRecordContent(browsing);
+  $("records-tab").setAttribute("aria-selected", String(!browsing && !guiding));
   $("browse-tab").setAttribute("aria-selected", String(browsing));
+  $("guide-tab").setAttribute("aria-selected", String(guiding));
+  if (guiding) void loadGuide();
   if (browsing) requestAnimationFrame(() => {
     if (!browseMap) initBrowseMap();
     else browseMap.invalidateSize();
@@ -1211,10 +1113,134 @@ function showExplorerTab(tab) {
       void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
     }
   });
-  else if (selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
+  else if (!guiding && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
     if (parcelMap) parcelMap.invalidateSize();
     else void loadMap(selectedQuery(), viewVersion);
   });
+}
+function guideFieldTable(parent, fields) {
+  const table = el("table", null, "guide-field-table");
+  const head = el("thead");
+  const heading = el("tr");
+  for (const title of ["Field", "Meaning", "Origin"]) heading.append(el("th", title));
+  head.append(heading);
+  table.append(head);
+  const body = el("tbody");
+  for (const field of fields) {
+    const row = el("tr");
+    row.append(el("th", field.key), el("td", field.meaning), el("td", field.origin));
+    body.append(row);
+  }
+  table.append(body);
+  parent.append(table);
+}
+function renderGuideSection(key) {
+  if (!guideData) return;
+  const content = $("guide-content");
+  const example = $("guide-example");
+  content.replaceChildren();
+  example.replaceChildren();
+  for (const button of $("guide-nav").querySelectorAll("button"))
+    button.setAttribute("aria-current", button.dataset.guide === key ? "page" : "false");
+  if (key === "home") {
+    content.append(el("p", "Official source records · private preview", "eyebrow"),
+      el("h2", "How to read this parcel feed"));
+    const steps = el("ol", null, "guide-steps");
+    for (const step of ["Resolve an address to a City parcel ID and object ID.",
+      "Read the overview and source coverage before interpreting an empty result.",
+      "Open one group, filter the returned records, then inspect the original source.",
+      "Use the dated feed for source dates; follow a permit ID for its public child records."])
+      steps.append(el("li", step));
+    content.append(steps, el("h3", "Reading rules"));
+    for (const rule of guideData.rules) content.append(el("p", rule, "guide-rule"));
+    example.append(el("h3", "REST and MCP"), el("p", "Each method below shows the protected REST path and the matching MCP tool. Example responses are requested only when you press the button."));
+  } else if (key === "fields") {
+    content.append(el("p", "Response schema", "eyebrow"), el("h2", "Field guide"),
+      el("p", "These service fields appear around record attributes returned by each source adapter. Coverage explains omitted fields and unavailable checks."));
+    guideFieldTable(content, guideData.fields);
+    example.append(el("h3", "Source fields"), el("p", "The attributes object contains fields returned by this adapter. Open the official source and review its coverage note for field limits. An unlabeled key has not been assigned a new meaning here."));
+  } else if (key === "sources") {
+    content.append(el("p", "Provenance", "eyebrow"), el("h2", "Official sources and gaps"));
+    for (const group of guideData.groups) {
+      const section = el("section", null, "guide-source-group");
+      section.append(el("h3", group.title));
+      for (const source of guideData.sources.filter((entry) => entry.group === group.id)) {
+        const row = el("div", null, "guide-source-row");
+        row.append(el("h4", source.title), el("p", `${source.mode} · ${source.coverage}`, "meta"), link(source.url, "Open official source"));
+        if (source.verification_url) row.append(link(source.verification_url, "Verification page"));
+        section.append(row);
+      }
+      content.append(section);
+    }
+  } else {
+    const method = guideData.methods.find((entry) => entry.id === key);
+    if (!method) return;
+    content.append(el("p", "API and MCP method", "eyebrow"), el("h2", method.title), el("p", method.description));
+    const contract = el("dl", null, "guide-contract");
+    for (const [name, value] of [["REST", method.rest], ["MCP tool", method.mcp], ["Inputs", method.inputs]]) {
+      const row = el("div");
+      row.append(el("dt", name), el("dd", value));
+      contract.append(row);
+    }
+    content.append(contract);
+    if (["records", "feed"].includes(key)) {
+      content.append(el("h3", "Filters"));
+      for (const filter of guideData.filters.filter((entry) => entry.applies_to.includes(key)))
+        content.append(el("p", `${filter.key} · ${filter.label}${filter.multiple ? " · repeat in REST or pass an array to MCP" : ""}`, "guide-rule"));
+      content.append(el("p", "Filter before paging. Facets count returned records before filters; total counts filtered returned records. Keep the same filters with next_cursor.", "meta"));
+    }
+    content.append(el("h3", "Response fields"));
+    guideFieldTable(content, guideData.fields);
+    example.append(el("h3", "Example request"));
+    const path = method.rest.split(" ")[1];
+    const qs = new URLSearchParams();
+    if (!["resolve", "catalog", "permit-search"].includes(key) && selected && requestedParcelKey === parcelKey(selected)) {
+      qs.set("parcel_id", selected.parcel_id);
+      if (selected.objectid) qs.set("objectid", selected.objectid);
+    } else if (!["resolve", "catalog", "permit-search"].includes(key)) qs.set("parcel_id", "<City parcel ID>");
+    if (key === "permit-search") { qs.set("neighborhood", "<City neighborhood>"); qs.set("permit_type", "<exact type>"); }
+    if (key === "records") qs.set("group", "property");
+    if (key === "permit") qs.set("permit_id", "<published permit ID>");
+    if (key === "application") qs.set("application_id", "<published application ID>");
+    const request = `${method.rest}${qs.size ? `?${qs}` : ""}`;
+    example.append(el("pre", request));
+    const mcp = el("pre", JSON.stringify({ tool: method.mcp, arguments: Object.fromEntries(qs) }, null, 2));
+    example.append(mcp);
+    if (method.rest.startsWith("GET") && !["permit", "application", "permit-search"].includes(key) &&
+      (key === "catalog" || (selected && requestedParcelKey === parcelKey(selected)))) {
+      const load = el("button", "Request live example");
+      load.type = "button";
+      load.onclick = async () => {
+        load.disabled = true;
+        const output = el("pre", "Loading official records…", "guide-live-response");
+        example.append(output);
+        try { output.textContent = JSON.stringify(await api(`${path}${qs.size ? `?${qs}` : ""}`), null, 2); }
+        catch (error) { output.textContent = `Request failed: ${error.message}`; }
+        finally { load.disabled = false; }
+      };
+      example.append(load);
+    }
+  }
+}
+async function loadGuide() {
+  if (!guideData) {
+    $("guide-content").replaceChildren(el("p", "Loading the protected data guide…", "meta"));
+    try { guideData = await api("/api/v1/schema"); }
+    catch (error) {
+      $("guide-content").replaceChildren(el("p", `Data guide unavailable: ${error.message}`, "source-warning"));
+      return;
+    }
+  }
+  const nav = $("guide-nav");
+  nav.replaceChildren();
+  for (const [id, title] of [["home", "How to read the data"], ...guideData.methods.map((item) => [item.id, item.title]), ["fields", "Field guide"], ["sources", "Sources and gaps"]]) {
+    const button = el("button", title, "guide-nav-button");
+    button.type = "button";
+    button.dataset.guide = id;
+    button.onclick = () => renderGuideSection(id);
+    nav.append(button);
+  }
+  renderGuideSection("home");
 }
 function browseParcelStyle(feature) {
   const p = feature.properties ?? {};
@@ -1256,8 +1282,11 @@ async function selectBrowseParcel(feature) {
     button.disabled = true;
     button.textContent = "Loading parcel data…";
     try {
+      const saved = new URL(location.href).searchParams;
       await choose({ parcel_id: p.parcel_id, objectid: p.objectid,
-        address: p.address, match: { method: "map-selection" } }, null, "browse");
+        address: p.address, match: { method: "map-selection" } }, null, "browse",
+      saved.get("parcel_id") === String(p.parcel_id) && saved.get("objectid") === String(p.objectid));
+      setMobileBrowseView("records");
     } finally {
       if (version === browseSelectionVersion) {
         button.disabled = false;
@@ -1338,24 +1367,324 @@ function initBrowseMap() {
   leaflet.control.scale({ metric: false, imperial: true }).addTo(browseMap);
   void loadBrowseParcels();
 }
+function filterState(id) {
+  return groupFilters.get(id) ?? {
+    category: [], record_type: [], source_id: [], display_group: [], source_status: [],
+    event_date_from: "", event_date_to: "", address_match: false,
+  };
+}
+function renderTimelineFilters(data, qs, version) {
+  const container = $("timeline-filters");
+  container.replaceChildren();
+  const summary = el("p", `${data.total} of ${data.returned_total} returned dated rows${data.partial ? " · some source checks incomplete" : ""}`, "overview-summary");
+  container.append(summary);
+  if (filterCount(timelineFilters)) {
+    const active = el("div", null, "active-filters");
+    active.append(el("span", `${filterCount(timelineFilters)} applied`, "filter-count"));
+    for (const key of ["category", "record_type", "source_id", "source_status", "event_date_from", "event_date_to", "address_match"])
+      for (const value of Array.isArray(timelineFilters[key]) ? timelineFilters[key] : timelineFilters[key] ? [timelineFilters[key]] : []) {
+        const chip = el("button", `${key.replaceAll("_", " ")}: ${value === true ? "yes" : value} ×`, "filter-chip");
+        chip.type = "button";
+        chip.onclick = () => {
+          timelineFilters = { ...timelineFilters, [key]: Array.isArray(timelineFilters[key]) ? timelineFilters[key].filter((entry) => entry !== value) : key === "address_match" ? false : "" };
+          saveDataUrl();
+          void loadFeed(qs, version);
+        };
+        active.append(chip);
+      }
+    container.append(active);
+  }
+  const details = el("details", null, "filter-drawer");
+  details.append(el("summary", `Timeline filters${filterCount(timelineFilters) ? ` · ${filterCount(timelineFilters)} applied` : ""}`));
+  const form = el("form", null, "filter-form");
+  filterChoices(form, "category", "Municipal category", data.facets?.category, timelineFilters.category, (value) => municipalCategoryTitles[value] ?? value);
+  filterChoices(form, "record_type", "Published work type", data.facets?.record_type, timelineFilters.record_type, (value) => value);
+  filterChoices(form, "source_id", "Official source", data.facets?.source_id, timelineFilters.source_id, sourceName);
+  filterChoices(form, "source_status", "Exact published status", data.facets?.source_status, timelineFilters.source_status, (value) => value);
+  const dates = el("fieldset", null, "filter-fieldset filter-dates");
+  dates.append(el("legend", "Source event date · inclusive"));
+  for (const [key, title] of [["event_date_from", "From"], ["event_date_to", "Through"]]) {
+    const label = el("label", title);
+    const input = document.createElement("input");
+    input.type = "date";
+    input.name = key;
+    input.value = timelineFilters[key] ?? "";
+    label.append(input);
+    dates.append(label);
+  }
+  form.append(dates);
+  if (searchedAddress) {
+    const label = el("label", null, "filter-choice");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "address_match";
+    input.checked = timelineFilters.address_match;
+    label.append(input, document.createTextNode(`Source address matches ${searchedAddress}`));
+    form.append(label);
+  }
+  const apply = el("button", "Apply filters");
+  apply.type = "submit";
+  const clear = el("button", "Clear all", "secondary");
+  clear.type = "button";
+  clear.onclick = () => {
+    timelineFilters = { category: [], record_type: [], source_id: [], source_status: [], event_date_from: "", event_date_to: "", address_match: false };
+    saveDataUrl();
+    void loadFeed(qs, version);
+  };
+  form.append(apply, clear);
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    const values = new FormData(form);
+    timelineFilters = {
+      category: values.getAll("category"), record_type: values.getAll("record_type"), source_id: values.getAll("source_id"), source_status: values.getAll("source_status"),
+      event_date_from: values.get("event_date_from") ?? "", event_date_to: values.get("event_date_to") ?? "",
+      address_match: values.has("address_match"),
+    };
+    saveDataUrl();
+    void loadFeed(qs, version);
+  };
+  details.append(form);
+  container.append(details);
+}
+function addFilterParams(params, filters) {
+  for (const key of ["category", "record_type", "source_id", "display_group", "source_status"])
+    for (const value of filters[key] ?? []) params.append(key, value);
+  for (const key of ["event_date_from", "event_date_to"])
+    if (filters[key]) params.set(key, filters[key]);
+  if (filters.address_match) params.set("address_match", "true");
+}
+function filterCount(filters) {
+  return ["category", "record_type", "source_id", "display_group", "source_status"]
+    .reduce((count, key) => count + (filters[key]?.length ?? 0), 0) +
+    Number(Boolean(filters.event_date_from)) + Number(Boolean(filters.event_date_to)) + Number(Boolean(filters.address_match));
+}
+function filterChoices(parent, key, title, values, selected, label) {
+  if (!Object.keys(values ?? {}).length) return;
+  const fieldset = el("fieldset", null, "filter-fieldset");
+  fieldset.append(el("legend", title));
+  for (const [value, count] of Object.entries(values)) {
+    const row = el("label", null, "filter-choice");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = key;
+    input.value = value;
+    input.checked = selected.includes(value);
+    row.append(input, document.createTextNode(`${label(value)} · ${count} returned`));
+    fieldset.append(row);
+  }
+  parent.append(fieldset);
+}
+function renderFilters(id, data, qs, version) {
+  const current = filterState(id);
+  const container = el("div", null, "filters-area");
+  const active = el("div", null, "active-filters");
+  const amount = filterCount(current);
+  if (amount) {
+    active.append(el("span", `${amount} applied`, "filter-count"));
+    for (const key of ["category", "record_type", "source_id", "display_group", "source_status"])
+      for (const value of current[key] ?? []) {
+        const chip = el("button", `${key.replaceAll("_", " ")}: ${value} ×`, "filter-chip");
+        chip.type = "button";
+        chip.setAttribute("aria-label", `Remove ${key.replaceAll("_", " ")} filter ${value}`);
+        chip.onclick = () => {
+          groupFilters.set(id, { ...current, [key]: current[key].filter((entry) => entry !== value) });
+          saveDataUrl();
+          void loadGroup(id, $(`group-${id}`), qs, version);
+        };
+        active.append(chip);
+      }
+    for (const key of ["event_date_from", "event_date_to", "address_match"])
+      if (current[key]) {
+        const chip = el("button", `${key.replaceAll("_", " ")}: ${current[key] === true ? "yes" : current[key]} ×`, "filter-chip");
+        chip.type = "button";
+        chip.onclick = () => {
+          groupFilters.set(id, { ...current, [key]: key === "address_match" ? false : "" });
+          saveDataUrl();
+          void loadGroup(id, $(`group-${id}`), qs, version);
+        };
+        active.append(chip);
+      }
+    const clear = el("button", "Clear all", "filter-clear");
+    clear.type = "button";
+    clear.onclick = () => { groupFilters.delete(id); saveDataUrl(); void loadGroup(id, $(`group-${id}`), qs, version); };
+    active.append(clear);
+  }
+  container.append(active);
+  const details = el("details", null, "filter-drawer");
+  details.append(el("summary", `Filters${amount ? ` · ${amount} applied` : ""}`));
+  const form = el("form", null, "filter-form");
+  filterChoices(form, "category", "Municipal category", data.facets?.category, current.category, (value) => municipalCategoryTitles[value] ?? value);
+  filterChoices(form, "record_type", "Published work type", data.facets?.record_type, current.record_type, (value) => value);
+  filterChoices(form, "source_id", "Official source", data.facets?.source_id, current.source_id, sourceName);
+  if (["activity", "business", "ownership"].includes(id)) {
+    const definitions = new Map((data.display_groups ?? []).map((entry) => [entry.key, entry.title]));
+    filterChoices(form, "display_group", id === "ownership" ? "Ownership section" : "Published status reading group", data.facets?.display_group, current.display_group, (value) => definitions.get(value) ?? value);
+  }
+  filterChoices(form, "source_status", "Exact published status", data.facets?.source_status, current.source_status, (value) => value);
+  const dates = el("fieldset", null, "filter-fieldset filter-dates");
+  dates.append(el("legend", "Source event date · inclusive"));
+  for (const [key, title] of [["event_date_from", "From"], ["event_date_to", "Through"]]) {
+    const label = el("label", title);
+    const input = document.createElement("input");
+    input.type = "date";
+    input.name = key;
+    input.value = current[key] ?? "";
+    label.append(input);
+    dates.append(label);
+  }
+  dates.append(el("p", `${data.facets?.undated ?? 0} returned rows have no event date; a date range excludes them.`, "meta"));
+  form.append(dates);
+  if (searchedAddress) {
+    const label = el("label", null, "filter-choice");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "address_match";
+    input.checked = current.address_match;
+    label.append(input, document.createTextNode(`Source address matches ${searchedAddress}`));
+    form.append(label, el("p", "Only explicit source address fields qualify. Other parcel records remain available when this filter is off.", "meta"));
+  }
+  const submit = el("button", "Apply filters");
+  submit.type = "submit";
+  form.append(submit);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const values = new FormData(form);
+    const filters = Object.fromEntries(["category", "record_type", "source_id", "display_group", "source_status"].map((key) => [key, values.getAll(key)]));
+    filters.event_date_from = values.get("event_date_from") ?? "";
+    filters.event_date_to = values.get("event_date_to") ?? "";
+    filters.address_match = values.has("address_match");
+    groupFilters.set(id, filters);
+    saveDataUrl();
+    void loadGroup(id, $(`group-${id}`), qs, version);
+  });
+  details.append(form);
+  container.append(details);
+  return container;
+}
+function kindTitle(key, data) {
+  if (key.startsWith("source:")) return sourceName(key.slice(7));
+  return data.display_groups?.find((entry) => entry.key === key)?.title ?? municipalCategoryTitles[key] ?? key;
+}
+function kindKey(item, id) {
+  return id === "ownership" ? item.display_group?.key ?? "unclassified" : item.category ?? `source:${item.source_id}`;
+}
+function orderedKinds(id, facets) {
+  const preferred = id === "ownership"
+    ? ["owner_names", "owner_registry", "owner_history", "unclassified"]
+    : id === "business" ? ["License", "Occupant"]
+      : ["Permit", "License", "Application", "Complaint", "Contact", "Document", "Certificate", "Occupant"];
+  return Object.keys(facets?.kind ?? {}).sort((a, b) => {
+    const aRank = preferred.indexOf(a);
+    const bRank = preferred.indexOf(b);
+    return (aRank < 0 ? preferred.length : aRank) - (bRank < 0 ? preferred.length : bRank) || a.localeCompare(b);
+  });
+}
+function renderCategoryIndex(parent, id, data, qs, version) {
+  if (!["activity", "business", "ownership"].includes(id)) return;
+  const index = el("nav", null, "category-index");
+  index.setAttribute("aria-label", `${groups.find(([key]) => key === id)?.[1] ?? id} categories`);
+  index.append(el("p", "Browse categories · counts are returned rows before filters", "meta"));
+  const all = el("button", "All categories", "category-button");
+  all.type = "button";
+  const currentSelection = filterState(id);
+  all.setAttribute("aria-pressed", String(!currentSelection.category.length && !currentSelection.source_id.length && !currentSelection.display_group.length));
+  all.onclick = () => {
+    const current = filterState(id);
+    groupFilters.set(id, { ...current, category: [], record_type: [], source_id: [], display_group: [] });
+    saveDataUrl();
+    void loadGroup(id, $(`group-${id}`), qs, version);
+  };
+  index.append(all);
+  for (const key of orderedKinds(id, data.facets)) {
+    const count = data.facets.kind[key];
+    const button = el("button", `${kindTitle(key, data)} · ${count}`, "category-button");
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(id === "ownership" ? currentSelection.display_group.includes(key) :
+      key.startsWith("source:") ? currentSelection.source_id.includes(key.slice(7)) : currentSelection.category.includes(key)));
+    button.onclick = () => {
+      const current = filterState(id);
+      const next = { ...current, category: [], record_type: [], source_id: [], display_group: [] };
+      if (id === "ownership") next.display_group = [key];
+      else if (key.startsWith("source:")) next.source_id = [key.slice(7)];
+      else next.category = [key];
+      groupFilters.set(id, next);
+      saveDataUrl();
+      void loadGroup(id, $(`group-${id}`), qs, version);
+    };
+    index.append(button);
+  }
+  parent.append(index);
+}
+function prepareHierarchy(parent, id, data) {
+  const state = { id, data, categories: new Map() };
+  displayTargets.set(parent, state);
+  const filters = filterState(id);
+  const keys = orderedKinds(id, data.facets).filter((key) =>
+    (id === "ownership" ? !filters.display_group.length || filters.display_group.includes(key) :
+      (!filters.category.length || filters.category.includes(key)) &&
+      (!filters.source_id.length || !key.startsWith("source:") || filters.source_id.includes(key.slice(7)))));
+  for (const key of keys) {
+    const category = el("section", null, "record-category");
+    const heading = el("div", null, "record-category-heading");
+    heading.append(el("h3", kindTitle(key, data)), el("span", `${data.facets.kind[key]} returned`, "group-count"));
+    category.append(heading);
+    const empty = el("p", "No rows in this page. Select this category above to request its matching rows.", "category-page-note");
+    category.append(empty);
+    parent.append(category);
+    state.categories.set(key, { category, empty, statuses: new Map() });
+  }
+}
+function appendHierarchicalRecord(parent, item) {
+  const state = displayTargets.get(parent);
+  const key = kindKey(item, state.id);
+  const target = state.categories.get(key);
+  if (!target) return;
+  target.empty.remove();
+  if (state.id === "ownership") {
+    let list = target.statuses.get("all");
+    if (!list) {
+      list = el("div", null, "record-list");
+      target.category.append(list);
+      target.statuses.set("all", list);
+    }
+    appendRecord(list, item);
+    return;
+  }
+  const statusKey = item.display_group?.key ?? "unclassified";
+  let list = target.statuses.get(statusKey);
+  if (!list) {
+    const section = el("section", null, "status-section");
+    const name = state.data.display_groups?.find((entry) => entry.key === statusKey)?.title ?? "Status not stated";
+    const count = state.data.facets?.kind_display_group?.[key]?.[statusKey] ?? 0;
+    section.append(el("h4", `${name} · ${count} returned`));
+    list = el("div", null, "record-list");
+    section.append(list);
+    target.category.append(section);
+    target.statuses.set(statusKey, list);
+  }
+  appendRecord(list, item);
+}
 async function loadGroup(id, section, qs, version, cursor = null) {
+  const generation = cursor ? groupLoadVersions.get(id) : (groupLoadVersions.set(id, (groupLoadVersions.get(id) ?? 0) + 1), groupLoadVersions.get(id));
+  if (!cursor) section.replaceChildren(el("p", "Loading returned records and source coverage…", "meta"));
   try {
     const p = new URLSearchParams(qs);
     p.set("group", id);
     p.set("limit", "50");
+    addFilterParams(p, filterState(id));
     if (cursor) p.set("cursor", cursor);
     const data = await api(`/api/v1/records?${p}`);
-    if (version !== viewVersion) return;
+    if (version !== viewVersion || generation !== groupLoadVersions.get(id)) return;
     if (!cursor) {
-      groupResponses.set(id, data);
-      if (SHOW_SNAPSHOT) renderSnapshot();
       const definition = groups.find((group) => group[0] === id);
       section.replaceChildren();
       const heading = el("div", null, "group-heading");
       heading.append(el("h2", definition[1]));
-      heading.append(el("span", `${data.total} ${data.total === 1 ? "record" : "records"}`, "group-count"));
+      heading.append(el("span", `${data.total} of ${data.returned_total} returned`, "group-count"));
       section.append(heading);
       section.append(el("p", definition[2], "group-intro"));
+      section.append(renderFilters(id, data, qs, version));
+      renderCategoryIndex(section, id, data, qs, version);
       const coverage = el("details", null, "sources-panel");
       const gaps = data.sources.filter((source) => ["partial", "unavailable"].includes(source.status)).length;
       coverage.append(el("summary", `Sources checked: ${data.sources.length}${gaps ? ` · ${gaps} with gaps` : ""}`));
@@ -1363,17 +1692,18 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       for (const source of data.sources) sourceLine(sourceList, source);
       coverage.append(sourceList);
       section.append(coverage);
+      if (gaps) section.append(el("p", `${gaps} source checks were incomplete; counts describe returned rows.`, "source-warning"));
       const grouped = ["activity", "business", "ownership"].includes(id);
       const records = el("div", null, grouped ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
       section.append(records);
-      if (grouped) prepareDisplayGroups(records, data);
+      if (grouped) prepareHierarchy(records, id, data);
       if (!data.items.length)
-        section.append(el("p", "No records returned by the checked sources. Open source coverage to see any gaps.", "empty-state"));
+        section.append(el("p", "No returned records match these filters. Review source coverage for gaps.", "empty-state"));
     }
     const records = $(`records-${id}`);
     for (const item of data.items) {
-      if (["activity", "business", "ownership"].includes(id)) appendDisplayRecord(records, item);
+      if (["activity", "business", "ownership"].includes(id)) appendHierarchicalRecord(records, item);
       else appendRecord(records, item);
     }
     if (data.next_cursor) {
@@ -1386,10 +1716,15 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       section.append(b);
     }
   } catch (error) {
-    if (version !== viewVersion) return;
+    if (version !== viewVersion || generation !== groupLoadVersions.get(id)) return;
+    loadedGroups.delete(id);
     section.append(
       el("p", `Could not load this group: ${error.message}`, "meta"),
     );
+    const retry = el("button", "Retry group", "secondary");
+    retry.type = "button";
+    retry.onclick = () => showDataSection(id, false);
+    section.append(retry);
   }
 }
 function appendTimelineEvent(parent, item) {
@@ -1425,13 +1760,20 @@ function appendTimelineEvent(parent, item) {
   parent.append(entry);
 }
 async function loadFeed(qs, version, cursor = null) {
+  const generation = cursor ? feedLoadVersion : ++feedLoadVersion;
+  if (!cursor) {
+    $("timeline-filters").replaceChildren(el("p", "Loading dated records and source coverage…", "meta"));
+    $("feed").replaceChildren();
+  }
   try {
     const p = new URLSearchParams(qs);
+    addFilterParams(p, timelineFilters);
     if (cursor) p.set("cursor", cursor);
     const data = await api(`/api/v1/feed?${p}`);
-    if (version !== viewVersion) return;
+    if (version !== viewVersion || generation !== feedLoadVersion) return;
     if (!cursor) {
       $("feed").replaceChildren();
+      renderTimelineFilters(data, qs, version);
       const gaps = data.sources.filter((source) => ["unavailable", "partial"].includes(source.status));
       if (gaps.length)
         $("feed").append(el("li", `${gaps.length} timeline sources have limited coverage. Review source status in the groups below.`, "timeline-note"));
@@ -1449,15 +1791,21 @@ async function loadFeed(qs, version, cursor = null) {
         void loadFeed(qs, version, data.next_cursor);
       };
   } catch (error) {
-    if (version === viewVersion)
-      $("feed").append(el("li", `Could not load the timeline: ${error.message}`, "timeline-note"));
+    if (version === viewVersion && generation === feedLoadVersion) {
+      feedLoaded = false;
+      const notice = el("li", `Could not load the timeline: ${error.message}`, "timeline-note");
+      const retry = el("button", "Retry timeline", "secondary");
+      retry.type = "button";
+      retry.onclick = () => showDataSection("timeline", false);
+      notice.append(retry);
+      $("feed").append(notice);
+    }
   }
 }
 $("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const version = ++viewVersion;
   selected = null;
-  groupResponses.clear();
   resetMap();
   $("record-content").hidden = true;
   requestedParcelKey = null;
@@ -1510,6 +1858,15 @@ $("search-form").addEventListener("submit", async (event) => {
 });
 $("records-tab").addEventListener("click", () => showExplorerTab("records"));
 $("browse-tab").addEventListener("click", () => showExplorerTab("browse"));
+$("guide-tab").addEventListener("click", () => showExplorerTab("guide"));
+function setMobileBrowseView(view) {
+  document.body.classList.toggle("mobile-records-active", view === "records");
+  $("mobile-map-tab").setAttribute("aria-pressed", String(view === "map"));
+  $("mobile-records-tab").setAttribute("aria-pressed", String(view === "records"));
+  if (view === "map") requestAnimationFrame(() => browseMap?.invalidateSize());
+}
+$("mobile-map-tab").addEventListener("click", () => setMobileBrowseView("map"));
+$("mobile-records-tab").addEventListener("click", () => setMobileBrowseView("records"));
 $("browse-panel-toggle").addEventListener("click", () => {
   const expanded = document.body.classList.toggle("browse-expanded");
   $("browse-panel-toggle").setAttribute("aria-expanded", String(expanded));
@@ -1519,11 +1876,16 @@ $("browse-panel-toggle").addEventListener("click", () => {
 $("records-tab").parentElement.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
-  const target = event.key === "Home" || event.key === "ArrowLeft" ? $("records-tab") : $("browse-tab");
+  const tabs = [$("records-tab"), $("browse-tab"), $("guide-tab")];
+  const current = tabs.indexOf(document.activeElement);
+  const index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
+    (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  const target = tabs[index];
   target.focus();
   target.click();
 });
 const initial = new URL(location.href).searchParams;
+if (initial.get("view") === "guide") showExplorerTab("guide");
 if (initial.get("view") === "map") {
   showExplorerTab("browse");
   if (initial.has("parcel_id")) requestAnimationFrame(async () => {
@@ -1540,7 +1902,7 @@ if (initial.get("view") === "map") {
     }
   });
 }
-if (initial.has("parcel_id") && initial.get("view") !== "map") {
+if (initial.has("parcel_id") && !["map", "guide"].includes(initial.get("view"))) {
   const restore = async () => {
     const startingVersion = viewVersion;
     const original = initial.get("query_address");
@@ -1558,13 +1920,13 @@ if (initial.has("parcel_id") && initial.get("view") !== "map") {
           ["parcel-address", "address-point-intersection"].includes(candidate.match?.method));
         if (verified && startingVersion === viewVersion) {
           $("query").value = original;
-          await choose(verified, original);
+          await choose(verified, original, "records", true);
           return;
         }
       } catch { /* Load the parcel without an unverified address focus. */ }
     }
     if (startingVersion === viewVersion)
-      await choose({ parcel_id: initial.get("parcel_id"), objectid: initial.get("objectid") });
+      await choose({ parcel_id: initial.get("parcel_id"), objectid: initial.get("objectid") }, null, "records", true);
   };
   void restore();
 }

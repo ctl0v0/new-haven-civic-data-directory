@@ -6,6 +6,8 @@ import { resolveParcel } from "../parcel/resolve.js";
 import { parcelRecords, parcelTrashPickup, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
 import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { addressEvidence } from "../parcel/address-evidence.js";
+import { checkedFilters, filterRecords, recordFacets } from "../parcel/filters.js";
+import { schemaGuide } from "../parcel/guide-schema.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getGroup, getSourceRecords } from "../parcel/adapters.js";
 import { permitDetails, applicationDetails } from "../parcel/permit-details.js";
@@ -14,6 +16,7 @@ import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
+import schemaRoute from "../api/v1/schema.js";
 import trashPickupRoute from "../api/v1/trash-pickup.js";
 import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
@@ -69,6 +72,48 @@ const parcel = (id) => ({
     nh_ward: 7,
   },
   geometry: polygon,
+});
+
+test("record filters count all returned rows before paging and keep official status and address evidence", () => {
+  const items = [
+    { id: "p1", source_id: "municity", category: "Permit", event_date: "2025-04-05", attributes: { PermitType: "Water Heater", PermStatus: "Issued" }, display_group: { key: "reported" }, address_evidence: { matches_query: true } },
+    { id: "p2", source_id: "municity", category: "Permit", event_date: "2024-03-05", attributes: { PermitType: "Other", PermStatus: "Issued" }, display_group: { key: "older" }, address_evidence: { matches_query: false } },
+    { id: "l1", source_id: "municity", category: "License", event_date: null, attributes: { Status: "Expired" }, display_group: { key: "past" }, address_evidence: null },
+  ];
+  const facets = recordFacets(items, "activity");
+  assert.deepEqual(facets.kind, { License: 1, Permit: 2 });
+  assert.equal(facets.kind_display_group.Permit.reported, 1);
+  assert.equal(facets.record_type["Water Heater"], 1);
+  assert.equal(facets.undated, 1);
+  assert.equal(facets.basis, "returned_records_before_filters");
+  const filters = checkedFilters({ category: ["Permit"], record_type: ["water heater"], source_status: ["issued"],
+    event_date_from: "2025-01-01", event_date_to: "2025-12-31", address_match: true },
+  { queryAddress: "3 Edwards St" });
+  assert.deepEqual(filterRecords(items, filters).map((item) => item.id), ["p1"]);
+  assert.throws(() => checkedFilters({ event_date_from: "2025-02-30" }), { status: 400 });
+  assert.throws(() => checkedFilters({ address_match: true }), { status: 400 });
+});
+
+test("protected schema describes the live REST and MCP filter contract", async () => {
+  assert.equal((await schemaRoute.fetch(new Request("https://example.com/api/v1/schema"))).status, 401);
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const responseData = await schemaRoute.fetch(new Request("https://example.com/api/v1/schema", { headers: auth }));
+  assert.equal(responseData.status, 200);
+  const guide = await responseData.json();
+  assert.deepEqual(guide, schemaGuide());
+  assert.ok(guide.methods.some((method) => method.mcp === "get_parcel_records"));
+  assert.ok(guide.filters.some((filter) => filter.key === "address_match"));
+  assert.ok(guide.sources.every((source) => source.url.startsWith("https://")));
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "resources/read",
+      params: { uri: "newhaven://parcel/schema" } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(JSON.parse(payload.result.contents[0].text), guide);
 });
 
 test("private access fails closed and signed cookies cannot be forged", async () => {
@@ -2028,6 +2073,16 @@ test("address focus annotates REST and MCP records without filtering the parcel"
   assert.equal(records.items.find((item) => item.source_id === "addresses").address_evidence.matches_query, true);
   assert.equal(records.items.find((item) => item.source_id === "parcels").address_evidence.matches_query, false);
   assert.ok(records.items.some((item) => item.source_id === "parcels"), "parcel-wide records remain visible");
+  const filteredRest = await recordsRoute.fetch(new Request(
+    `https://example.com/api/v1/records?parcel_id=${id}&group=property&query_address=3%20Edwards%20St&source_id=addresses&address_match=true&limit=1`,
+    { headers: auth },
+  ));
+  assert.equal(filteredRest.status, 200);
+  const filtered = await filteredRest.json();
+  assert.equal(filtered.total, 1);
+  assert.equal(filtered.returned_total, records.total);
+  assert.equal(filtered.items[0].source_id, "addresses");
+  assert.equal(filtered.facets.source_id.parcels, 1, "facets retain unfiltered source counts");
   const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
     method: "POST",
     headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
@@ -2040,6 +2095,18 @@ test("address focus annotates REST and MCP records without filtering the parcel"
   const mcpText = await mcp.text();
   const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
   assert.deepEqual(payload.result.structuredContent, records);
+  const filteredMcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/call",
+      params: { name: "get_parcel_records", arguments: {
+        parcel_id: String(id), group: "property", query_address: "3 Edwards St",
+        source_id: ["addresses"], address_match: true, limit: 1,
+      } } }),
+  }));
+  const filteredText = await filteredMcp.text();
+  const filteredPayload = JSON.parse(filteredText.startsWith("event:") ? filteredText.match(/^data: (.+)$/m)?.[1] : filteredText);
+  assert.deepEqual(filteredPayload.result.structuredContent, filtered);
   const invalid = await recordsRoute.fetch(new Request(
     `https://example.com/api/v1/records?parcel_id=${id}&group=property&query_address=not-an-address`,
     { headers: auth },
@@ -2059,8 +2126,8 @@ test("address focus marks only municipal permit LegalAddress in the dated feed",
       return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 999053 }] });
     if (url.pathname.endsWith("/Children"))
       return response({ Permit: [
-        { Permit_ID: 1, Parcel_ID: id, LegalAddress: "3 EDWARDS ST", PermitDate: "2024-06-01", Description: "Shop work" },
-        { Permit_ID: 2, Parcel_ID: id, PermitDate: "2024-05-01", Description: "3 Edwards St shop work" },
+        { Permit_ID: 1, Parcel_ID: id, LegalAddress: "3 EDWARDS ST", PermitDate: "2024-06-01", PermitType: "Water Heater", PermStatus: "Issued", Description: "Shop work" },
+        { Permit_ID: 2, Parcel_ID: id, PermitDate: "2024-05-01", PermitType: "Other", PermStatus: "Draft", Description: "3 Edwards St shop work" },
       ] });
     return response({ features: [] });
   };
@@ -2076,4 +2143,22 @@ test("address focus marks only municipal permit LegalAddress in the dated feed",
   assert.equal(permits[0].address_evidence.matches_query, true);
   assert.equal(permits[1].address_evidence, null);
   assert.ok(feed.items.some((item) => item.source_id === "parcel-sale"), "parcel-wide sale entry remains");
+  const filteredRest = await feedRoute.fetch(new Request(
+    `https://example.com/api/v1/feed?parcel_id=${id}&query_address=3%20Edwards%20St&record_type=Water%20Heater&source_status=Issued&address_match=true`,
+    { headers: auth },
+  ));
+  const filtered = await filteredRest.json();
+  assert.equal(filtered.total, 1);
+  assert.equal(filtered.items[0].attributes.Permit_ID, 1);
+  assert.equal(filtered.facets.record_type.Other, 1);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call", params: {
+      name: "get_parcel_feed", arguments: { parcel_id: String(id), query_address: "3 Edwards St",
+        record_type: ["Water Heater"], source_status: ["Issued"], address_match: true },
+    } }),
+  }));
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, filtered);
 });

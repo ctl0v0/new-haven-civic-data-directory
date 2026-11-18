@@ -14,6 +14,7 @@ const app = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
     <button id="browse-tab" type="button" role="tab" aria-selected="false" aria-controls="browse-view">Browse parcel map</button>
+    <button id="guide-tab" type="button" role="tab" aria-selected="false" aria-controls="guide-view">Data guide</button>
   </nav>
   <div id="records-view" role="tabpanel" aria-labelledby="records-tab">
   <section class="search-panel" aria-labelledby="page-title">
@@ -51,20 +52,24 @@ const app = `
     <div id="map-context-notes" class="map-context-notes"></div>
     <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Visual backgrounds: <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Esri street map</a> or <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. Backgrounds do not establish parcel facts or current conditions.</p>
   </section>
+  <nav id="group-nav" aria-label="Parcel data sections" hidden></nav>
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="snapshot-title">At a glance</h2></div><p>Plain-language facts from the records below.</p></div>
+    <div id="overview-counts"></div>
     <div id="snapshot-grid" class="snapshot-grid"></div>
   </section>
-  <nav id="group-nav" aria-label="Jump to parcel sections" hidden></nav>
   <section id="feed-section" class="timeline-section" aria-labelledby="timeline-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. A document or contact date may only mark an update to that record.</p></div>
+    <div id="timeline-filters"></div>
     <ol id="feed" class="timeline"></ol>
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
   </section>
   <div id="groups" class="record-groups"></div>
+  <section id="record-detail" class="record-detail" hidden></section>
   </div></div>
   </div>
   <section id="browse-view" role="tabpanel" aria-labelledby="browse-tab" hidden>
+    <div class="browse-mobile-switch" role="group" aria-label="Browse view"><button id="mobile-map-tab" type="button" aria-pressed="true">Map</button><button id="mobile-records-tab" type="button" aria-pressed="false">Records</button></div>
     <div class="browse-workspace">
       <aside class="browse-sidebar">
         <p class="eyebrow">Official City parcel layer</p>
@@ -79,6 +84,9 @@ const app = `
       </aside>
       <div id="browse-map" role="region" aria-label="Browse New Haven parcel boundaries" tabindex="0"></div>
     </div>
+  </section>
+  <section id="guide-view" role="tabpanel" aria-labelledby="guide-tab" hidden>
+    <div class="guide-shell"><aside class="guide-index" aria-label="Data guide navigation"><p class="eyebrow">Reference</p><h1>Data guide</h1><p>How the parcel records, REST API and MCP tools fit together.</p><nav id="guide-nav"></nav></aside><div id="guide-content" class="guide-content" aria-live="polite"></div><aside id="guide-example" class="guide-example" aria-label="Request and response example"></aside></div>
   </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>

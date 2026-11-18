@@ -39,5 +39,13 @@ export function params(request) {
     cursor: url.searchParams.get("cursor"),
     limit: url.searchParams.get("limit"),
     query_address: url.searchParams.get("query_address"),
+    category: url.searchParams.getAll("category"),
+    record_type: url.searchParams.getAll("record_type"),
+    source_id: url.searchParams.getAll("source_id"),
+    display_group: url.searchParams.getAll("display_group"),
+    source_status: url.searchParams.getAll("source_status"),
+    event_date_from: url.searchParams.get("event_date_from"),
+    event_date_to: url.searchParams.get("event_date_to"),
+    address_match: url.searchParams.get("address_match"),
   };
 }

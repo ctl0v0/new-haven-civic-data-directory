@@ -2,6 +2,7 @@ import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
+import { schemaGuide } from "../parcel/guide-schema.js";
 import {
   resolveParcel,
   parcelSummary,
@@ -58,6 +59,12 @@ export function createServer() {
       .string()
       .regex(/^\d{1,12}$/)
       .optional(),
+  };
+  const selections = z.array(z.string().min(1).max(100)).max(20).optional();
+  const recordFilters = {
+    category: selections, record_type: selections, source_id: selections, source_status: selections,
+    event_date_from: z.iso.date().optional(), event_date_to: z.iso.date().optional(),
+    address_match: z.boolean().optional(),
   };
   tool(
     server,
@@ -126,9 +133,10 @@ export function createServer() {
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(50).optional(),
       query_address: z.string().min(1).max(160).optional(),
+      ...recordFilters,
+      display_group: selections,
     }),
-    ({ parcel_id, objectid, group, cursor, limit, query_address }) =>
-      parcelRecords(parcel_id, group, { objectid, cursor, limit, query_address }),
+    ({ parcel_id, group, ...options }) => parcelRecords(parcel_id, group, options),
   );
   tool(
     server,
@@ -140,9 +148,9 @@ export function createServer() {
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(50).optional(),
       query_address: z.string().min(1).max(160).optional(),
+      ...recordFilters,
     }),
-    ({ parcel_id, objectid, cursor, limit, query_address }) =>
-      parcelFeed(parcel_id, { objectid, cursor, limit, query_address }),
+    ({ parcel_id, ...options }) => parcelFeed(parcel_id, options),
   );
   tool(
     server,
@@ -199,6 +207,16 @@ export function createServer() {
     "Return live, curated, paused, and unavailable source status and limitations.",
     z.object({}),
     () => sourceCoverage(),
+  );
+  server.registerResource(
+    "parcel-schema",
+    "newhaven://parcel/schema",
+    {
+      title: "Parcel API and MCP field guide",
+      description: "Methods, filters, response fields, sources and reading rules",
+      mimeType: "application/json",
+    },
+    async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(schemaGuide()) }] }),
   );
   server.registerResource(
     "source-coverage",

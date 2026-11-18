@@ -7,6 +7,7 @@ import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js"
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
 import { parcelPhoto as photoForParcel } from "./photo.js";
 import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords } from "./record-state.js";
+import { checkedFilters, filterRecords, recordFacets } from "./filters.js";
 import { permitDetails, applicationDetails } from "./permit-details.js";
 import { searchMunicipalPermits } from "./permit-search.js";
 
@@ -61,6 +62,44 @@ export async function parcelOverview(id, objectid = null) {
       event_date: item.event_date,
       source_url: item.source_url,
     }));
+  const preferred = {
+    property: ["parcels", "assessor-subareas", "assessor-valuations"],
+    ownership: ["parcel-owner", "assessor-owner", "business-master"],
+    business: ["municipal-business-licenses", "municipal-occupants"],
+    activity: ["municity", "lci-cases", "managed-lots"],
+    geography: ["zoning", "neighborhoods"],
+    environment: ["ct-brownfields"],
+    representation: ["alders", "cmt-contacts"],
+  };
+  const highlight = (item) => {
+    const a = item.attributes ?? {};
+    const label = item.source_id === "parcels" ? a.property_address :
+      item.source_id === "assessor-subareas" ? `${a.description_as_published ?? "Building subarea"}${a.code ? ` (${a.code})` : ""}` :
+      item.source_id === "assessor-valuations" ? `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation` :
+      item.source_id === "parcel-owner" ? a.owner_name_1 ?? a.owner_name_2 :
+      item.source_id === "assessor-owner" ? a.owner_name ?? a.co_owner_name :
+      item.source_id === "business-master" ? a.legal_name :
+      item.source_id === "municipal-business-licenses" ? a.business_name :
+      item.source_id === "municipal-occupants" ? a.occupant_name :
+      item.source_id === "zoning" ? a.zone_code ? `Zoning district ${a.zone_code}` : null :
+      item.source_id === "neighborhoods" ? a.neighborhood_name ?? a.name :
+      item.source_id === "ct-brownfields" ? a.site_name :
+      item.source_id === "alders" ? a.alder_name :
+      item.source_id === "cmt-contacts" ? a.district_name :
+      item.category ? `${item.category} ${item.source_record_id ?? ""}`.trim() : null;
+    return {
+      source_id: item.source_id,
+      source_record_id: item.source_record_id,
+      source_url: item.source_url,
+      event_date: item.event_date,
+      label: String(label ?? item.source_record_id ?? item.source_id).slice(0, 160),
+    };
+  };
+  const highlights = Object.fromEntries(groups.map((group) => {
+    const rows = (preferred[group.group] ?? []).flatMap((sourceId) =>
+      group.items.filter((item) => item.source_id === sourceId).slice(0, sourceId === "municity" ? 3 : 1));
+    return [group.group, rows.slice(0, 3).map(highlight)];
+  }));
   return {
     parcel: {
       parcel_id: feature.attributes.parcel_id,
@@ -73,6 +112,7 @@ export async function parcelOverview(id, objectid = null) {
       sources: group.sources,
     })),
     recent_events: events,
+    highlights,
     partial: groups.some((group) => group.partial),
     note: "Source counts and dates describe the current response, not a complete property history. Use get_parcel_records for fields and provenance.",
   };
@@ -81,25 +121,31 @@ export async function parcelOverview(id, objectid = null) {
 export async function parcelRecords(
   id,
   group,
-  { objectid = null, cursor = null, limit = 25, query_address = null } = {},
+  { objectid = null, cursor = null, limit = 25, query_address = null, ...options } = {},
 ) {
   const queryAddress = checkedQueryAddress(query_address);
+  const filters = checkedFilters(options, { queryAddress });
   const feature = await loadParcel(id, objectid);
   const data = await getGroup(group, feature);
-  const ordered = orderDisplayRecords(data.items, group);
-  const page = pageItems(ordered, cursor, limit);
+  const ordered = markAddressEvidence(orderDisplayRecords(data.items, group), queryAddress);
+  const facets = recordFacets(ordered, group);
+  const filtered = filterRecords(ordered, filters);
+  const page = pageItems(filtered, cursor, limit);
   const displayGroups = DISPLAY_GROUPS.filter(({ key }) =>
     group === "ownership" ? key.startsWith("owner_") : !key.startsWith("owner_"));
   const counts = displayGroupCounts(ordered);
   return {
     ...data,
     ...page,
+    facets,
+    filters,
+    returned_total: ordered.length,
     ...(["activity", "business", "ownership"].includes(group) ? {
       display_groups: displayGroups,
       display_group_counts: Object.fromEntries(displayGroups.map(({ key }) => [key, counts[key]])),
     } : {}),
     ...(queryAddress ? { query_address: queryAddress } : {}),
-    items: markAddressEvidence(page.items, queryAddress),
+    items: page.items,
   };
 }
 
@@ -130,9 +176,10 @@ export async function parcelApplicationDetails(id, applicationId, objectid = nul
 
 export async function parcelFeed(
   id,
-  { objectid = null, cursor = null, limit = 25, query_address = null } = {},
+  { objectid = null, cursor = null, limit = 25, query_address = null, ...options } = {},
 ) {
   const queryAddress = checkedQueryAddress(query_address);
+  const filters = checkedFilters(options, { feed: true, queryAddress });
   const feature = await loadParcel(id, objectid);
   const key = `feed:${feature.attributes.parcel_id}:${feature.attributes.objectid}`;
   const data = await cached(key, async () => {
@@ -161,14 +208,18 @@ export async function parcelFeed(
       note: "Dates are reported event or source-record dates. This feed does not track changes between source checks.",
     };
   });
-  const page = pageItems(data.items, cursor, limit);
+  const withEvidence = markAddressEvidence(data.items.map((item) =>
+    item.category || ["lci-cases", "assessor-sales"].includes(item.source_id)
+      ? { ...item, display_group: displayGroup(item) } : item), queryAddress);
+  const page = pageItems(filterRecords(withEvidence, filters), cursor, limit);
   return {
     ...data,
     ...page,
+    filters,
+    facets: recordFacets(withEvidence),
+    returned_total: withEvidence.length,
     ...(queryAddress ? { query_address: queryAddress } : {}),
-    items: markAddressEvidence(page.items.map((item) =>
-      item.category || ["lci-cases", "assessor-sales"].includes(item.source_id)
-        ? { ...item, display_group: displayGroup(item) } : item), queryAddress),
+    items: page.items,
   };
 }
 
