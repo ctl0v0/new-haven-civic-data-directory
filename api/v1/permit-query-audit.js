@@ -39,6 +39,22 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "extra-child-schema") {
+      const targets = [{ entity: "Permit", id: 589760 }, { entity: "Permit", id: 590645 },
+        { entity: "Application", id: 50838 }, { entity: "Application", id: 51953 }];
+      const results = await Promise.all(targets.map(async ({ entity, id }) => {
+        const data = await fetchJson(`https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/${entity}/${id}/Children`, OPTS);
+        return { entity, id, categories: Object.fromEntries(Object.entries(data).map(([kind, rows]) =>
+          [kind, { count: Array.isArray(rows) ? rows.length : null,
+            keys: Array.isArray(rows) ? [...new Set(rows.slice(0, 3).flatMap((row) => Object.keys(row ?? {})))].sort() : null,
+            sample: ["Inspection", "Flag"].includes(kind) && Array.isArray(rows) ? rows.slice(0, 2).map((row) =>
+              Object.fromEntries(Object.entries(row).filter(([key, value]) =>
+                /^(Inspection|Flag|Status|Result|Type|Date|CreatedDate|Modified|Entity|Description|Name|Public|Deleted|Category)/i.test(key) &&
+                (value == null || ["string", "number", "boolean"].includes(typeof value))))) : null }])),
+        };
+      }));
+      return Response.json({ results }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "westville-details") {
       const expected = [
         { parcel_id: 25642, objectid: 15603, permit_id: 590395, print_key: "417 1239 00500" },
