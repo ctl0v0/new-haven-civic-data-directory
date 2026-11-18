@@ -47,6 +47,22 @@ export default {
       }));
       return Response.json({ sources }, { headers: { "Cache-Control": "private, no-store" } });
     }
+    if (new URL(request.url).searchParams.get("mode") === "streets") {
+      const base = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer";
+      const data = await fetchJson(`${base}?f=pjson`, { timeout: 10000, maxBytes: 2_000_000 });
+      const level = 17;
+      const x = Math.floor((-72.9279 + 180) / 360 * 2 ** level);
+      const latitude = 41.3083 * Math.PI / 180;
+      const y = Math.floor((1 - Math.asinh(Math.tan(latitude)) / Math.PI) / 2 * 2 ** level);
+      const response = await fetch(`${base}/tile/${level}/${y}/${x}`, {
+        method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(8000),
+      });
+      return Response.json({ service: data.mapName, tiled: data.singleFusedMapCache,
+        levels: data.tileInfo?.lods?.map((item) => item.level).slice(-5),
+        copyright: data.copyrightText, tile: { status: response.status,
+          type: response.headers.get("content-type") } },
+      { headers: { "Cache-Control": "private, no-store" } });
+    }
     const id = "10386";
     const objectid = "20011";
     const parcel = await loadParcel(id, objectid);
