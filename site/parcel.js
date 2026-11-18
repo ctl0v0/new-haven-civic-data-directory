@@ -950,7 +950,7 @@ async function loadMap(qs, version) {
       [center.lat + latOffset, center.lng + lonOffset],
     ], { padding: [18, 18], maxZoom: 18 });
     leaflet.control.scale({ metric: false, imperial: true }).addTo(map);
-    await loadMapContext(map, qs, version);
+    await loadMapContext(map, qs, version, bounds);
   } catch (error) {
     if (version !== viewVersion) return;
     if (parcelMap) {
@@ -1006,7 +1006,7 @@ function mapFeatureLayer(layer) {
     onEachFeature: (feature, leafletLayer) => leafletLayer.bindPopup(mapFeaturePopup(feature, layer)),
   });
 }
-async function loadMapContext(map, qs, version) {
+async function loadMapContext(map, qs, version, parcelBounds) {
   const list = $("map-layer-list");
   list.replaceChildren(el("p", "Loading official map layers…", "meta"));
   try {
@@ -1027,7 +1027,10 @@ async function loadMapContext(map, qs, version) {
       const name = el("span", layer.title);
       title.append(checkbox, swatch, name);
       row.append(title);
-      row.append(el("p", `${layer.scope === "nearby" ? "Nearby · " : "On parcel · "}${layer.features.length} mapped · ${layer.status.replaceAll("_", " ")}`, "map-layer-meta"));
+      const extent = layer.scope === "nearby"
+        ? `Within ${(layer.search_radius_m ?? context.nearby_radius_m).toLocaleString()} m · `
+        : "On parcel · ";
+      row.append(el("p", `${extent}${layer.features.length} mapped · ${layer.status.replaceAll("_", " ")}`, "map-layer-meta"));
       if (layer.source_updated_at)
         row.append(el("p", `Source data last edited ${shortDate(layer.source_updated_at)}`, "map-layer-meta"));
       else row.append(el("p", "Source update date unavailable", "map-layer-meta"));
@@ -1039,13 +1042,17 @@ async function loadMapContext(map, qs, version) {
       const rendered = mapFeatureLayer(layer);
       if (checkbox.checked) rendered.addTo(map);
       checkbox.addEventListener("change", () => {
-        if (checkbox.checked) rendered.addTo(map);
+        if (checkbox.checked) {
+          rendered.addTo(map);
+          if (layer.id === "metered-parking-spaces")
+            map.fitBounds(rendered.getBounds().extend(parcelBounds), { padding: [18, 18], maxZoom: 18 });
+        }
         else map.removeLayer(rendered);
       });
     }
     const notes = $("map-context-notes");
     notes.replaceChildren();
-    notes.append(el("p", `Nearby transit stops and mapped metered spaces cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.`, "meta"));
+    notes.append(el("p", "Nearby transit stops cover 400 metres and mapped metered spaces cover 1 kilometre in a straight line from the parcel map center. They are not parcel-linked records.", "meta"));
     const gaps = el("p", null, "meta");
     gaps.append(document.createTextNode("Mapped meters do not show current availability, rates, or restrictions. Loading zones and available spaces are not mapped. "));
     gaps.append(link(context.gaps?.[0]?.source_url, "See City parking maps"));

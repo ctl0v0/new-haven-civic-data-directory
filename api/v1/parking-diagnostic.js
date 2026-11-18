@@ -1,8 +1,9 @@
 import { loadParcel } from "../../parcel/resolve.js";
 import { parcelFeatureToGeoJSON } from "../../parcel/geometry.js";
-import { arcgis } from "../../parcel/http.js";
+import { arcgis, fetchBounded } from "../../parcel/http.js";
 import { LAYERS } from "../../parcel/config.js";
 import { parcelMapContext } from "../../parcel/map-context.js";
+import { load } from "cheerio";
 
 const envelope = (center, metres) => {
   const lat = metres / 111195;
@@ -44,9 +45,21 @@ export default {
     })).sort((a, b) => a.distance_m - b.distance_m).slice(0, 5);
     const context = await parcelMapContext(id, objectid);
     const layer = context.layers.find((item) => item.id === "metered-parking-spaces");
+    const assessorHtml = await fetchBounded(`https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${id}`, {
+      accept: "text/html,application/xhtml+xml", timeout: 9000, maxBytes: 5_000_000,
+    });
+    const $ = load(assessorHtml);
+    const assessorVerified = Number($("#MainContent_lblPid").first().text().trim()) === Number(id);
+    const assessorImages = assessorVerified ? $("img").toArray().map((node) => ({
+      id: $(node).attr("id") ?? null, alt: $(node).attr("alt") ?? null,
+      src: $(node).attr("src") ?? null, parent_id: $(node).parent().attr("id") ?? null,
+    })).slice(0, 30) : [];
+    const parcelImageFields = Object.fromEntries(Object.entries(parcel.attributes)
+      .filter(([key]) => /image|photo|picture|file/i.test(key)));
     return Response.json({ parcel: { id, objectid, address: parcel.attributes.property_address, bbox },
       center, counts, closest, layer: { status: layer.status, count: layer.features.length,
-        warning: layer.warning, source_updated_at: layer.source_updated_at } },
+        warning: layer.warning, source_updated_at: layer.source_updated_at },
+      parcelImageFields, assessorVerified, assessorImages },
     { headers: { "Cache-Control": "private, no-store" } });
   },
 };

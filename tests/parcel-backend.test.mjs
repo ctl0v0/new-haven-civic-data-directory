@@ -1832,11 +1832,14 @@ test("map context keeps official parcel and nearby layers separate with REST and
         point(...center, { OBJECTID: 1, StopName: "Church Street", InService: 1 }),
         point(-72.90, 41.32, { OBJECTID: 2, StopName: "Far away" }),
       ], spatialReference: { wkid: 4326 } });
-    if (url.pathname.includes("Metered_Parking_Spaces"))
+    if (url.pathname.includes("Metered_Parking_Spaces")) {
+      const bounds = JSON.parse(url.searchParams.get("geometry"));
+      assert.ok(bounds.xmax - bounds.xmin > 0.02, "meter search reaches beyond 400 metres");
       return response({ features: [
         point(...center, { objectid: 301, facilityid: "TEST_0301", spacenum: 1, meterspec: "Source text" }),
-        point(-72.90, 41.32, { objectid: 302, facilityid: "FAR_0302" }),
+        point(-72.89, 41.33, { objectid: 302, facilityid: "FAR_0302" }),
       ], spatialReference: { wkid: 4326 } });
+    }
     throw Error(`Unexpected map source: ${url.pathname}`);
   };
   const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
@@ -1851,6 +1854,7 @@ test("map context keeps official parcel and nearby layers separate with REST and
   assert.equal(context.layers.find((layer) => layer.id === "transit-stops").features.length, 1);
   const parking = context.layers.find((layer) => layer.id === "metered-parking-spaces");
   assert.equal(parking.scope, "nearby");
+  assert.equal(parking.search_radius_m, 1000);
   assert.equal(parking.features.length, 1);
   assert.equal(parking.features[0].properties.facilityid, "TEST_0301");
   assert.equal(parking.features[0].properties.source_url,

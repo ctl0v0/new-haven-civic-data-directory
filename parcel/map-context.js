@@ -13,7 +13,7 @@ export const MAP_LAYERS = Object.freeze([
   { id: "parcel-addresses", title: "City address points on this parcel", scope: "parcel", url: LAYERS.addresses, kind: "point", fields: ["house_number", "full_street_name", "unit"] },
   { id: "zoning", title: "City zoning districts intersecting this parcel", scope: "parcel", url: LAYERS.zoning, kind: "polygon", fields: ["zone_code", "district_category", "district"] },
   { id: "transit-stops", title: "City hosted CT Transit stops nearby", scope: "nearby", url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0", kind: "point", fields: ["StopId", "StopName", "OnStreet", "AtStreet", "InService"] },
-  { id: "metered-parking-spaces", title: "City mapped metered parking spaces nearby", scope: "nearby", url: LAYERS.parkingSpaces, kind: "point", maxFeatures: 500,
+  { id: "metered-parking-spaces", title: "City mapped metered parking spaces nearby", scope: "nearby", url: LAYERS.parkingSpaces, kind: "point", radiusMeters: 1000, maxFeatures: 1000,
     fields: ["meternum", "facilityid", "post_num", "spacenum", "zone_", "meterspec"],
     note: "Mapped meter inventory, not an available-space feed. Confirm current rules and rates on posted signs." },
 ]);
@@ -61,14 +61,14 @@ function metersFromCenter(point, center) {
   return [longitude * EARTH_RADIUS * Math.cos(center[1] * Math.PI / 180), latitude * EARTH_RADIUS];
 }
 
-function nearby(geometry, center) {
+function nearby(geometry, center, radiusMeters) {
   if (geometry.type === "Point")
-    return Math.hypot(...metersFromCenter(geometry.coordinates, center)) <= RADIUS_METERS;
+    return Math.hypot(...metersFromCenter(geometry.coordinates, center)) <= radiusMeters;
   return false;
 }
 
-function searchEnvelope(center) {
-  const latOffset = RADIUS_METERS / EARTH_RADIUS * 180 / Math.PI;
+function searchEnvelope(center, radiusMeters) {
+  const latOffset = radiusMeters / EARTH_RADIUS * 180 / Math.PI;
   const lonOffset = latOffset / Math.cos(center[1] * Math.PI / 180);
   return {
     xmin: center[0] - lonOffset,
@@ -89,11 +89,12 @@ function publishedDate(metadata) {
 async function mapLayer(definition, parcel, center) {
   try {
     const maxFeatures = definition.maxFeatures ?? MAX_FEATURES;
+    const radiusMeters = definition.radiusMeters ?? RADIUS_METERS;
     const metadataPromise = cached(`map-layer-metadata:${definition.id}`, () =>
       fetchJson(`${definition.url}?f=pjson`, { timeout: 8000 }), 3600).catch(() => null);
     const area = definition.scope === "parcel"
       ? { geometry: JSON.stringify(parcel.geometry), geometryType: "esriGeometryPolygon" }
-      : { geometry: JSON.stringify(searchEnvelope(center)), geometryType: "esriGeometryEnvelope" };
+      : { geometry: JSON.stringify(searchEnvelope(center, radiusMeters)), geometryType: "esriGeometryEnvelope" };
     const data = await arcgis(definition.url, {
       ...area,
       inSR: "4326",
@@ -125,13 +126,14 @@ async function mapLayer(definition, parcel, center) {
         },
         geometry,
       };
-    }).filter((feature) => definition.scope === "parcel" || nearby(feature.geometry, center));
+    }).filter((feature) => definition.scope === "parcel" || nearby(feature.geometry, center, radiusMeters));
     const truncated = Boolean(data.exceededTransferLimit) || (data.features?.length ?? 0) > maxFeatures;
     const metadata = await metadataPromise;
     return {
       id: definition.id,
       title: definition.title,
       scope: definition.scope,
+      search_radius_m: definition.scope === "nearby" ? radiusMeters : null,
       source_url: definition.url,
       note: definition.note ?? null,
       source_updated_at: publishedDate(metadata),
@@ -145,6 +147,7 @@ async function mapLayer(definition, parcel, center) {
       id: definition.id,
       title: definition.title,
       scope: definition.scope,
+      search_radius_m: definition.scope === "nearby" ? definition.radiusMeters ?? RADIUS_METERS : null,
       source_url: definition.url,
       note: definition.note ?? null,
       source_updated_at: null,
@@ -163,7 +166,7 @@ export async function parcelMapContext(id, objectid = null) {
     (feature.bbox[0] + feature.bbox[2]) / 2,
     (feature.bbox[1] + feature.bbox[3]) / 2,
   ];
-  return cached(`map-context:v3:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, async () => ({
+  return cached(`map-context:v4:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, async () => ({
     parcel: {
       parcel_id: parcel.attributes.parcel_id,
       objectid: parcel.attributes.objectid,
@@ -173,6 +176,6 @@ export async function parcelMapContext(id, objectid = null) {
     nearby_origin: "center of the selected parcel's mapped extent",
     layers: await Promise.all(MAP_LAYERS.map((definition) => mapLayer(definition, parcel, center))),
     gaps: MAP_SOURCE_GAPS,
-    note: "Nearby features are map context, not records linked to the selected parcel. Address points are mapped locations, not verified entrances. Metered parking points are a mapped inventory, not current availability.",
+    note: "Nearby features are map context within each layer's reported search radius, not records linked to the selected parcel. Address points are mapped locations, not verified entrances. Metered parking points are a mapped inventory, not current availability.",
   }));
 }
