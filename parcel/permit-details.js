@@ -96,7 +96,7 @@ export async function permitDetails(parcel, permitId) {
   const applicationId = id(listed.attributes.Application_ID);
   const listedApplication = applicationId ? vendor.items.find((item) =>
     item.category === "Application" && id(item.attributes.Application_ID) === applicationId) : null;
-  return cached(`permit-details:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}:${requestedId}`, async () => {
+  return cached(`permit-details:v2:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}:${requestedId}`, async () => {
     const targets = [{ kind: "Permit", entityId: requestedId, listed }];
     if (applicationId) targets.push({ kind: "Application", entityId: applicationId, listed: listedApplication });
     const checks = await Promise.all(targets.map(async (target) => {
