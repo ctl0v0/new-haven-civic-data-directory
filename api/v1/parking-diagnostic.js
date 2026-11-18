@@ -90,7 +90,7 @@ export default {
     const vendor = Array.isArray(municipalResult.rows) && municipalResult.rows.length === 1
       ? municipalResult.rows[0] : null;
     const municipalId = vendor && String(vendor.PrintKey).trim() === key ? Number(vendor.Parcel_ID) : null;
-    const municipalPhotoChecks = await Promise.all([municipalId, 13303]
+    const municipalPhotoChecks = await Promise.all([municipalId, 13303, 999999999]
       .filter((value) => Number.isSafeInteger(value)).map(async (value) => {
         const url = `https://www.municitymedia.com/NewHavenCityCT/Parcel/${value}/streetview.jpg`;
         try {
