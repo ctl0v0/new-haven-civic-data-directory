@@ -1,5 +1,6 @@
 import { load } from "cheerio";
 import { fetchBounded } from "../../parcel/http.js";
+import { getSourceRecords } from "../../parcel/adapters.js";
 
 const allowed = new Map([
   [11236, "20 Eld St"],
@@ -14,6 +15,15 @@ export default {
       return new Response("Not found", { status: 404 });
     const pid = Number(new URL(request.url).searchParams.get("pid"));
     if (!allowed.has(pid)) return new Response("Not found", { status: 404 });
+    if (new URL(request.url).searchParams.has("parsed")) {
+      const parcel = { attributes: { parcel_id: pid, objectid: pid } };
+      const ids = ["assessor-owner", "assessor-land", "assessor-buildings", "assessor-subareas",
+        "assessor-extra-features", "assessor-outbuildings"];
+      const sources = await Promise.all(ids.map((id) => getSourceRecords(id, parcel)));
+      return Response.json(Object.fromEntries(sources.map((source) => [source.source_id, {
+        status: source.status, warning: source.warning, items: source.items.map((item) => item.attributes),
+      }])), { headers: { "Cache-Control": "private, no-store" } });
+    }
     const url = `https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${pid}`;
     const html = await fetchBounded(url, { accept: "text/html,application/xhtml+xml", timeout: 12000, maxBytes: 5_000_000 })
       .catch((error) => `SOURCE_ERROR: ${error.message}`);

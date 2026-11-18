@@ -749,6 +749,65 @@ test("assessor ownership and valuation tables become separate parcel records", a
   );
 });
 
+test("assessor co-owner and building, land, feature, and outbuilding rows retain their source sections", async () => {
+  globalThis.fetch = async (input) => {
+    assert.match(String(input), /Parcel\.aspx\?pid=999056/);
+    return new Response(`
+      <span id="MainContent_lblPid">999056</span>
+      <span id="MainContent_lblOwner">First Owner</span>
+      <span id="MainContent_lblCoOwner">Second Owner</span>
+      <span id="MainContent_lblAddr1">C/O Manager<br>12 MAIN ST<br>NEW HAVEN, CT 06511</span>
+      <span id="MainContent_lblBldCount">2</span>
+      <table id="MainContent_tblLandUse"><tr><td>Use Code</td><td>3030</td></tr>
+        <tr><td>Description</td><td>MIXED USE</td></tr><tr><td>Zone</td><td>BA2</td></tr>
+        <tr><td>Neighborhood</td><td>WHA3</td></tr></table>
+      <table id="MainContent_tblLand"><tr><td>Size (Acres)</td><td>0.14</td></tr>
+        <tr><td>Frontage</td><td>1</td></tr></table>
+      <span id="MainContent_ctl02_lblHeading">Building 1 : Section 1</span>
+      <table id="MainContent_ctl02_tblBldg"><tr><td>Year Built:</td><td>1940</td></tr>
+        <tr><td>Replacement Cost:</td><td>$500,000</td></tr></table>
+      <table id="MainContent_ctl02_grdCns"><tr><th>Field</th><th>Description</th></tr>
+        <tr><td>Style:</td><td>Mix Ret Off</td></tr><tr><td>Heating Fuel</td><td>Gas/Oil</td></tr></table>
+      <table id="MainContent_ctl02_grdSub"><tr><th>Code</th><th>Description</th><th>GrossArea</th><th>LivingArea</th></tr>
+        <tr><td>RET</td><td>Retail Area</td><td>2,975</td><td>2,975</td></tr></table>
+      <span id="MainContent_ctl03_lblHeading">Building 2 : Section 1</span>
+      <table id="MainContent_ctl03_tblBldg"><tr><td>Year Built:</td><td>1950</td></tr></table>
+      <table id="MainContent_ctl03_grdCns"><tr><th>Field</th><th>Description</th></tr>
+        <tr><td>Style:</td><td>Warehouse</td></tr></table>
+      <table id="MainContent_ctl03_grdSub"><tr><th>Code</th><th>Description</th><th>GrossArea</th><th>LivingArea</th></tr>
+        <tr><td>BAS</td><td>First Floor</td><td>1,000</td><td>1,000</td></tr></table>
+      <table id="MainContent_grdXf"><tr><th>Code</th><th>Description</th><th>Size</th><th>Value</th><th>Assessed Value</th><th>Bldg #</th></tr>
+        <tr><td>SPR2</td><td>WET/CONCEALED</td><td>39610.00 S.F.</td><td>$78,600</td><td>$55,020</td><td>1</td></tr></table>
+      <table id="MainContent_grdOb"><tr><th>Code</th><th>Description</th><th>Sub Code</th><th>Sub Description</th><th>Size</th><th>Value</th><th>Assessed Value</th><th>Bldg #</th></tr>
+        <tr><td>PAV1</td><td>PAVING-ASPHALT</td><td></td><td></td><td>2700.00 S.F.</td><td>$5,500</td><td>$3,850</td><td>2</td></tr></table>
+    `, { headers: { "content-type": "text/html" } });
+  };
+  const p = parcel(999056);
+  const [owner, land, buildings, subareas, extras, outbuildings, card] = await Promise.all([
+    getSourceRecords("assessor-owner", p),
+    getSourceRecords("assessor-land", p),
+    getSourceRecords("assessor-buildings", p),
+    getSourceRecords("assessor-subareas", p),
+    getSourceRecords("assessor-extra-features", p),
+    getSourceRecords("assessor-outbuildings", p),
+    getSourceRecords("assessor", p),
+  ]);
+  assert.equal(owner.items[0].attributes.co_owner_name, "Second Owner");
+  assert.deepEqual(owner.items[0].attributes.mailing_address_lines,
+    ["C/O Manager", "12 MAIN ST", "NEW HAVEN, CT 06511"]);
+  assert.equal(land.items[0].attributes.assessor_zone_as_published, "BA2");
+  assert.equal(land.items[0].attributes.land_measure_rows[1].label_as_published, "Frontage");
+  assert.deepEqual(buildings.items.map((item) => item.attributes.building_number), [1, 2]);
+  assert.equal(buildings.items[0].attributes.attribute_rows[1].value_as_published, "Gas/Oil");
+  assert.deepEqual(subareas.items.map((item) => item.attributes.building_number), [1, 2]);
+  assert.equal(extras.items[0].attributes.code, "SPR2");
+  assert.equal(outbuildings.items[0].attributes.building_number_as_published, "2");
+  assert.equal(card.items[0].attributes.building_facts.building_count, 2);
+  assert.equal(card.items[0].attributes.building_facts.year_built, undefined);
+  assert.ok([owner, land, buildings, subareas, extras, outbuildings].every((result) =>
+    result.items.every((item) => item.source_url.endsWith("pid=999056") && item.event_date === null)));
+});
+
 test("state records without an owner LLC and manually selected planning sources do not create parcel records", async () => {
   globalThis.fetch = async () => {
     throw Error("Gap sources must not make upstream record requests");

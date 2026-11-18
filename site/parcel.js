@@ -19,6 +19,10 @@ const sourceNames = {
   "assessor-sales": "Assessor ownership history",
   "assessor-valuations": "Assessor valuation history",
   "assessor-subareas": "Assessor building subareas",
+  "assessor-land": "Assessor land use and measures",
+  "assessor-buildings": "Assessor building sections",
+  "assessor-extra-features": "Assessor extra features",
+  "assessor-outbuildings": "Assessor outbuildings",
   "local-historic-districts": "City local historic districts",
   "state-historic-districts": "City hosted State historic districts",
   "ct-brownfields": "CT DEEP brownfields inventory",
@@ -132,6 +136,13 @@ function recordTitle(item) {
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   if (item.source_id === "assessor-subareas")
     return `${a.description_as_published ?? "Building subarea"}${a.code ? ` (${a.code})` : ""}`;
+  if (item.source_id === "assessor-land") return "Assessor land use and measures";
+  if (item.source_id === "assessor-buildings")
+    return a.heading_as_published ?? `Building section ${a.section_id ?? ""}`;
+  if (item.source_id === "assessor-extra-features")
+    return `${a.description_as_published ?? "Extra feature"}${a.code ? ` (${a.code})` : ""}`;
+  if (item.source_id === "assessor-outbuildings")
+    return `${a.description_as_published ?? "Outbuilding"}${a.code ? ` (${a.code})` : ""}`;
   if (item.source_id === "alders") {
     const ward = a.ward_label
       ? /^ward\b/i.test(a.ward_label) ? a.ward_label : `Ward ${a.ward_label}`
@@ -142,7 +153,7 @@ function recordTitle(item) {
     return a.zone_code ? `Zoning district ${a.zone_code}` : "City zoning polygon";
   if (item.source_id === "assessor") return "Assessor building and land facts";
   if (item.source_id === "parcel-owner") return a.owner_name_1 ?? "City parcel owner name";
-  if (item.source_id === "assessor-owner") return a.owner_name ?? "Assessor owner name";
+  if (item.source_id === "assessor-owner") return a.owner_name ?? a.co_owner_name ?? "Assessor owner name";
   if (item.source_id === "cmt-contacts")
     return `CMT contacts · ${a.district_name ?? a.district_num ?? item.source_record_id}`;
   if (item.source_id === "ct-brownfields") return a.site_name ?? "DEEP inventory site";
@@ -178,6 +189,16 @@ function recordDescription(item) {
   if (item.source_id === "assessor-sales")
     return [a.sale_price ? `Sale price listed: ${a.sale_price}` : null, a.book_page ? `Book and page ${a.book_page}` : null, a.instrument ? `Instrument ${a.instrument}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "assessor-valuations") return null;
+  if (item.source_id === "assessor-land")
+    return [a.use_description_as_published, a.use_code ? `Use code ${a.use_code}` : null,
+      a.assessor_zone_as_published ? `Assessor zone ${a.assessor_zone_as_published}` : null]
+      .filter(Boolean).join(" · ");
+  if (item.source_id === "assessor-buildings")
+    return `${a.summary_rows?.length ?? 0} building summary fields · ${a.attribute_rows?.length ?? 0} building attributes`;
+  if (["assessor-extra-features", "assessor-outbuildings"].includes(item.source_id))
+    return [a.size_as_published, a.value_as_published ? `Value ${a.value_as_published}` : null,
+      a.building_number_as_published ? `Building ${a.building_number_as_published}` : null]
+      .filter(Boolean).join(" · ");
   if (item.source_id === "assessor-subareas")
     return [a.gross_area_sq_ft != null ? `${Number(a.gross_area_sq_ft).toLocaleString()} gross sq ft` : a.gross_area_as_published ? `Gross area as published: ${a.gross_area_as_published}` : null,
       a.living_area_sq_ft != null ? `${Number(a.living_area_sq_ft).toLocaleString()} living sq ft` : a.living_area_as_published ? `Living area as published: ${a.living_area_as_published}` : null,
@@ -220,10 +241,16 @@ function sourceFields(value, prefix = "") {
   const fields = [];
   for (const [key, entry] of Object.entries(value ?? {})) {
     const label = prefix ? `${prefix} · ${fieldLabel(key)}` : fieldLabel(key);
-    if (entry && typeof entry === "object" && !Array.isArray(entry))
+    if (Array.isArray(entry))
+      entry.forEach((row, index) => {
+        const rowLabel = `${label} ${index + 1}`;
+        if (row && typeof row === "object") fields.push(...sourceFields(row, rowLabel));
+        else fields.push([rowLabel, row == null ? "Not provided" : String(row)]);
+      });
+    else if (entry && typeof entry === "object")
       fields.push(...sourceFields(entry, label));
     else fields.push([label, entry == null ? "Not provided" :
-      typeof entry === "object" ? JSON.stringify(entry) : String(entry)]);
+      String(entry)]);
   }
   return fields;
 }
@@ -292,6 +319,26 @@ function appendRecord(parent, item) {
       ["CMT email", item.attributes.cmt_email],
       ["CMT phone", item.attributes.cmt_phone],
     ].filter(([, value]) => value != null && value !== "")
+    : item.source_id === "assessor-owner" ? [
+      ["Owner", item.attributes.owner_name],
+      ["Co-owner", item.attributes.co_owner_name],
+      ["Mailing address as published", item.attributes.mailing_address_lines?.join(" · ")],
+    ].filter(([, value]) => value)
+    : item.source_id === "assessor-land" ? [
+      ["Use code", item.attributes.use_code],
+      ["Use description", item.attributes.use_description_as_published],
+      ["Assessor zone", item.attributes.assessor_zone_as_published],
+      ["Neighborhood code", item.attributes.neighborhood_code_as_published],
+      ...((item.attributes.land_measure_rows ?? []).filter((row) => row.value_as_published)
+        .map((row) => [row.label_as_published, row.value_as_published])),
+    ].filter(([, value]) => value)
+    : item.source_id === "assessor-buildings" ? [
+      ...((item.attributes.summary_rows ?? []).filter((row) => row.value_as_published)
+        .map((row) => [row.label_as_published, row.value_as_published])),
+      ...((item.attributes.attribute_rows ?? []).filter((row) =>
+        ["Style:", "Model", "Grade", "Stories:", "Occupancy", "Bldg Use"].includes(row.label_as_published))
+        .map((row) => [row.label_as_published, row.value_as_published])),
+    ].filter(([, value]) => value)
     : item.source_id === "business-master" ? [
       ["ALEI", item.attributes.alei],
       ["Registry status", item.attributes.registry_status],
@@ -527,10 +574,15 @@ function renderSnapshot() {
     if (cityOwner) {
       owner.append(el("p", "City GIS parcel owner", "snapshot-label"));
       owner.append(el("p", cityOwner.attributes.owner_name_1));
+      if (cityOwner.attributes.owner_name_2)
+        owner.append(el("p", `City GIS second owner: ${cityOwner.attributes.owner_name_2}`));
     }
     if (assessorOwner) {
       owner.append(el("p", "Assessor card owner", "snapshot-label"));
-      owner.append(el("p", assessorOwner.attributes.owner_name));
+      if (assessorOwner.attributes.owner_name)
+        owner.append(el("p", assessorOwner.attributes.owner_name));
+      if (assessorOwner.attributes.co_owner_name)
+        owner.append(el("p", `Co-owner: ${assessorOwner.attributes.co_owner_name}`));
     }
     if (ownerEntity) {
       owner.append(el("p", "Matched State LLC", "snapshot-label"));

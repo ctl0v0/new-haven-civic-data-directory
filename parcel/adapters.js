@@ -366,6 +366,52 @@ function assessorTableRows($, id, expectedHeadings) {
     : null;
 }
 
+function assessorLabeledRows($, id) {
+  const table = $(`#${id}`);
+  if (!table.length) return null;
+  const rows = table.find("tr").toArray().map((row) =>
+    $(row).children("td").toArray().map((cell) => text($(cell).text())),
+  );
+  if (rows.some((cells) => cells.length !== 2 || !cells[0])) return null;
+  return rows.map(([label, value]) => ({ label_as_published: label, value_as_published: value }));
+}
+
+function assessorOptionalTable($, id, headings, emptyText) {
+  const table = $(`#${id}`);
+  if (!table.length) return null;
+  const first = text(table.find("tr").first().text());
+  if (first === emptyText) return [];
+  return assessorTableRows($, id, headings);
+}
+
+function assessorMailingLines($) {
+  return $("#MainContent_lblAddr1").contents().toArray()
+    .map((node) => node.name === "br" ? "\n" : node.type === "text" ? node.data : $(node).text())
+    .join("").split("\n").map(text).filter(Boolean);
+}
+
+function assessorBuildingSections($) {
+  const prefixes = new Set();
+  $('[id^="MainContent_ctl"]').each((_, element) => {
+    const match = $(element).attr("id")?.match(/^MainContent_(ctl\d+)_(?:tblBldg|grdCns)$/);
+    if (match) prefixes.add(match[1]);
+  });
+  return [...prefixes].map((prefix) => {
+    const heading = text($(`#MainContent_${prefix}_lblHeading`).text());
+    const buildingNumber = heading?.match(/\bBuilding\s+(\d+)\b/i)?.[1] ?? null;
+    const sectionNumber = heading?.match(/\bSection\s+(\d+)\b/i)?.[1] ?? null;
+    return {
+      section_id: prefix,
+      heading_as_published: heading,
+      building_number: buildingNumber ? Number(buildingNumber) : null,
+      section_number: sectionNumber ? Number(sectionNumber) : null,
+      summary_rows: assessorLabeledRows($, `MainContent_${prefix}_tblBldg`),
+      attribute_rows: assessorTableRows($, `MainContent_${prefix}_grdCns`, ["Field", "Description"])
+        ?.map(([label, value]) => ({ label_as_published: label, value_as_published: value })),
+    };
+  });
+}
+
 const assessorPending = new Map();
 async function assessorData(parcel) {
   const id = Number(parcel.attributes.parcel_id);
@@ -419,6 +465,16 @@ async function assessorData(parcel) {
     return {
       attributes,
       buildingFacts: assessorBuildingFacts($, attributes),
+      buildings: assessorBuildingSections($),
+      landUseRows: assessorLabeledRows($, "MainContent_tblLandUse"),
+      landRows: assessorLabeledRows($, "MainContent_tblLand"),
+      extraFeatures: assessorOptionalTable($, "MainContent_grdXf",
+        ["Code", "Description", "Size", "Value", "Assessed Value", "Bldg #"],
+        "No Data for Extra Features"),
+      outbuildings: assessorOptionalTable($, "MainContent_grdOb",
+        ["Code", "Description", "Sub Code", "Sub Description", "Size", "Value", "Assessed Value", "Bldg #"],
+        "No Data for Outbuildings"),
+      mailingAddressLines: assessorMailingLines($),
       subareas: assessorSubareas($),
       sales,
       valuationTables,
@@ -449,7 +505,7 @@ function assessorBuildingFacts($, attributes) {
   };
   const integer = (value) => /^\d[\d,]*$/.test(value ?? "") ? Number(value.replaceAll(",", "")) : null;
   const decimal = (value) => /^\d[\d,]*(?:\.\d+)?$/.test(value ?? "") ? Number(value.replaceAll(",", "")) : null;
-  const count = integer(field(["lblBldgCount", "lblBuildingCount"], "Building Count"));
+  const count = integer(field(["lblBldCount", "lblBldgCount", "lblBuildingCount"], "Building Count"));
   const year = integer(field(["lblYearBuilt"], "Year Built"));
   const livingArea = integer(field(["lblLivingArea"], "Living Area"));
   const oneBuilding = count == null || count <= 1;
@@ -483,6 +539,10 @@ function assessorSubareas($) {
     });
     if (headerIndex < 0) continue;
     const tableNumber = tables.length + 1;
+    const sectionId = $(table).attr("id")?.match(/^MainContent_(ctl\d+)_grdSub$/)?.[1] ?? null;
+    const sectionHeading = sectionId ? text($(`#MainContent_${sectionId}_lblHeading`).text()) : null;
+    const buildingNumber = sectionHeading?.match(/\bBuilding\s+(\d+)\b/i)?.[1] ?? null;
+    const sectionNumber = sectionHeading?.match(/\bSection\s+(\d+)\b/i)?.[1] ?? null;
     const items = [];
     for (const [rowIndex, row] of rows.slice(headerIndex + 1).entries()) {
       const cells = $(row).children("td").toArray().map((cell) => text($(cell).text()));
@@ -495,6 +555,9 @@ function assessorSubareas($) {
       if ((cells[2] && gross === null) || (cells[3] && living === null)) malformedRows++;
       items.push({
         table_number: tableNumber,
+        section_heading_as_published: sectionHeading,
+        building_number: buildingNumber ? Number(buildingNumber) : null,
+        section_number: sectionNumber ? Number(sectionNumber) : null,
         row_number: rowIndex + 1,
         code: cells[0],
         description_as_published: cells[1],
@@ -523,18 +586,93 @@ async function assessorRecord(parcel) {
 
 async function assessorOwnerRecords(parcel) {
   const id = Number(parcel.attributes.parcel_id);
-  const { attributes, url } = await assessorData(parcel);
+  const { attributes, mailingAddressLines, url } = await assessorData(parcel);
   const owner = text(attributes.lblOwner);
-  if (!owner)
-    return unavailable("assessor-owner", "The verified assessor card did not publish a readable owner name.");
+  const coOwner = text(attributes.lblCoOwner);
+  if (!owner && !coOwner)
+    return unavailable("assessor-owner", "The verified assessor card did not publish a readable owner or co-owner name.");
   return result("assessor-owner", [record(id, "assessor-owner", {
     owner_name: owner,
+    co_owner_name: coOwner,
+    mailing_address_lines: mailingAddressLines,
     parcel_id: id,
   }, {
     match: "assessor-pid-exact",
     sourceUrl: url,
-    note: "Owner name as published on the exact Vision assessor card; compare the City GIS owner field if they differ.",
+    note: "Owner, co-owner and mailing address as published on the exact Vision assessor card; compare the City GIS owner fields if they differ.",
   })]);
+}
+
+async function assessorLandRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { landUseRows, landRows, url } = await assessorData(parcel);
+  if (landUseRows === null && landRows === null)
+    return unavailable("assessor-land", "The verified assessor card did not return readable land tables.");
+  const value = (rows, label) => rows?.find((row) => row.label_as_published === label)?.value_as_published ?? null;
+  return result("assessor-land", [record(id, "assessor-land", {
+    use_code: value(landUseRows, "Use Code"),
+    use_description_as_published: value(landUseRows, "Description"),
+    assessor_zone_as_published: value(landUseRows, "Zone"),
+    neighborhood_code_as_published: value(landUseRows, "Neighborhood"),
+    land_use_rows: landUseRows,
+    land_measure_rows: landRows,
+  }, {
+    match: "assessor-pid-exact", sourceUrl: url,
+    note: "Land use, zone and measure fields are the assessor card's published labels and values. The assessor zone is not a zoning determination.",
+  })], {
+    partial: landUseRows === null || landRows === null,
+    warning: landUseRows === null || landRows === null ? "One assessor land table could not be read." : null,
+  });
+}
+
+async function assessorBuildingRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { buildings, attributes, url } = await assessorData(parcel);
+  if (!buildings.length) {
+    if (text(attributes.lblBldCount) === "0") return result("assessor-buildings", []);
+    return unavailable("assessor-buildings", "The verified assessor card did not return a readable building section.");
+  }
+  const items = buildings.map((building) => record(`${id}:${building.section_id}`, "assessor-buildings", building, {
+    match: "assessor-pid-exact", sourceUrl: url,
+    note: "Each building section and field is shown as published by the assessor. Cost, condition and use fields are assessment descriptions, not an inspection or lease measurement.",
+  }));
+  const partial = buildings.some((building) =>
+    !building.heading_as_published || building.summary_rows === null || building.attribute_rows === null);
+  return result("assessor-buildings", items, {
+    partial,
+    warning: partial ? "One or more assessor building sections could not be read completely." : null,
+  });
+}
+
+async function assessorExtraFeatureRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { extraFeatures, url } = await assessorData(parcel);
+  if (extraFeatures === null)
+    return unavailable("assessor-extra-features", "The verified assessor card did not return a readable Extra Features table.");
+  return result("assessor-extra-features", extraFeatures.map((cells, index) =>
+    record(`${id}:${index + 1}`, "assessor-extra-features", {
+      code: cells[0], description_as_published: cells[1], size_as_published: cells[2],
+      value_as_published: cells[3], assessed_value_as_published: cells[4],
+      building_number_as_published: cells[5],
+    }, { match: "assessor-pid-exact", sourceUrl: url,
+      note: "Extra Feature row as published on the verified assessor card; size and value are not independent measurements or tax bills." }),
+  ));
+}
+
+async function assessorOutbuildingRecords(parcel) {
+  const id = Number(parcel.attributes.parcel_id);
+  const { outbuildings, url } = await assessorData(parcel);
+  if (outbuildings === null)
+    return unavailable("assessor-outbuildings", "The verified assessor card did not return a readable Outbuildings table.");
+  return result("assessor-outbuildings", outbuildings.map((cells, index) =>
+    record(`${id}:${index + 1}`, "assessor-outbuildings", {
+      code: cells[0], description_as_published: cells[1],
+      sub_code_as_published: cells[2], sub_description_as_published: cells[3],
+      size_as_published: cells[4], value_as_published: cells[5],
+      assessed_value_as_published: cells[6], building_number_as_published: cells[7],
+    }, { match: "assessor-pid-exact", sourceUrl: url,
+      note: "Outbuilding row as published on the verified assessor card; size and value are not independent measurements or tax bills." }),
+  ));
 }
 
 async function assessorSubareaRecords(parcel) {
@@ -1395,6 +1533,10 @@ const ADAPTERS = Object.freeze({
   assessor: assessorRecord,
   "assessor-owner": assessorOwnerRecords,
   "assessor-subareas": assessorSubareaRecords,
+  "assessor-land": assessorLandRecords,
+  "assessor-buildings": assessorBuildingRecords,
+  "assessor-extra-features": assessorExtraFeatureRecords,
+  "assessor-outbuildings": assessorOutbuildingRecords,
   "assessor-sales": assessorSalesRecords,
   "assessor-valuations": assessorValuationRecords,
   zoning: (p) => boundaryRecords("zoning", LAYERS.zoning, p),

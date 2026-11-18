@@ -89,6 +89,46 @@ export const SOURCES = Object.freeze([
     directoryId: "assessor",
   },
   {
+    id: "assessor-land",
+    group: "property",
+    title: "Assessor land use and measures",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Land Use and Land table rows from the exact Vision assessor PID. The assessor's zone, neighborhood code and land values are shown as published, without turning them into a zoning or tax determination.",
+    directoryId: "assessor",
+  },
+  {
+    id: "assessor-buildings",
+    group: "property",
+    title: "Assessor building sections and attributes",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Each readable building section, its summary rows and its Building Attributes table from the exact Vision assessor PID. Source labels and values remain attached to their building section.",
+    directoryId: "assessor",
+  },
+  {
+    id: "assessor-extra-features",
+    group: "property",
+    title: "Assessor extra features",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Individual Extra Features rows from the exact Vision assessor PID, including source-reported code, description, size, values and building number.",
+    directoryId: "assessor",
+  },
+  {
+    id: "assessor-outbuildings",
+    group: "property",
+    title: "Assessor outbuildings",
+    url: "https://gis.vgsi.com/newhavenct/",
+    mode: "live",
+    coverage:
+      "Individual Outbuildings rows from the exact Vision assessor PID, including source-reported code, description, size, values and building number.",
+    directoryId: "assessor",
+  },
+  {
     id: "addresses",
     group: "property",
     title: "City address points",
