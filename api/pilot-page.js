@@ -11,6 +11,11 @@ const footer =
 const login =
   '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>';
 const app = `
+  <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
+    <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
+    <button id="browse-tab" type="button" role="tab" aria-selected="false" aria-controls="browse-view">Browse parcel map</button>
+  </nav>
+  <div id="records-view" role="tabpanel" aria-labelledby="records-tab">
   <section class="search-panel" aria-labelledby="page-title">
     <p class="eyebrow">New Haven parcel explorer</p>
     <h1 id="page-title">What do city records say about this building?</h1>
@@ -24,11 +29,16 @@ const app = `
   </section>
   <section id="candidates" class="panel" hidden><h2>Choose a parcel</h2><p>More than one city parcel may match an address. Review the listed address before choosing.</p><div id="candidate-list"></div></section>
   <section id="parcel-summary" class="parcel-hero" hidden>
-    <p class="eyebrow">City parcel record</p>
-    <h2 id="parcel-title"></h2>
-    <p id="parcel-identifiers" class="meta"></p>
-    <p id="parcel-match" class="match-note" hidden></p>
-    <p class="small">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
+    <div class="parcel-hero-layout"><div class="parcel-hero-copy">
+      <p class="eyebrow">City parcel record</p>
+      <h2 id="parcel-title"></h2>
+      <p id="parcel-identifiers" class="meta"></p>
+      <p id="parcel-match" class="match-note" hidden></p>
+      <p class="small">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
+    </div><figure id="parcel-photo" class="parcel-photo" hidden>
+      <img id="parcel-photo-image" alt="Building photo from the verified City assessor card">
+      <figcaption>Assessor building photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View assessor card</a></figcaption>
+    </figure></div>
   </section>
   <section id="parcel-map-section" class="map-panel" aria-labelledby="parcel-map-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Mapped parcel</p><h2 id="parcel-map-title">City parcel boundary</h2></div><p>The outline is a parcel boundary, not a building footprint.</p></div>
@@ -51,6 +61,16 @@ const app = `
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
   </section>
   <div id="groups" class="record-groups"></div>
+  </div>
+  <section id="browse-view" role="tabpanel" aria-labelledby="browse-tab" hidden>
+    <div class="section-heading"><div><p class="eyebrow">Official City parcel layer</p><h1>Browse parcels on the map</h1></div><p>Pan and zoom, then select a parcel. Full records load only after you request them.</p></div>
+    <div class="browse-workspace">
+      <div id="browse-map" role="region" aria-label="Browse New Haven parcel boundaries" tabindex="0"></div>
+      <aside id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and assessor building photo.</p></aside>
+    </div>
+    <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
+    <p class="meta">Parcel boundaries and labels come from the live City GIS parcel layer. Background aerial imagery is from CT ECO. A building photo is shown only when the assessor card confirms the selected parcel ID. Neither source establishes current conditions.</p>
+  </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
   String(value).replace(
@@ -81,7 +101,7 @@ export default {
           "Cache-Control": "private, no-store",
           "X-Frame-Options": "DENY",
           "Content-Security-Policy":
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cteco.uconn.edu; base-uri 'none'; form-action 'self'",
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cteco.uconn.edu https://gis.vgsi.com; base-uri 'none'; form-action 'self'",
         },
       },
     );

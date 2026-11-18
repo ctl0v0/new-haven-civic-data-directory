@@ -469,6 +469,22 @@ function assessorBuildingSections($) {
 }
 
 const assessorPending = new Map();
+function assessorBuildingPhoto($, cardUrl) {
+  for (const image of $('img[id^="MainContent_"][id$="_imgPhoto"]').toArray()) {
+    const id = $(image).attr("id") ?? "";
+    if (!/^MainContent_ctl\d+_imgPhoto$/.test(id)) continue;
+    try {
+      const url = new URL($(image).attr("src") ?? "", cardUrl);
+      if (url.origin !== "https://gis.vgsi.com" ||
+          !/^\/photos\/NewhavenCTPhotos\//i.test(url.pathname) ||
+          !/\.(?:jpe?g|png)$/i.test(url.pathname) || url.search || url.hash)
+        continue;
+      return url.href;
+    } catch { /* An unreadable image path is not a verified photo. */ }
+  }
+  return null;
+}
+
 async function assessorData(parcel) {
   const id = Number(parcel.attributes.parcel_id);
   if (assessorPending.has(id)) return assessorPending.get(id);
@@ -520,6 +536,7 @@ async function assessorData(parcel) {
     }));
     return {
       attributes,
+      buildingPhotoUrl: assessorBuildingPhoto($, url),
       buildingFacts: assessorBuildingFacts($, attributes),
       buildings: assessorBuildingSections($),
       landUseRows: assessorLabeledRows($, "MainContent_tblLandUse"),
@@ -543,6 +560,18 @@ async function assessorData(parcel) {
   } finally {
     assessorPending.delete(id);
   }
+}
+
+export async function assessorPhotoForParcel(parcel) {
+  const { buildingPhotoUrl, url } = await assessorData(parcel);
+  return {
+    parcel_id: parcel.attributes.parcel_id,
+    objectid: parcel.attributes.objectid,
+    status: buildingPhotoUrl ? "ok" : "no_records",
+    photo_url: buildingPhotoUrl,
+    source_url: url,
+    note: "Building photo on the verified City assessor card. The card does not publish a photo date; a photo of one building may not show the entire parcel.",
+  };
 }
 
 // Read only uniquely labeled facts from the verified card. Repeated labels on
@@ -630,9 +659,10 @@ function assessorSubareas($) {
 
 async function assessorRecord(parcel) {
   const id = Number(parcel.attributes.parcel_id);
-  const { attributes, buildingFacts, url } = await assessorData(parcel);
+  const { attributes, buildingFacts, buildingPhotoUrl, url } = await assessorData(parcel);
   return result("assessor", [
-    record(id, "assessor", { ...attributes, building_facts: buildingFacts }, {
+    record(id, "assessor", { ...attributes, building_facts: buildingFacts,
+      ...(buildingPhotoUrl ? { building_photo_url: buildingPhotoUrl } : {}) }, {
       sourceUrl: url,
       note: "Vision card fields are displayed as published; assessed values are not tax bills. Published sale dates appear as separate Ownership History events.",
     }),

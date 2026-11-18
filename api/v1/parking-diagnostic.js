@@ -1,8 +1,9 @@
 import { loadParcel } from "../../parcel/resolve.js";
 import { parcelFeatureToGeoJSON } from "../../parcel/geometry.js";
-import { arcgis, fetchBounded } from "../../parcel/http.js";
+import { arcgis, fetchBounded, fetchJson } from "../../parcel/http.js";
 import { LAYERS } from "../../parcel/config.js";
 import { parcelMapContext } from "../../parcel/map-context.js";
+import { browseParcels } from "../../parcel/browse.js";
 import { load } from "cheerio";
 
 const envelope = (center, metres) => {
@@ -22,6 +23,12 @@ export default {
   async fetch(request) {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
+    if (new URL(request.url).searchParams.get("mode") === "browse") {
+      const data = await browseParcels("-72.932,41.305,-72.924,41.311");
+      return Response.json({ status: data.status, count: data.features.length,
+        warning: data.warning, first: data.features[0]?.properties ?? null },
+      { headers: { "Cache-Control": "private, no-store" } });
+    }
     const id = "10386";
     const objectid = "20011";
     const parcel = await loadParcel(id, objectid);
@@ -70,10 +77,36 @@ export default {
     }));
     const parcelImageFields = Object.fromEntries(Object.entries(parcel.attributes)
       .filter(([key]) => /image|photo|picture|file/i.test(key)));
+    const key = String(parcel.attributes.mblu).split("/").map((part) => part.trim())
+      .filter(Boolean).join(" ").toUpperCase();
+    const municipalSearch = new URL("https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data");
+    for (const [name, value] of Object.entries({ Customer: "NewHavenCityCT", entity: "Parcel", entity_id: "",
+      fieldtype: "text", mapid: "", mapobject: "", module: "", numrecs: "5", operator: "=",
+      pid: "", searchfield: "PrintKey", section: "", value: key }))
+      municipalSearch.searchParams.set(name, value);
+    const municipalResult = await fetchJson(municipalSearch, {
+      headers: { SourceId: "2" }, timeout: 10000, maxBytes: 10_000_000,
+    });
+    const vendor = Array.isArray(municipalResult.rows) && municipalResult.rows.length === 1
+      ? municipalResult.rows[0] : null;
+    const municipalId = vendor && String(vendor.PrintKey).trim() === key ? Number(vendor.Parcel_ID) : null;
+    const municipalPhotoChecks = await Promise.all([municipalId, 13303]
+      .filter((value) => Number.isSafeInteger(value)).map(async (value) => {
+        const url = `https://www.municitymedia.com/NewHavenCityCT/Parcel/${value}/streetview.jpg`;
+        try {
+          const response = await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(8000) });
+          return { id: value, status: response.status, type: response.headers.get("content-type"),
+            length: response.headers.get("content-length"), location: response.headers.get("location") };
+        } catch (error) { return { id: value, error: error.message }; }
+      }));
     return Response.json({ parcel: { id, objectid, address: parcel.attributes.property_address, bbox },
       center, counts, closest, layer: { status: layer.status, count: layer.features.length,
         warning: layer.warning, source_updated_at: layer.source_updated_at },
-      parcelImageFields, assessorVerified, assessorImages, photoChecks },
+      parcelImageFields, assessorVerified, assessorImages, photoChecks,
+      municipal: { id: municipalId, match_count: municipalResult.rows?.length ?? null,
+        photo_fields: Object.fromEntries(Object.entries(vendor ?? {})
+          .filter(([field]) => /image|photo|media|streetview/i.test(field))),
+        photo_checks: municipalPhotoChecks } },
     { headers: { "Cache-Control": "private, no-store" } });
   },
 };

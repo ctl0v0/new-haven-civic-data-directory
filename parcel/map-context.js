@@ -13,7 +13,7 @@ export const MAP_LAYERS = Object.freeze([
   { id: "parcel-addresses", title: "City address points on this parcel", scope: "parcel", url: LAYERS.addresses, kind: "point", fields: ["house_number", "full_street_name", "unit"] },
   { id: "zoning", title: "City zoning districts intersecting this parcel", scope: "parcel", url: LAYERS.zoning, kind: "polygon", fields: ["zone_code", "district_category", "district"] },
   { id: "transit-stops", title: "City hosted CT Transit stops nearby", scope: "nearby", url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0", kind: "point", fields: ["StopId", "StopName", "OnStreet", "AtStreet", "InService"] },
-  { id: "metered-parking-spaces", title: "City mapped metered parking spaces nearby", scope: "nearby", url: LAYERS.parkingSpaces, kind: "point", radiusMeters: 1000, maxFeatures: 1000,
+  { id: "metered-parking-spaces", title: "City mapped metered parking spaces nearby", scope: "nearby", url: LAYERS.parkingSpaces, kind: "point", maxFeatures: 500,
     fields: ["meternum", "facilityid", "post_num", "spacenum", "zone_", "meterspec"],
     note: "Mapped meter inventory, not an available-space feed. Confirm current rules and rates on posted signs." },
 ]);
@@ -166,7 +166,7 @@ export async function parcelMapContext(id, objectid = null) {
     (feature.bbox[0] + feature.bbox[2]) / 2,
     (feature.bbox[1] + feature.bbox[3]) / 2,
   ];
-  return cached(`map-context:v4:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, async () => ({
+  return cached(`map-context:v5:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}`, async () => ({
     parcel: {
       parcel_id: parcel.attributes.parcel_id,
       objectid: parcel.attributes.objectid,

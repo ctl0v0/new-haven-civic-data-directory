@@ -18,6 +18,8 @@ import trashPickupRoute from "../api/v1/trash-pickup.js";
 import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
+import browseParcelsRoute from "../api/v1/browse-parcels.js";
+import parcelPhotoRoute from "../api/v1/parcel-photo.js";
 import permitDetailsRoute from "../api/v1/permit-details.js";
 import applicationDetailsRoute from "../api/v1/application-details.js";
 import searchPermitsRoute from "../api/v1/search-permits.js";
@@ -1834,7 +1836,7 @@ test("map context keeps official parcel and nearby layers separate with REST and
       ], spatialReference: { wkid: 4326 } });
     if (url.pathname.includes("Metered_Parking_Spaces")) {
       const bounds = JSON.parse(url.searchParams.get("geometry"));
-      assert.ok(bounds.xmax - bounds.xmin > 0.02, "meter search reaches beyond 400 metres");
+      assert.ok(bounds.xmax - bounds.xmin < 0.011, "meter search stays within its 400-metre envelope");
       return response({ features: [
         point(...center, { objectid: 301, facilityid: "TEST_0301", spacenum: 1, meterspec: "Source text" }),
         point(-72.89, 41.33, { objectid: 302, facilityid: "FAR_0302" }),
@@ -1854,7 +1856,7 @@ test("map context keeps official parcel and nearby layers separate with REST and
   assert.equal(context.layers.find((layer) => layer.id === "transit-stops").features.length, 1);
   const parking = context.layers.find((layer) => layer.id === "metered-parking-spaces");
   assert.equal(parking.scope, "nearby");
-  assert.equal(parking.search_radius_m, 1000);
+  assert.equal(parking.search_radius_m, 400);
   assert.equal(parking.features.length, 1);
   assert.equal(parking.features[0].properties.facilityid, "TEST_0301");
   assert.equal(parking.features[0].properties.source_url,
@@ -1874,6 +1876,52 @@ test("map context keeps official parcel and nearby layers separate with REST and
   const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
   assert.deepEqual(payload.result.structuredContent, context);
   assert.deepEqual(await parcelMapContext(String(id)), context);
+});
+
+test("map browsing requests only bounded City parcel polygons until a parcel is chosen", async () => {
+  const requests = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    requests.push(url.pathname);
+    assert.match(url.pathname, /Parcel_Viewer\/FeatureServer\/0\/query$/);
+    assert.equal(url.searchParams.get("outFields"), "objectid,parcel_id,property_address,mblu");
+    return response({ features: [parcel(999091)], spatialReference: { wkid: 4326 } });
+  };
+  const url = "https://example.com/api/v1/browse-parcels?bbox=-72.93,41.3,-72.92,41.31";
+  assert.equal((await browseParcelsRoute.fetch(new Request(url))).status, 401);
+  const headers = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const result = await browseParcelsRoute.fetch(new Request(url, { headers }));
+  assert.equal(result.status, 200);
+  const data = await result.json();
+  assert.equal(data.features.length, 1);
+  assert.equal(data.features[0].properties.parcel_id, 999091);
+  assert.deepEqual(requests.length, 1);
+  assert.equal((await browseParcelsRoute.fetch(new Request(
+    "https://example.com/api/v1/browse-parcels?bbox=-73,41.3,-72.8,41.4", { headers },
+  ))).status, 400);
+});
+
+test("photo preview requires the selected City parcel and matching assessor PID", async () => {
+  const id = 999092;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === "gis.vgsi.com") return new Response(
+      `<span id="MainContent_lblPid">${id}</span><img id="MainContent_ctl02_imgPhoto" alt="Building Photo" src="/photos/NewhavenCTPhotos/00/05/61/23.jpg">`,
+      { headers: { "content-type": "text/html" } },
+    );
+    if (url.pathname.includes("Parcel_Viewer"))
+      return response({ features: [parcel(id)], spatialReference: { wkid: 4326 } });
+    throw Error(`Unexpected preview source: ${url.href}`);
+  };
+  const url = `https://example.com/api/v1/parcel-photo?parcel_id=${id}&objectid=${id + 10}`;
+  assert.equal((await parcelPhotoRoute.fetch(new Request(url))).status, 401);
+  const headers = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const result = await parcelPhotoRoute.fetch(new Request(url, { headers }));
+  assert.equal(result.status, 200);
+  const data = await result.json();
+  assert.equal(data.status, "ok");
+  assert.equal(data.photo_url, "https://gis.vgsi.com/photos/NewhavenCTPhotos/00/05/61/23.jpg");
+  assert.equal(data.source_url, `https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${id}`);
 });
 
 test("address focus uses explicit full source addresses, not descriptions or parcel-only links", () => {

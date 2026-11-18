@@ -63,6 +63,12 @@ const municipalCategoryTitles = {
   Certificate: "Certificates",
 };
 let parcelMap = null;
+let browseMap = null;
+let browseLayer = null;
+let browseTimer = null;
+let browseRequestVersion = 0;
+let browseSelectionVersion = 0;
+let selectedBrowseParcel = null;
 const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
 const MAP_COLORS = {
   "parcel-addresses": "#dc5c32",
@@ -110,6 +116,29 @@ function resetMap() {
   $("parcel-map-status").textContent = "";
   $("map-layer-list").replaceChildren();
   $("map-context-notes").replaceChildren();
+}
+function setAssessorPhoto(figure, image, sourceLink, data) {
+  figure.hidden = true;
+  image.removeAttribute("src");
+  if (data?.status !== "ok" || !data.photo_url || !data.source_url) return false;
+  try {
+    const photo = new URL(data.photo_url);
+    const source = new URL(data.source_url);
+    if (photo.origin !== "https://gis.vgsi.com" || source.origin !== photo.origin) return false;
+    image.onerror = () => { figure.hidden = true; };
+    image.src = photo.href;
+    sourceLink.href = source.href;
+    figure.hidden = false;
+    return true;
+  } catch { return false; }
+}
+async function loadHeroPhoto(qs, version) {
+  const figure = $("parcel-photo");
+  try {
+    const data = await api(`/api/v1/parcel-photo?${qs}`);
+    if (version !== viewVersion) return;
+    setAssessorPhoto(figure, $("parcel-photo-image"), $("parcel-photo-source"), data);
+  } catch { if (version === viewVersion) figure.hidden = true; }
 }
 function shortDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "")) return value ?? "";
@@ -830,6 +859,8 @@ function renderSnapshot() {
 async function choose(item, searchedQuery = null) {
   const version = ++viewVersion;
   resetMap();
+  $("parcel-photo").hidden = true;
+  $("parcel-photo-image").removeAttribute("src");
   selected = item;
   searchedAddress = searchedQuery &&
     ["parcel-address", "address-point-intersection"].includes(item.match?.method)
@@ -880,6 +911,7 @@ async function choose(item, searchedQuery = null) {
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
     const tasks = [];
+    tasks.push(loadHeroPhoto(qs, version));
     tasks.push(loadMap(qs, version));
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
@@ -1031,6 +1063,8 @@ async function loadMapContext(map, qs, version, parcelBounds) {
         ? `Within ${(layer.search_radius_m ?? context.nearby_radius_m).toLocaleString()} m · `
         : "On parcel · ";
       row.append(el("p", `${extent}${layer.features.length} mapped · ${layer.status.replaceAll("_", " ")}`, "map-layer-meta"));
+      if (layer.id === "metered-parking-spaces" && layer.status === "no_records")
+        row.append(el("p", "No City mapped meters within 400 m of this parcel; there are no markers to turn on.", "map-layer-meta"));
       if (layer.source_updated_at)
         row.append(el("p", `Source data last edited ${shortDate(layer.source_updated_at)}`, "map-layer-meta"));
       else row.append(el("p", "Source update date unavailable", "map-layer-meta"));
@@ -1052,7 +1086,7 @@ async function loadMapContext(map, qs, version, parcelBounds) {
     }
     const notes = $("map-context-notes");
     notes.replaceChildren();
-    notes.append(el("p", "Nearby transit stops cover 400 metres and mapped metered spaces cover 1 kilometre in a straight line from the parcel map center. They are not parcel-linked records.", "meta"));
+    notes.append(el("p", "Nearby transit stops and mapped metered spaces cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.", "meta"));
     const gaps = el("p", null, "meta");
     gaps.append(document.createTextNode("Mapped meters do not show current availability, rates, or restrictions. Loading zones and available spaces are not mapped. "));
     gaps.append(link(context.gaps?.[0]?.source_url, "See City parking maps"));
@@ -1061,6 +1095,125 @@ async function loadMapContext(map, qs, version, parcelBounds) {
     if (version !== viewVersion) return;
     list.replaceChildren(el("p", `Map context unavailable: ${error.message}. The selected parcel boundary remains visible.`, "map-layer-warning"));
   }
+}
+function showExplorerTab(tab) {
+  const browsing = tab === "browse";
+  const url = new URL(location.href);
+  if (browsing) url.searchParams.set("view", "map");
+  else url.searchParams.delete("view");
+  history.replaceState(null, "", `${url.pathname}${url.search}`);
+  $("records-view").hidden = browsing;
+  $("browse-view").hidden = !browsing;
+  $("records-tab").setAttribute("aria-selected", String(!browsing));
+  $("browse-tab").setAttribute("aria-selected", String(browsing));
+  if (browsing) requestAnimationFrame(() => {
+    if (!browseMap) initBrowseMap();
+    else browseMap.invalidateSize();
+  });
+}
+function browseParcelStyle(feature) {
+  const p = feature.properties ?? {};
+  const active = selectedBrowseParcel &&
+    String(p.parcel_id) === String(selectedBrowseParcel.parcel_id) &&
+    String(p.objectid) === String(selectedBrowseParcel.objectid);
+  return { color: active ? "#00d5d8" : "#173e35", weight: active ? 4 : 1.5,
+    fillColor: active ? "#00d5d8" : "#f8c547", fillOpacity: active ? .22 : .04 };
+}
+async function selectBrowseParcel(feature) {
+  const p = feature.properties ?? {};
+  if (p.parcel_id == null || p.objectid == null) return;
+  const version = ++browseSelectionVersion;
+  selectedBrowseParcel = { parcel_id: p.parcel_id, objectid: p.objectid,
+    address: p.address, source_url: p.source_url };
+  browseLayer?.setStyle(browseParcelStyle);
+  const aside = $("browse-selection");
+  const title = p.address?.trim() || `City parcel ${p.parcel_id}`;
+  aside.replaceChildren(el("p", "Selected City parcel", "eyebrow"), el("h2", title),
+    el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "meta"),
+    el("p", "Checking the verified assessor card for a building photo…", "meta"));
+  aside.append(link(p.source_url, "Open City parcel source"));
+  const button = el("button", "Request parcel data");
+  button.type = "button";
+  button.addEventListener("click", () => {
+    showExplorerTab("records");
+    void choose({ parcel_id: p.parcel_id, objectid: p.objectid,
+      address: p.address, match: { method: "map-selection" } });
+  });
+  aside.append(button);
+  try {
+    const qs = new URLSearchParams({ parcel_id: p.parcel_id, objectid: p.objectid });
+    const data = await api(`/api/v1/parcel-photo?${qs}`);
+    if (version !== browseSelectionVersion) return;
+    aside.querySelector(".meta:last-of-type")?.remove();
+    if (data.status !== "ok") {
+      aside.insertBefore(el("p", "The verified assessor card has no building photo for this parcel.", "meta"), button);
+      return;
+    }
+    const figure = el("figure", null, "parcel-photo");
+    const image = document.createElement("img");
+    image.alt = "Building photo from the verified City assessor card";
+    const caption = el("figcaption", "Assessor building photo · date not published. ");
+    const source = el("a", "View assessor card");
+    source.target = "_blank";
+    source.rel = "noopener noreferrer";
+    caption.append(source);
+    figure.append(image, caption);
+    if (setAssessorPhoto(figure, image, source, data)) aside.insertBefore(figure, button);
+  } catch {
+    if (version === browseSelectionVersion) {
+      aside.querySelector(".meta:last-of-type")?.remove();
+      aside.insertBefore(el("p", "Assessor photo unavailable; the City parcel selection remains available.", "meta"), button);
+    }
+  }
+}
+async function loadBrowseParcels() {
+  if (!browseMap) return;
+  const version = ++browseRequestVersion;
+  const status = $("browse-map-status");
+  if (browseMap.getZoom() < 17) {
+    if (browseLayer) browseMap.removeLayer(browseLayer);
+    browseLayer = null;
+    status.textContent = "Zoom in to level 17 to display City parcel outlines.";
+    return;
+  }
+  const bounds = browseMap.getBounds();
+  const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+  status.textContent = "Loading City parcel outlines for this map view…";
+  try {
+    const data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox })}`);
+    if (version !== browseRequestVersion || !browseMap) return;
+    if (browseLayer) browseMap.removeLayer(browseLayer);
+    browseLayer = window.L.geoJSON({ type: "FeatureCollection", features: data.features }, {
+      style: browseParcelStyle,
+      onEachFeature: (feature, layer) => layer.on("click", () => { void selectBrowseParcel(feature); }),
+    }).addTo(browseMap);
+    status.textContent = data.warning ?? (data.features.length
+      ? `${data.features.length} City parcel outlines in view. Select one to preview it; full records have not been requested.`
+      : "No City parcel outlines returned for this view.");
+  } catch (error) {
+    if (version === browseRequestVersion)
+      status.textContent = `Could not load City parcel outlines: ${error.message}`;
+  }
+}
+function initBrowseMap() {
+  if (browseMap) return;
+  const leaflet = window.L;
+  if (!leaflet) {
+    $("browse-map-status").textContent = "Map renderer unavailable.";
+    return;
+  }
+  browseMap = leaflet.map($("browse-map"), { scrollWheelZoom: false, keyboard: true });
+  leaflet.tileLayer(AERIAL_TILES, {
+    maxZoom: 21, maxNativeZoom: 21,
+    attribution: '<a href="https://maps.cteco.uconn.edu/data/flight2023/" target="_blank" rel="noopener noreferrer">2023 aerial imagery · CT ECO</a>',
+  }).addTo(browseMap);
+  browseMap.setView([41.3083, -72.9279], 17);
+  browseMap.on("moveend", () => {
+    clearTimeout(browseTimer);
+    browseTimer = setTimeout(() => { void loadBrowseParcels(); }, 250);
+  });
+  leaflet.control.scale({ metric: false, imperial: true }).addTo(browseMap);
+  void loadBrowseParcels();
 }
 async function loadGroup(id, section, qs, version, cursor = null) {
   try {
@@ -1183,6 +1336,7 @@ $("search-form").addEventListener("submit", async (event) => {
   selected = null;
   groupResponses.clear();
   resetMap();
+  $("parcel-photo").hidden = true;
   $("parcel-summary").hidden = true;
   $("snapshot").hidden = true;
   $("feed-section").hidden = true;
@@ -1229,8 +1383,18 @@ $("search-form").addEventListener("submit", async (event) => {
     if (version === viewVersion) status(error.message);
   }
 });
+$("records-tab").addEventListener("click", () => showExplorerTab("records"));
+$("browse-tab").addEventListener("click", () => showExplorerTab("browse"));
+$("records-tab").parentElement.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const target = event.key === "Home" || event.key === "ArrowLeft" ? $("records-tab") : $("browse-tab");
+  target.focus();
+  target.click();
+});
 const initial = new URL(location.href).searchParams;
-if (initial.has("parcel_id")) {
+if (initial.get("view") === "map") showExplorerTab("browse");
+if (initial.has("parcel_id") && initial.get("view") !== "map") {
   const restore = async () => {
     const startingVersion = viewVersion;
     const original = initial.get("query_address");
