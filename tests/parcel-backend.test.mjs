@@ -698,8 +698,9 @@ test("verified municipal permit details expose fees and reviews once with explic
           Application_ID: 22797, PermitNo: "P-22-00708", Department: "Plumbing", PermStatus: "Issued",
           FullOnlyField: "official full row" }] });
       if (u.searchParams.get("entity") === "Application")
-        return response({ rows: [{ Application_ID: 22797, Parcel_ID: 22232,
-          PrintKey: "12 34", ApplicaNo: "P-22-00708", ApplicationStatus: "Approved" }] });
+        return response({ rows: [{ Application_ID: 22797,
+          PrintKey: "12 34", ApplicaNo: "P-22-00708", ApplicationStatus: "Approved",
+          FullOnlyApplicationField: "full application row" }] });
     }
     if (u.pathname.endsWith("/Parcel/22232/Children"))
       return response({ Permit: [{ Permit_ID: 569338, Application_ID: 22797, PermitNo: "P-22-00708" }],
@@ -724,6 +725,7 @@ test("verified municipal permit details expose fees and reviews once with explic
   const result = await permitDetails(parcel(id), "569338");
   assert.equal(result.permit.attributes.FullOnlyField, "official full row");
   assert.equal(result.application.attributes.ApplicationStatus, "Approved");
+  assert.equal(result.application.attributes.FullOnlyApplicationField, "full application row");
   assert.equal(result.items.filter((item) => item.category === "Fee").length, 1);
   assert.equal(result.items.find((item) => item.category === "Task").linked_from.length, 2);
   assert.equal(result.category_counts.Document, 1);
@@ -745,6 +747,29 @@ test("verified municipal permit details expose fees and reviews once with explic
   const mcpText = await mcp.text();
   const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
   assert.deepEqual(payload.result.structuredContent, await rest.json());
+});
+
+test("a linked application search without parcel ID needs a matching parcel child", async () => {
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data")) {
+      if (u.searchParams.get("entity") === "Parcel")
+        return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 555 }] });
+      if (u.searchParams.get("entity") === "Permit")
+        return response({ rows: [{ Permit_ID: 1001, Parcel_ID: 555, PrintKey: "12 34", Application_ID: 2001 }] });
+      return response({ rows: [{ Application_ID: 2001, PrintKey: "12 34", ApplicationNumber: "A-1" }] });
+    }
+    if (u.pathname.endsWith("/Parcel/555/Children"))
+      return response({ Permit: [{ Permit_ID: 1001, Application_ID: 2001 }] });
+    if (u.pathname.endsWith("/Permit/1001/Children")) return response({ Fee: [] });
+    if (u.pathname.endsWith("/Application/2001/Children"))
+      return response({ Fee: [{ Fee_ID: 9001, Amount: "999" }] });
+    throw Error(`Unexpected source: ${u}`);
+  };
+  const result = await permitDetails(parcel(999071), "1001");
+  assert.equal(result.application, null);
+  assert.equal(result.partial, true);
+  assert.equal(result.items.length, 0);
 });
 
 test("municipal occupants use only public fields attached to the verified parcel", async () => {

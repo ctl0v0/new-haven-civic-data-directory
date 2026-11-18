@@ -65,12 +65,14 @@ function searchUrl(kind, entityId) {
   })) url.searchParams.set(key, value);
   return url;
 }
-async function fullEntity(kind, entityId, vendorParcelId, key) {
+async function fullEntity(kind, entityId, vendorParcelId, key, listedOnParcel) {
   const data = await fetchJson(searchUrl(kind, entityId), OPTIONS);
   if (!Array.isArray(data.rows) || data.rows.length !== 1) return null;
   const row = data.rows[0];
-  return id(row?.[`${kind}_ID`]) === entityId &&
-    id(row.Parcel_ID) === vendorParcelId && String(row.PrintKey ?? "").trim().toUpperCase() === key
+  const parcelMatches = id(row.Parcel_ID) === vendorParcelId ||
+    (kind === "Application" && row.Parcel_ID == null && listedOnParcel);
+  return id(row?.[`${kind}_ID`]) === entityId && parcelMatches &&
+    String(row.PrintKey ?? "").trim().toUpperCase() === key
     ? row : null;
 }
 function entityRecord(kind, row, match) {
@@ -99,7 +101,7 @@ export async function permitDetails(parcel, permitId) {
     if (applicationId) targets.push({ kind: "Application", entityId: applicationId, listed: listedApplication });
     const checks = await Promise.all(targets.map(async (target) => {
       const [entity, children] = await Promise.allSettled([
-        fullEntity(target.kind, target.entityId, vendorParcelId, key),
+        fullEntity(target.kind, target.entityId, vendorParcelId, key, Boolean(target.listed)),
         fetchJson(`${API}/Customer/NewHavenCityCT/${target.kind}/${target.entityId}/Children`, OPTIONS),
       ]);
       const verified = entity.status === "fulfilled" ? entity.value : null;
