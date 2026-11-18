@@ -44,6 +44,25 @@ export default {
         return Response.json({ error: error.message }, { headers: { "Cache-Control": "private, no-store" } });
       }
     }
+    if (mode === "links") {
+      const search = new URL("https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data");
+      for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT", entity: "Permit", entity_id: "", fieldtype: "text", mapid: "", mapobject: "", module: "", numrecs: "5", operator: "=", pid: "", searchfield: "Permit_ID", section: "", value: "569338" }))
+        search.searchParams.set(key, value);
+      const parent = (await fetchJson(search, OPTIONS)).rows?.[0];
+      const appId = Number(parent?.Application_ID);
+      const appChildren = Number.isSafeInteger(appId) && appId > 0
+        ? await fetchJson(`https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Application/${appId}/Children`, OPTIONS).catch((error) => ({ error: error.message })) : null;
+      const parcelChildren = await fetchJson(`https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/Parcel/${Number(parent.Parcel_ID)}/Children`, OPTIONS);
+      const parcelPermit = (parcelChildren.Permit ?? []).find((row) => Number(row.Permit_ID) === 569338);
+      const parcelApplication = (parcelChildren.Application ?? []).find((row) => Number(row.Application_ID) === appId);
+      return Response.json({
+        parent: Object.fromEntries(["Permit_ID", "Parcel_ID", "Application_ID", "ApplicationNumber", "ApplicaNo", "PermitNo", "Department", "PermStatus", "PermitType", "PermitDate", "ApplicaDate1", "PrintKey", "LegalAddress"].map((key) => [key, parent?.[key] ?? null])),
+        parcel_permit_found: Boolean(parcelPermit), parcel_permit_field_count: parcelPermit ? Object.keys(parcelPermit).length : 0,
+        parcel_application_found: Boolean(parcelApplication), parcel_application_field_count: parcelApplication ? Object.keys(parcelApplication).length : 0,
+        application_children: appChildren ? describe(appChildren) : null,
+        application_review_rows: (appChildren?.Task ?? []).slice(0, 10).map((row) => Object.fromEntries(["Task_ID", "Entity", "Entity_ID", "TaskType", "Subject", "ApprovalStatus", "DateCompleted", "Deleted"].map((key) => [key, row[key] ?? null]))),
+      }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     const checks = await Promise.all(["", "/Children"].map(async (suffix) => {
       try {
         const data = await fetchJson(BASE + suffix, OPTIONS);
