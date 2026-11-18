@@ -64,10 +64,13 @@ const municipalCategoryTitles = {
 let parcelMap = null;
 let browseMap = null;
 let browseLayer = null;
+let browseSelectedLayer = null;
+let browseContextLayers = [];
 let browseTimer = null;
 let browseRequestVersion = 0;
 let browseSelectionVersion = 0;
 let selectedBrowseParcel = null;
+let requestedParcelKey = null;
 const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
 const STREET_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
 const MAP_COLORS = {
@@ -118,6 +121,31 @@ function link(url, label) {
 }
 function status(message) {
   $("status").textContent = message;
+  $("browse-data-status").textContent = message;
+}
+function parcelKey(item) {
+  return `${item?.parcel_id ?? ""}:${item?.objectid ?? ""}`;
+}
+function selectedQuery() {
+  const qs = new URLSearchParams({ parcel_id: selected.parcel_id });
+  if (selected.objectid) qs.set("objectid", selected.objectid);
+  if (searchedAddress) qs.set("query_address", searchedAddress);
+  return qs;
+}
+function placeRecordContent(browsing) {
+  (browsing ? $("browse-data-slot") : $("record-content-home"))
+    .append($("record-content"));
+}
+function clearBrowseDataMap() {
+  if (browseMap) {
+    if (browseSelectedLayer) browseMap.removeLayer(browseSelectedLayer);
+    for (const layer of browseContextLayers) browseMap.removeLayer(layer);
+  }
+  browseSelectedLayer = null;
+  browseContextLayers = [];
+  $("browse-map-layers").hidden = true;
+  $("browse-map-layer-list").replaceChildren();
+  $("browse-map-context-notes").replaceChildren();
 }
 function resetMap() {
   if (parcelMap) {
@@ -881,12 +909,17 @@ function renderSnapshot() {
     environmental.append(el("p", "A listing or missing row does not establish present site conditions. Check the linked source for its update date.", "snapshot-caveat"));
   }
 }
-async function choose(item, searchedQuery = null) {
+async function choose(item, searchedQuery = null, viewer = "records") {
   const version = ++viewVersion;
+  const browsing = viewer === "browse";
   resetMap();
+  clearBrowseDataMap();
+  placeRecordContent(browsing);
+  $("record-content").hidden = false;
   $("parcel-photo").hidden = true;
   $("parcel-photo-image").removeAttribute("src");
   selected = item;
+  requestedParcelKey = null;
   searchedAddress = searchedQuery &&
     ["parcel-address", "address-point-intersection"].includes(item.match?.method)
     ? searchedQuery.trim() : "";
@@ -895,7 +928,7 @@ async function choose(item, searchedQuery = null) {
   history.replaceState(
     null,
     "",
-    `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}${searchedAddress ? `&query_address=${encodeURIComponent(searchedAddress)}` : ""}`,
+    `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}${searchedAddress ? `&query_address=${encodeURIComponent(searchedAddress)}` : ""}${browsing ? "&view=map" : ""}`,
   );
   $("groups").replaceChildren();
   $("group-nav").replaceChildren();
@@ -910,6 +943,8 @@ async function choose(item, searchedQuery = null) {
     if (searchedAddress) qs.set("query_address", searchedAddress);
     const summary = await api(`/api/v1/parcel?${qs}`);
     if (version !== viewVersion) return;
+    requestedParcelKey = parcelKey(summary.parcel);
+    if (browsing) $("browse-intro").textContent = "Official records for the selected parcel are below.";
     $("parcel-summary").hidden = false;
     $("snapshot").hidden = !SHOW_SNAPSHOT;
     $("parcel-title").textContent =
@@ -936,8 +971,8 @@ async function choose(item, searchedQuery = null) {
     timelineLink.href = "#feed-section";
     $("group-nav").append(timelineLink);
     const tasks = [];
-    tasks.push(loadHeroPhoto(qs, version));
-    tasks.push(loadMap(qs, version));
+    if (!browsing) tasks.push(loadHeroPhoto(qs, version));
+    tasks.push(browsing ? loadBrowseSelectedMap(qs, version) : loadMap(qs, version));
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
       section.id = `group-${id}`;
@@ -953,7 +988,7 @@ async function choose(item, searchedQuery = null) {
     await Promise.allSettled(tasks);
     if (version === viewVersion) status("Records loaded. Open a record to inspect its source fields.");
   } catch (error) {
-    status(error.message);
+    if (version === viewVersion) status(error.message);
   }
 }
 async function loadMap(qs, version) {
@@ -1020,6 +1055,36 @@ async function loadMap(qs, version) {
     $("parcel-map-status").textContent = `Could not show the parcel map: ${error.message}`;
   }
 }
+async function loadBrowseSelectedMap(qs, version, recenter = false) {
+  const layersPanel = $("browse-map-layers");
+  layersPanel.hidden = false;
+  layersPanel.open = false;
+  const list = $("browse-map-layer-list");
+  list.replaceChildren(el("p", "Loading the selected City parcel boundary…", "meta"));
+  try {
+    const feature = await api(`/api/v1/geometry?${qs}`);
+    if (version !== viewVersion || !browseMap) return;
+    if (parcelKey(selectedBrowseParcel) !== parcelKey(feature.properties))
+      void selectBrowseParcel(feature);
+    if (!browseMap.getPane("selected-boundary")) {
+      browseMap.createPane("selected-boundary");
+      browseMap.getPane("selected-boundary").style.zIndex = 390;
+    }
+    browseSelectedLayer = window.L.geoJSON(feature, {
+      pane: "selected-boundary", interactive: false,
+      style: { color: "#00a8ad", weight: 4, fillColor: "#00d5d8", fillOpacity: .1 },
+    }).addTo(browseMap);
+    const bounds = browseSelectedLayer.getBounds();
+    if (!bounds.isValid()) throw Error("City parcel boundary has no map extent");
+    if (recenter) browseMap.fitBounds(bounds.pad(2), { maxZoom: 18 });
+    browseContextLayers = await loadMapContext(browseMap, qs, version, bounds, {
+      list, notes: $("browse-map-context-notes"),
+    });
+  } catch (error) {
+    if (version !== viewVersion) return;
+    list.replaceChildren(el("p", `Could not show selected parcel layers: ${error.message}`, "map-layer-warning"));
+  }
+}
 function mapFeatureTitle(feature, layerId) {
   const p = feature.properties ?? {};
   if (layerId === "parcel-addresses") return `${p.house_number ?? ""} ${p.full_street_name ?? ""}`.trim() || "City address point";
@@ -1065,13 +1130,15 @@ function mapFeatureLayer(layer) {
     onEachFeature: (feature, leafletLayer) => leafletLayer.bindPopup(mapFeaturePopup(feature, layer)),
   });
 }
-async function loadMapContext(map, qs, version, parcelBounds) {
-  const list = $("map-layer-list");
+async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
+  const list = targets.list ?? $("map-layer-list");
+  const notes = targets.notes ?? $("map-context-notes");
   list.replaceChildren(el("p", "Loading official map layers…", "meta"));
   try {
     const context = await api(`/api/v1/map-context?${qs}`);
-    if (version !== viewVersion || map !== parcelMap) return;
+    if (version !== viewVersion || (map !== parcelMap && map !== browseMap)) return [];
     list.replaceChildren();
+    const renderedLayers = [];
     for (const layer of context.layers) {
       const row = el("div", null, "map-layer-row");
       const title = el("label", null, "map-layer-toggle");
@@ -1101,6 +1168,7 @@ async function loadMapContext(map, qs, version, parcelBounds) {
       list.append(row);
       if (!layer.features.length) continue;
       const rendered = mapFeatureLayer(layer);
+      renderedLayers.push(rendered);
       if (checkbox.checked) rendered.addTo(map);
       checkbox.addEventListener("change", () => {
         if (checkbox.checked) {
@@ -1111,16 +1179,17 @@ async function loadMapContext(map, qs, version, parcelBounds) {
         else map.removeLayer(rendered);
       });
     }
-    const notes = $("map-context-notes");
     notes.replaceChildren();
     notes.append(el("p", "Nearby transit stops and mapped metered spaces cover 400 metres in a straight line from the parcel map center. They are not parcel-linked records.", "meta"));
     const gaps = el("p", null, "meta");
     gaps.append(document.createTextNode("Mapped meters do not show current availability, rates, or restrictions. Loading zones and available spaces are not mapped. "));
     gaps.append(link(context.gaps?.[0]?.source_url, "See City parking maps"));
     notes.append(gaps);
+    return renderedLayers;
   } catch (error) {
-    if (version !== viewVersion) return;
+    if (version !== viewVersion) return [];
     list.replaceChildren(el("p", `Map context unavailable: ${error.message}. The selected parcel boundary remains visible.`, "map-layer-warning"));
+    return [];
   }
 }
 function showExplorerTab(tab) {
@@ -1132,11 +1201,19 @@ function showExplorerTab(tab) {
   history.replaceState(null, "", `${url.pathname}${url.search}`);
   $("records-view").hidden = browsing;
   $("browse-view").hidden = !browsing;
+  placeRecordContent(browsing);
   $("records-tab").setAttribute("aria-selected", String(!browsing));
   $("browse-tab").setAttribute("aria-selected", String(browsing));
   if (browsing) requestAnimationFrame(() => {
     if (!browseMap) initBrowseMap();
     else browseMap.invalidateSize();
+    if (selected && requestedParcelKey === parcelKey(selected) && !browseSelectedLayer) {
+      void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
+    }
+  });
+  else if (selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
+    if (parcelMap) parcelMap.invalidateSize();
+    else void loadMap(selectedQuery(), viewVersion);
   });
 }
 function browseParcelStyle(feature) {
@@ -1150,6 +1227,17 @@ function browseParcelStyle(feature) {
 async function selectBrowseParcel(feature) {
   const p = feature.properties ?? {};
   if (p.parcel_id == null || p.objectid == null) return;
+  const key = parcelKey(p);
+  if (selected && parcelKey(selected) !== key) {
+    ++viewVersion;
+    selected = null;
+    requestedParcelKey = null;
+    $("record-content").hidden = true;
+    $("browse-data-status").textContent = "";
+    $("browse-intro").textContent = "Select Request parcel data to load the full records for this parcel.";
+    clearBrowseDataMap();
+    resetMap();
+  }
   const version = ++browseSelectionVersion;
   selectedBrowseParcel = { parcel_id: p.parcel_id, objectid: p.objectid,
     address: p.address, source_url: p.source_url };
@@ -1162,12 +1250,20 @@ async function selectBrowseParcel(feature) {
     el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "meta"),
     el("p", "Checking official parcel photo sources…", "meta"));
   aside.append(link(p.source_url, "Open City parcel source"));
-  const button = el("button", "Request parcel data");
+  const button = el("button", requestedParcelKey === key ? "Refresh parcel data" : "Request parcel data");
   button.type = "button";
-  button.addEventListener("click", () => {
-    showExplorerTab("records");
-    void choose({ parcel_id: p.parcel_id, objectid: p.objectid,
-      address: p.address, match: { method: "map-selection" } });
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Loading parcel data…";
+    try {
+      await choose({ parcel_id: p.parcel_id, objectid: p.objectid,
+        address: p.address, match: { method: "map-selection" } }, null, "browse");
+    } finally {
+      if (version === browseSelectionVersion) {
+        button.disabled = false;
+        button.textContent = requestedParcelKey === key ? "Refresh parcel data" : "Request parcel data";
+      }
+    }
   });
   aside.append(button);
   try {
@@ -1363,6 +1459,8 @@ $("search-form").addEventListener("submit", async (event) => {
   selected = null;
   groupResponses.clear();
   resetMap();
+  $("record-content").hidden = true;
+  requestedParcelKey = null;
   $("parcel-photo").hidden = true;
   $("parcel-summary").hidden = true;
   $("snapshot").hidden = true;
@@ -1412,6 +1510,12 @@ $("search-form").addEventListener("submit", async (event) => {
 });
 $("records-tab").addEventListener("click", () => showExplorerTab("records"));
 $("browse-tab").addEventListener("click", () => showExplorerTab("browse"));
+$("browse-panel-toggle").addEventListener("click", () => {
+  const expanded = document.body.classList.toggle("browse-expanded");
+  $("browse-panel-toggle").setAttribute("aria-expanded", String(expanded));
+  $("browse-panel-toggle").textContent = expanded ? "Narrow panel" : "Expand panel";
+  requestAnimationFrame(() => browseMap?.invalidateSize());
+});
 $("records-tab").parentElement.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
@@ -1420,7 +1524,22 @@ $("records-tab").parentElement.addEventListener("keydown", (event) => {
   target.click();
 });
 const initial = new URL(location.href).searchParams;
-if (initial.get("view") === "map") showExplorerTab("browse");
+if (initial.get("view") === "map") {
+  showExplorerTab("browse");
+  if (initial.has("parcel_id")) requestAnimationFrame(async () => {
+    try {
+      const qs = new URLSearchParams({ parcel_id: initial.get("parcel_id") });
+      if (initial.has("objectid")) qs.set("objectid", initial.get("objectid"));
+      const feature = await api(`/api/v1/geometry?${qs}`);
+      if (!browseMap || !feature?.geometry || !feature?.properties) return;
+      const bounds = window.L.geoJSON(feature).getBounds();
+      if (bounds.isValid()) browseMap.fitBounds(bounds.pad(2), { maxZoom: 18 });
+      await selectBrowseParcel(feature);
+    } catch (error) {
+      $("browse-map-status").textContent = `Could not restore this City parcel: ${error.message}`;
+    }
+  });
+}
 if (initial.has("parcel_id") && initial.get("view") !== "map") {
   const restore = async () => {
     const startingVersion = viewVersion;

@@ -247,6 +247,10 @@ test("pilot login creates a private page session", async () => {
   assert.match(html, /id="parcel-map"/);
   assert.match(html, /id="browse-tab"/);
   assert.match(html, /id="browse-map"/);
+  assert.match(html, /id="browse-data-slot"/);
+  assert.match(html, /id="browse-map-layer-list"/);
+  assert.match(html, /id="browse-panel-toggle"/);
+  assert.match(html, /id="record-content"/);
   assert.match(html, /id="parcel-photo-image"/);
   assert.match(html, /\/leaflet\/leaflet\.js/);
   assert.match(page.headers.get("content-security-policy"), /img-src 'self' data: https:\/\/cteco\.uconn\.edu/);

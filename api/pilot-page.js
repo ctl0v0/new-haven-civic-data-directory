@@ -28,6 +28,7 @@ const app = `
     <p id="status" role="status" aria-live="polite"></p>
   </section>
   <section id="candidates" class="panel" hidden><h2>Choose a parcel</h2><p>More than one city parcel may match an address. Review the listed address before choosing.</p><div id="candidate-list"></div></section>
+  <div id="record-content-home"><div id="record-content" hidden>
   <section id="parcel-summary" class="parcel-hero" hidden>
     <div class="parcel-hero-layout"><div class="parcel-hero-copy">
       <p class="eyebrow">City parcel record</p>
@@ -61,14 +62,18 @@ const app = `
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
   </section>
   <div id="groups" class="record-groups"></div>
+  </div></div>
   </div>
   <section id="browse-view" role="tabpanel" aria-labelledby="browse-tab" hidden>
     <div class="browse-workspace">
       <aside class="browse-sidebar">
         <p class="eyebrow">Official City parcel layer</p>
-        <h1>Browse parcels</h1>
-        <p>Pan and zoom, then select a parcel. Full records load only after you request them.</p>
+        <div class="browse-sidebar-heading"><h1>Browse parcels</h1><button id="browse-panel-toggle" type="button" class="secondary" aria-expanded="false">Expand panel</button></div>
+        <p id="browse-intro">Pan and zoom, then select a parcel. Full records load only after you request them.</p>
         <div id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and official photo.</p></div>
+        <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
+        <details id="browse-map-layers" class="browse-map-layers" hidden><summary>Map layers and sources</summary><p class="meta">The highlighted boundary is the selected City parcel. Nearby features are map context.</p><div id="browse-map-layer-list"></div><div id="browse-map-context-notes" class="map-context-notes"></div></details>
+        <div id="browse-data-slot"></div>
         <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
         <p class="meta">Parcel boundaries and labels: New Haven GIS. Background: Esri street map or CT ECO aerial imagery. A municipal street-view or assessor building photo appears only after an exact parcel match. Images do not establish current conditions.</p>
       </aside>
