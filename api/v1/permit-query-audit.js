@@ -1,4 +1,5 @@
-import { fetchJson } from "../../parcel/http.js";
+import { arcgis, fetchJson } from "../../parcel/http.js";
+import { LAYERS } from "../../parcel/config.js";
 
 const BASE = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
 const OPTS = { headers: { SourceId: "2" }, timeout: 12000, maxBytes: 10_000_000 };
@@ -36,13 +37,22 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "neighborhood-schema") {
+      const [metadata, sample] = await Promise.all([
+        fetchJson(`${LAYERS.neighborhoods}?f=json`, OPTS),
+        arcgis(LAYERS.neighborhoods, { where: "1=1", outFields: "*", resultRecordCount: "5" }),
+      ]);
+      return Response.json({ fields: metadata.fields?.map((field) => field.name),
+        samples: sample.features?.map((feature) => feature.attributes) },
+      { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "recent-candidates") {
       const url = new URL(BASE);
       for (const [key, entry] of Object.entries({ Customer: "NewHavenCityCT", entity: "Permit",
         entity_id: "", fieldtype: "text", mapid: "", mapobject: "", module: "",
-        numrecs: "1000", operator: "=", pid: "", searchfield: "PermitType",
+        numrecs: "2000", operator: "=", pid: "", searchfield: "PermitType",
         section: "", value: "Water Heater" })) url.searchParams.set(key, entry);
-      const data = await fetchJson(url, { ...OPTS, maxBytes: 20_000_000, timeout: 20000 });
+      const data = await fetchJson(url, { ...OPTS, maxBytes: 35_000_000, timeout: 25000 });
       const rows = Array.isArray(data.rows) ? data.rows : [];
       const recent = rows.filter((row) => String(row.PermitDate ?? "") >= "2026-08-20");
       return Response.json({ total: data.total, returned: rows.length,
