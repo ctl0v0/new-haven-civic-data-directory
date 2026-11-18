@@ -577,9 +577,8 @@ async function assessorRecord(parcel) {
   const { attributes, buildingFacts, url } = await assessorData(parcel);
   return result("assessor", [
     record(id, "assessor", { ...attributes, building_facts: buildingFacts }, {
-      eventDate: date(attributes.lblSaleDate),
       sourceUrl: url,
-      note: "Vision card fields are displayed as published; assessed values are not tax bills.",
+      note: "Vision card fields are displayed as published; assessed values are not tax bills. Published sale dates appear as separate Ownership History events.",
     }),
   ]);
 }

@@ -41,11 +41,11 @@ export const SOURCES = Object.freeze([
   {
     id: "assessor-owner",
     group: "ownership",
-    title: "Assessor card owner name",
+    title: "Assessor card owner, co-owner and mailing address",
     url: "https://gis.vgsi.com/newhavenct/",
     mode: "live",
     coverage:
-      "Owner name from the Vision assessor card after its PID matches this parcel. It may differ from the City GIS owner field and does not by itself establish a complete title chain.",
+      "Owner, co-owner when present, and mailing-address lines from the Vision assessor card after its PID matches this parcel. They may differ from the City GIS fields and do not establish a complete title chain.",
     directoryId: "assessor",
   },
   {

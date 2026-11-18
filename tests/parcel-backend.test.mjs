@@ -712,6 +712,7 @@ test("assessor ownership and valuation tables become separate parcel records", a
   ]);
   assert.equal(calls, 1);
   assert.equal(card.items[0].attributes.lblOwner, "Example Owner LLC");
+  assert.equal(card.items[0].event_date, null);
   assert.deepEqual(card.items[0].attributes.building_facts, {
     building_count: 1,
     year_built: 1910,
