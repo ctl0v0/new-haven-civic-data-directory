@@ -1,5 +1,7 @@
 import { arcgis, fetchJson } from "../../parcel/http.js";
 import { LAYERS } from "../../parcel/config.js";
+import { permitDetails } from "../../parcel/permit-details.js";
+import { getSourceRecords } from "../../parcel/adapters.js";
 
 const BASE = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
 const OPTS = { headers: { SourceId: "2" }, timeout: 12000, maxBytes: 10_000_000 };
@@ -37,6 +39,58 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "westville-details") {
+      const expected = [
+        { parcel_id: 25642, objectid: 15603, permit_id: 590395, print_key: "417 1239 00500" },
+        { parcel_id: 25317, objectid: 26456, permit_id: 589760, print_key: "409 1244 00400" },
+        { parcel_id: 25080, objectid: 9288, permit_id: 590645, print_key: "405 1241 02100" },
+      ];
+      const city = await arcgis(LAYERS.parcels, {
+        where: `parcel_id IN (${expected.map((item) => item.parcel_id).join(",")})`,
+        outFields: "*", returnGeometry: "true", outSR: "4326", resultRecordCount: "10",
+      });
+      const results = await Promise.all(expected.map(async (item) => {
+        const feature = (city.features ?? []).find((candidate) =>
+          Number(candidate.attributes?.parcel_id) === item.parcel_id &&
+          Number(candidate.attributes?.objectid) === item.objectid &&
+          String(candidate.attributes?.mblu ?? "").replaceAll("/", " ").trim() === item.print_key);
+        if (!feature) return { parcel_id: item.parcel_id, error: "City parcel identity mismatch" };
+        const neighborhoods = await getSourceRecords("neighborhoods", feature);
+        const westville = neighborhoods.items.some((row) => row.attributes.neighborhood === "WESTVILLE");
+        if (!westville) return { parcel_id: item.parcel_id, error: "No Westville polygon intersection" };
+        const detail = await permitDetails(feature, String(item.permit_id));
+        const app = detail.application?.attributes ?? {};
+        const contactSources = [
+          { entity: "Permit", id: item.permit_id },
+          ...(app.Application_ID ? [{ entity: "Application", id: app.Application_ID }] : []),
+        ];
+        const contacts = await Promise.all(contactSources.map(async (parent) => {
+          const children = await fetchJson(`https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/${parent.entity}/${parent.id}/Children`, OPTS);
+          return (children.Contact ?? []).filter((row) =>
+            ![true, 1, "true", "1"].includes(row.Deleted) &&
+            /contractor/i.test(`${row.ContactRole ?? ""} ${row.ContactType ?? ""}`))
+            .map((row) => ({ parent: `${parent.entity}/${parent.id}`, Contact_ID: row.Contact_ID,
+              Fullname: row.Fullname, CompanyName: row.CompanyName, ContactRole: row.ContactRole,
+              ContactType: row.ContactType, Phone: row.Phone, Email: row.Email,
+              EMailAddress: row.EMailAddress, Addr1: row.Addr1, City: row.City,
+              State: row.State, ZipCode: row.ZipCode, RoleIsPublic: row.Role?.IsPublic }));
+        }));
+        return { parcel_id: item.parcel_id, address: feature.attributes.property_address,
+          permit: { Permit_ID: detail.permit.attributes.Permit_ID,
+            PermitNo: detail.permit.attributes.PermitNo, PermitType: detail.permit.attributes.PermitType,
+            PermStatus: detail.permit.attributes.PermStatus, PermitDate: detail.permit.attributes.PermitDate,
+            LegalAddress: detail.permit.attributes.LegalAddress },
+          application: Object.fromEntries(["Application_ID", "ApplicationNumber", "ApplicationDate",
+            "PermitApplicationStatus", "PermitApplicationStatusUpdated", "ApplicationStatus",
+            "ApplicationStatusUpdated", "DateApproved", "Modified", "CreatedDate"]
+            .map((key) => [key, app[key] ?? null])),
+          review_tasks: detail.items.filter((child) => child.category === "Task")
+            .map((child) => ({ ...child.attributes, linked_from: child.linked_from.map((parent) => `${parent.entity}/${parent.entity_id}`) })),
+          contractor_contacts: contacts.flat(), partial: detail.partial, warnings: detail.warnings,
+        };
+      }));
+      return Response.json({ results }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "westville-candidates") {
       const url = new URL(BASE);
       for (const [key, entry] of Object.entries({ Customer: "NewHavenCityCT", entity: "Permit",
