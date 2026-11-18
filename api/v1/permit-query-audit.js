@@ -37,6 +37,53 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "westville-candidates") {
+      const url = new URL(BASE);
+      for (const [key, entry] of Object.entries({ Customer: "NewHavenCityCT", entity: "Permit",
+        entity_id: "", fieldtype: "text", mapid: "", mapobject: "", module: "",
+        numrecs: "2000", operator: "=", pid: "", searchfield: "PermitType",
+        section: "", value: "Water Heater" })) url.searchParams.set(key, entry);
+      const vendor = await fetchJson(url, { ...OPTS, maxBytes: 35_000_000, timeout: 25000 });
+      const permits = (Array.isArray(vendor.rows) ? vendor.rows : []).filter((row) =>
+        row.PermitType === "Water Heater" && row.PermStatus === "Issued" &&
+        String(row.PermitDate ?? "") >= "2026-08-20");
+      const neighborhood = await arcgis(LAYERS.neighborhoods, {
+        where: "UPPER(neighborhood) = 'WESTVILLE'", outFields: "objectid,neighborhood,neighborhood_label",
+        returnGeometry: "true", outSR: "4326", resultRecordCount: "10",
+      });
+      const zone = neighborhood.features ?? [];
+      if (zone.length !== 1) return Response.json({ neighborhood_matches: zone.length }, { headers: { "Cache-Control": "private, no-store" } });
+      const parcels = [];
+      let truncated = false;
+      for (let offset = 0; offset < 6000; offset += 1000) {
+        const page = await arcgis(LAYERS.parcels, {
+          where: "1=1", geometry: JSON.stringify(zone[0].geometry), geometryType: "esriGeometryPolygon",
+          inSR: "4326", spatialRel: "esriSpatialRelIntersects", outFields: "objectid,parcel_id,mblu,property_address",
+          orderByFields: "objectid", resultOffset: String(offset), resultRecordCount: "1000",
+        });
+        parcels.push(...(page.features ?? []));
+        if (!page.exceededTransferLimit && (page.features ?? []).length < 1000) break;
+        if (offset === 5000) truncated = true;
+      }
+      const key = (value) => String(value ?? "").replaceAll("/", " ").replace(/\s+/g, " ").trim().toUpperCase();
+      const byKey = new Map();
+      for (const feature of parcels) {
+        const normalized = key(feature.attributes?.mblu);
+        if (!normalized) continue;
+        if (!byKey.has(normalized)) byKey.set(normalized, []);
+        byKey.get(normalized).push(feature.attributes);
+      }
+      return Response.json({ vendor_returned: vendor.rows?.length, vendor_limit_reached: vendor.rows?.length === 2000,
+        recent_issued_count: permits.length, neighborhood_objectid: zone[0].attributes.objectid,
+        intersecting_parcels: parcels.length, parcel_query_truncated: truncated,
+        matches: permits.flatMap((permit) => (byKey.get(key(permit.PrintKey)) ?? []).map((parcel) => ({
+          permit_id: permit.Permit_ID, permit_number: permit.PermitNo, permit_date: permit.PermitDate,
+          application_id: permit.Application_ID, legal_address: permit.LegalAddress,
+          print_key: permit.PrintKey, city_parcel_id: parcel.parcel_id,
+          city_objectid: parcel.objectid, city_address: parcel.property_address,
+        }))),
+      }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "neighborhood-schema") {
       const [metadata, sample] = await Promise.all([
         fetchJson(`${LAYERS.neighborhoods}?f=json`, OPTS),
