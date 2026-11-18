@@ -69,12 +69,27 @@ let browseRequestVersion = 0;
 let browseSelectionVersion = 0;
 let selectedBrowseParcel = null;
 const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
+const STREET_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
 const MAP_COLORS = {
   "parcel-addresses": "#dc5c32",
   zoning: "#195e9d",
   "transit-stops": "#2476ba",
   "metered-parking-spaces": "#7550a4",
 };
+function addMapBackgrounds(map) {
+  const leaflet = window.L;
+  const streets = leaflet.tileLayer(STREET_TILES, {
+    maxZoom: 23, maxNativeZoom: 23,
+    attribution: '<a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Street map · Esri and contributors</a>',
+  }).addTo(map);
+  const aerial = leaflet.tileLayer(AERIAL_TILES, {
+    maxZoom: 21, maxNativeZoom: 21,
+    attribution: '<a href="https://maps.cteco.uconn.edu/data/flight2023/" target="_blank" rel="noopener noreferrer">2023 aerial imagery · CT ECO</a>',
+  });
+  leaflet.control.layers({ "Street map": streets, "2023 aerial imagery": aerial }, null,
+    { position: "topright", collapsed: false }).addTo(map);
+  return { streets, aerial };
+}
 async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
   const body = await r
@@ -953,29 +968,31 @@ async function loadMap(qs, version) {
     container.hidden = false;
     const map = leaflet.map(container, { scrollWheelZoom: false, keyboard: true });
     parcelMap = map;
-    let tileLoaded = false;
-    let tileFailed = false;
-    $("parcel-map-status").textContent = "Selected City parcel boundary shown. Loading 2023 aerial imagery…";
-    const aerial = leaflet.tileLayer(AERIAL_TILES, {
-      maxZoom: 21,
-      maxNativeZoom: 21,
-      attribution: '<a href="https://maps.cteco.uconn.edu/data/flight2023/" target="_blank" rel="noopener noreferrer">2023 aerial imagery · CT ECO</a>',
+    let activeBackground = "Street map";
+    $("parcel-map-status").textContent = "Selected City parcel boundary shown. Loading street map…";
+    const { streets, aerial } = addMapBackgrounds(map);
+    streets.on("tileload", () => {
+      if (version !== viewVersion) return;
+      if (activeBackground === "Street map")
+        $("parcel-map-status").textContent = "Selected City parcel boundary over a street map. Aerial imagery is available in the map switcher.";
+    });
+    streets.on("tileerror", () => {
+      if (version !== viewVersion) return;
+      if (activeBackground === "Street map")
+        $("parcel-map-status").textContent = "Some street tiles did not load. The City parcel boundary remains visible.";
     });
     aerial.on("tileload", () => {
-      if (version !== viewVersion) return;
-      tileLoaded = true;
-      $("parcel-map-status").textContent = tileFailed
-        ? "Some aerial tiles did not load. The parcel boundary remains visible."
-        : "Selected City parcel boundary over 2023 aerial imagery.";
+      if (version === viewVersion && activeBackground === "2023 aerial imagery")
+        $("parcel-map-status").textContent = "Selected City parcel boundary over 2023 aerial imagery.";
     });
     aerial.on("tileerror", () => {
-      if (version !== viewVersion) return;
-      tileFailed = true;
-      $("parcel-map-status").textContent = tileLoaded
-        ? "Some aerial tiles did not load. The parcel boundary remains visible."
-        : "Aerial imagery unavailable. The parcel boundary remains visible.";
+      if (version === viewVersion && activeBackground === "2023 aerial imagery")
+        $("parcel-map-status").textContent = "Some aerial tiles did not load. The City parcel boundary remains visible.";
     });
-    aerial.addTo(map);
+    map.on("baselayerchange", ({ name }) => {
+      activeBackground = name;
+      $("parcel-map-status").textContent = `Loading ${name.toLowerCase()} behind the City parcel boundary…`;
+    });
     const casing = leaflet.geoJSON(feature, {
       style: { color: "#173e35", weight: 8, fillOpacity: 0 },
     }).addTo(map);
@@ -1108,6 +1125,7 @@ async function loadMapContext(map, qs, version, parcelBounds) {
 }
 function showExplorerTab(tab) {
   const browsing = tab === "browse";
+  document.body.classList.toggle("browse-mode", browsing);
   const url = new URL(location.href);
   if (browsing) url.searchParams.set("view", "map");
   else url.searchParams.delete("view");
@@ -1137,6 +1155,8 @@ async function selectBrowseParcel(feature) {
     address: p.address, source_url: p.source_url };
   browseLayer?.setStyle(browseParcelStyle);
   const aside = $("browse-selection");
+  if (window.matchMedia("(max-width: 44rem)").matches)
+    aside.scrollIntoView({ behavior: "smooth", block: "start" });
   const title = p.address?.trim() || `City parcel ${p.parcel_id}`;
   aside.replaceChildren(el("p", "Selected City parcel", "eyebrow"), el("h2", title),
     el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "meta"),
@@ -1213,10 +1233,7 @@ function initBrowseMap() {
     return;
   }
   browseMap = leaflet.map($("browse-map"), { scrollWheelZoom: false, keyboard: true });
-  leaflet.tileLayer(AERIAL_TILES, {
-    maxZoom: 21, maxNativeZoom: 21,
-    attribution: '<a href="https://maps.cteco.uconn.edu/data/flight2023/" target="_blank" rel="noopener noreferrer">2023 aerial imagery · CT ECO</a>',
-  }).addTo(browseMap);
+  addMapBackgrounds(browseMap);
   browseMap.setView([41.3083, -72.9279], 17);
   browseMap.on("moveend", () => {
     clearTimeout(browseTimer);

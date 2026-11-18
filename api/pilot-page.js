@@ -48,7 +48,7 @@ const app = `
     </div>
     <p id="parcel-map-status" class="map-status" role="status" aria-live="polite"></p>
     <div id="map-context-notes" class="map-context-notes"></div>
-    <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Background: <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. The imagery does not show current occupancy or conditions.</p>
+    <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Visual backgrounds: <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Esri street map</a> or <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. Backgrounds do not establish parcel facts or current conditions.</p>
   </section>
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="snapshot-title">At a glance</h2></div><p>Plain-language facts from the records below.</p></div>
@@ -63,13 +63,17 @@ const app = `
   <div id="groups" class="record-groups"></div>
   </div>
   <section id="browse-view" role="tabpanel" aria-labelledby="browse-tab" hidden>
-    <div class="section-heading"><div><p class="eyebrow">Official City parcel layer</p><h1>Browse parcels on the map</h1></div><p>Pan and zoom, then select a parcel. Full records load only after you request them.</p></div>
     <div class="browse-workspace">
+      <aside class="browse-sidebar">
+        <p class="eyebrow">Official City parcel layer</p>
+        <h1>Browse parcels</h1>
+        <p>Pan and zoom, then select a parcel. Full records load only after you request them.</p>
+        <div id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and official photo.</p></div>
+        <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
+        <p class="meta">Parcel boundaries and labels: New Haven GIS. Background: Esri street map or CT ECO aerial imagery. A municipal street-view or assessor building photo appears only after an exact parcel match. Images do not establish current conditions.</p>
+      </aside>
       <div id="browse-map" role="region" aria-label="Browse New Haven parcel boundaries" tabindex="0"></div>
-      <aside id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and assessor building photo.</p></aside>
     </div>
-    <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
-    <p class="meta">Parcel boundaries and labels come from the live City GIS parcel layer. Background aerial imagery is from CT ECO. A municipal street-view or assessor building photo is shown only after an exact official parcel match. Neither image establishes current conditions.</p>
   </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>
@@ -101,7 +105,7 @@ export default {
           "Cache-Control": "private, no-store",
           "X-Frame-Options": "DENY",
           "Content-Security-Policy":
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cteco.uconn.edu https://gis.vgsi.com https://www.municitymedia.com; base-uri 'none'; form-action 'self'",
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://cteco.uconn.edu https://server.arcgisonline.com https://gis.vgsi.com https://www.municitymedia.com; base-uri 'none'; form-action 'self'",
         },
       },
     );
