@@ -36,6 +36,26 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "recent-candidates") {
+      const url = new URL(BASE);
+      for (const [key, entry] of Object.entries({ Customer: "NewHavenCityCT", entity: "Permit",
+        entity_id: "", fieldtype: "text", mapid: "", mapobject: "", module: "",
+        numrecs: "1000", operator: "=", pid: "", searchfield: "PermitType",
+        section: "", value: "Water Heater" })) url.searchParams.set(key, entry);
+      const data = await fetchJson(url, { ...OPTS, maxBytes: 20_000_000, timeout: 20000 });
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const recent = rows.filter((row) => String(row.PermitDate ?? "") >= "2026-08-20");
+      return Response.json({ total: data.total, returned: rows.length,
+        recent_count: recent.length,
+        recent: recent.slice(0, 100).map((row) => ({ Permit_ID: row.Permit_ID,
+          Application_ID: row.Application_ID, PermitNo: row.PermitNo,
+          PermStatus: row.PermStatus, PermitType: row.PermitType,
+          PermitDate: row.PermitDate, PrintKey: row.PrintKey,
+          LegalAddress: row.LegalAddress })),
+        years: Object.fromEntries([...new Set(rows.map((row) => String(row.PermitDate ?? "").slice(0, 4)).filter(Boolean))]
+          .map((year) => [year, rows.filter((row) => String(row.PermitDate ?? "").startsWith(year)).length])),
+      }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "scale") {
       const results = await Promise.all([
         search("Permit", "PermitType", "=", "Water Heater", "text", 100),
