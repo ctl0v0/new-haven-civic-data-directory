@@ -7,9 +7,11 @@ import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js"
 import { getGroup, getSourceRecords, pageItems } from "./adapters.js";
 import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords } from "./record-state.js";
 import { permitDetails, applicationDetails } from "./permit-details.js";
+import { searchMunicipalPermits } from "./permit-search.js";
 
 export { resolveParcel };
 export { parcelMapContext };
+export { searchMunicipalPermits };
 
 export async function parcelGeometry(id, objectid = null) {
   return parcelFeatureToGeoJSON(await loadParcel(id, objectid));

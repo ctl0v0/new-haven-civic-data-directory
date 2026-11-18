@@ -12,6 +12,7 @@ import {
   parcelTrashPickup,
   parcelPermitDetails,
   parcelApplicationDetails,
+  searchMunicipalPermits,
   parcelFeed,
   sourceCoverage,
 } from "../parcel/service.js";
@@ -150,7 +151,7 @@ export function createServer() {
     server,
     "get_permit_details",
     "Get municipal permit details",
-    "Return all published fields for a permit on the selected parcel, its explicitly linked application, and public fee, review task, document, contact-role and communication metadata. Child rows are deduplicated by source ID.",
+    "Return all published fields for a permit on the selected parcel, its explicitly linked application, and public fee, review task, inspection, document, contact-role, communication and source-flag metadata. Child rows are deduplicated by source ID.",
     z.object({ ...common, permit_id: z.string().regex(/^\d{1,12}$/) }),
     ({ parcel_id, objectid, permit_id }) => parcelPermitDetails(parcel_id, permit_id, objectid),
   );
@@ -158,9 +159,29 @@ export function createServer() {
     server,
     "get_application_details",
     "Get municipal application details",
-    "Return all published fields for an application on the selected parcel and its public fee, review task, document, contact-role and communication metadata. No permit is inferred from a shared number.",
+    "Return all published fields for an application on the selected parcel and its public fee, review task, inspection, document, contact-role, communication and source-flag metadata. No permit is inferred from a shared number.",
     z.object({ ...common, application_id: z.string().regex(/^\d{1,12}$/) }),
     ({ parcel_id, objectid, application_id }) => parcelApplicationDetails(parcel_id, application_id, objectid),
+  );
+  tool(
+    server,
+    "search_municipal_permits",
+    "Search municipal permits across City neighborhoods",
+    "Search an exact municipal permit type, join official City parcel MBLUs and neighborhood polygons, and optionally filter permit status, linked application status, application review task status/date, and contact role. days_back applies to permit and review completion dates. An approved review task is reported separately from application status; coverage limits are explicit.",
+    z.object({
+      neighborhood: z.string().min(1).max(80),
+      permit_type: z.string().min(1).max(100),
+      permit_status: z.string().min(1).max(100).optional(),
+      days_back: z.number().int().min(1).max(365).optional(),
+      permit_date_from: z.iso.date().optional(),
+      permit_date_through: z.iso.date().optional(),
+      application_status: z.string().min(1).max(100).optional(),
+      review_status: z.string().min(1).max(100).optional(),
+      review_completed_from: z.iso.date().optional(),
+      contact_role: z.string().min(1).max(100).optional(),
+      require_contact_role: z.boolean().optional(),
+    }),
+    (args) => searchMunicipalPermits(args),
   );
   tool(
     server,

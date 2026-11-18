@@ -4,14 +4,16 @@ import { cached, fetchJson, SourceError } from "./http.js";
 const API = "https://services5.municity5.com/M5Services/M5Service.svc";
 const WEB = "https://www.municityconnect.com/#/app/NewHavenCityCT/entity";
 const OPTIONS = { headers: { SourceId: "2" }, timeout: 10000, maxBytes: 10_000_000 };
-const CATEGORIES = ["Fee", "Task", "Document", "Contact", "Communication"];
-const IDS = { Fee: "Fee_ID", Task: "Task_ID", Document: "Document_ID", Contact: "Contact_ID", Communication: "Communication_ID" };
+const CATEGORIES = ["Fee", "Task", "Inspection", "Document", "Contact", "Communication", "Flag"];
+const IDS = { Fee: "Fee_ID", Task: "Task_ID", Inspection: "Inspection_ID", Document: "Document_ID", Contact: "Contact_ID", Communication: "Communication_ID", Flag: "Flag_ID" };
 const FIELDS = {
   Fee: ["Fee_ID", "Amount", "Date", "CreatedDate", "Modified", "Entity", "FeeCategory", "FeeSource", "FeeType", "FeePaid", "FeeVoided", "Paid", "PayType", "Status", "InvoicedDate", "InvoiceNumber", "InvoicePrinted", "ReceiptBookNo", "GLCode", "IsStateTax", "IsNotAllowedToPay", "ApplicationNumber", "PermitNo", "PrintKey", "LegalAddr", "LegalAddrNo", "LegalAddress", "ZipCode", "Section"],
   Task: ["Task_ID", "TaskType", "Subject", "ApprovalStatus", "AssignedTo", "Contact_ID", "Entity", "Entity_ID", "MappingSortOrder", "CreatedDate", "Modified", "DateCompleted"],
+  Inspection: ["Inspection_ID", "InspType", "Department", "Status", "Results", "Score", "SchedDate", "CloseDate", "NextInspDate", "CreatedDate", "Modified", "PermitNo", "PrintKey", "LegalAddress", "InspectorCode", "IsFollowup", "Description"],
   Document: ["Document_ID", "Name", "FilenameWeb", "Description", "Type", "DocumentType", "DocumentTemplate_ID", "Section", "Section_ID", "Date", "CreatedDate", "Modified", "Public", "UrlExists"],
   Contact: ["Contact_ID", "Fullname", "ContactRole", "ContactType", "PrimaryOwner", "Applicant", "Inspector"],
   Communication: ["Communication_ID", "CommunicationType_ID", "Title", "CreatedDate", "Modified"],
+  Flag: ["Flag_ID", "FlagType", "Description", "Status", "StartDate", "EndDate", "CreatedDate", "Modified"],
 };
 
 function id(value) {
@@ -47,13 +49,21 @@ function childAttributes(kind, row) {
   if (kind === "Contact") {
     attributes.Fullname = row.Fullname ??
       ([row.ContactFirstName, row.ContactLastName].filter(Boolean).join(" ") || null);
+    const contractor = /^contractor$/i.test(String(row.ContactRole ?? row.ContactType ?? "").trim());
+    const publicRole = flag(row.Role?.IsPublic);
+    if (contractor && publicRole) Object.assign(attributes, selected(row, [
+      "CompanyName", "ContactLicenseNumber", "ContactLicenseExpirationDate",
+      "Phone", "Email", "EMailAddress", "Addr1", "City", "State", "ZipCode",
+    ]));
   }
   return attributes;
 }
 function childDate(kind, row) {
   const fields = kind === "Fee" ? ["Date", "CreatedDate"]
     : kind === "Task" ? ["DateCompleted", "CreatedDate"]
-      : kind === "Document" ? ["Modified", "CreatedDate"] : ["CreatedDate", "Modified"];
+      : kind === "Inspection" ? ["CloseDate", "SchedDate", "CreatedDate"]
+        : kind === "Flag" ? ["StartDate", "CreatedDate"]
+          : kind === "Document" ? ["Modified", "CreatedDate"] : ["CreatedDate", "Modified"];
   return fields.map((field) => date(row[field])).find(Boolean) ?? null;
 }
 function searchUrl(kind, entityId) {
@@ -97,7 +107,7 @@ export async function municipalWorkDetails(parcel, kind, workId) {
   const applicationId = kind === "Permit" ? id(listed.attributes.Application_ID) : null;
   const listedApplication = applicationId ? vendor.items.find((item) =>
     item.category === "Application" && id(item.attributes.Application_ID) === applicationId) : null;
-  return cached(`work-details:v1:${kind}:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}:${requestedId}`, async () => {
+  return cached(`work-details:v2:${kind}:${parcel.attributes.parcel_id}:${parcel.attributes.objectid}:${requestedId}`, async () => {
     const targets = [{ kind, entityId: requestedId, listed }];
     if (applicationId) targets.push({ kind: "Application", entityId: applicationId, listed: listedApplication });
     const checks = await Promise.all(targets.map(async (target) => {
@@ -159,9 +169,11 @@ export async function municipalWorkDetails(parcel, kind, workId) {
             source_url: kind === "Document" ? attributes.public_document_url ?? parent.source_url : parent.source_url,
             note: kind === "Fee" ? "Fee and payment fields as reported by the municipal service."
               : kind === "Task" ? "Review task fields as reported; AssignedTo is the source value, not an inferred department."
+                : kind === "Inspection" ? "Inspection metadata as reported by the municipal service; status does not establish other inspections."
                 : kind === "Document" ? "Public document metadata; file contents are not stored."
-                  : kind === "Contact" ? "Public contact role summary; phone, email and address are omitted."
-                    : "Communication metadata; message body and recipients are omitted.",
+                  : kind === "Contact" ? "Contact role summary. Phone, email and address appear only for a Contractor role explicitly marked public by the source."
+                    : kind === "Flag" ? "Source flag metadata; this is not a current land-use or historic designation determination."
+                      : "Communication metadata; message body and recipients are omitted.",
           });
           counts[kind]++;
         }
@@ -178,7 +190,7 @@ export async function municipalWorkDetails(parcel, kind, workId) {
       permit, application, items: [...items.values()], category_counts: counts,
       partial: Boolean(warnings.length), warnings,
       retrieved_at: new Date().toISOString(),
-      note: "Permit and application fields are public municipal rows. Child fee and review fields retain source labels; private documents, deleted rows, internal notes, contact details and communication bodies are omitted. This endpoint does not assert inspection coverage.",
+      note: "Permit and application fields are public municipal rows. Child fee, review, inspection and flag fields retain source labels; private documents, deleted rows, internal notes and communication bodies are omitted. Contractor contact details appear only where the source role is explicitly public. Returned inspection rows do not establish complete inspection coverage.",
     };
   });
 }

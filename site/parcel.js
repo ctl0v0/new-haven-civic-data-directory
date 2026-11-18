@@ -301,8 +301,10 @@ function permitDetailTitle(item) {
   const a = item.attributes;
   if (item.category === "Fee") return [a.FeeType ?? a.FeeCategory ?? "Fee", a.Amount != null ? `Amount ${a.Amount}` : null].filter(Boolean).join(" · ");
   if (item.category === "Task") return [a.Subject ?? a.TaskType ?? "Review task", a.ApprovalStatus].filter(Boolean).join(" · ");
+  if (item.category === "Inspection") return [a.InspType ?? "Inspection", a.Status].filter(Boolean).join(" · ");
   if (item.category === "Document") return a.Name ?? "Public document";
   if (item.category === "Contact") return [a.Fullname ?? "Contact", a.ContactRole ?? a.ContactType].filter(Boolean).join(" · ");
+  if (item.category === "Flag") return [a.FlagType ?? "Source flag", a.Description].filter(Boolean).join(" · ");
   return a.Title ?? "Communication";
 }
 function renderWorkDetails(parent, data) {
@@ -332,7 +334,7 @@ function renderWorkDetails(parent, data) {
     application.append(fieldList(sourceFields(data.application.attributes), "record-fields all-fields"));
     parent.append(application);
   }
-  for (const [category, title] of [["Task", "Review tasks"], ["Fee", "Fees"], ["Document", "Public documents"], ["Contact", "Contact roles"], ["Communication", "Communications"]]) {
+  for (const [category, title] of [["Task", "Review tasks"], ["Fee", "Fees"], ["Inspection", "Inspections"], ["Document", "Public documents"], ["Contact", "Contact roles"], ["Communication", "Communications"], ["Flag", "Source flags"]]) {
     const rows = data.items.filter((item) => item.category === category);
     const section = el("section", null, "permit-detail-section");
     section.append(el("h4", `${title} · ${data.category_counts[category] == null ? "not returned" : rows.length}`));

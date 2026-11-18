@@ -2,6 +2,7 @@ import { arcgis, fetchJson } from "../../parcel/http.js";
 import { LAYERS } from "../../parcel/config.js";
 import { permitDetails } from "../../parcel/permit-details.js";
 import { getSourceRecords } from "../../parcel/adapters.js";
+import { searchMunicipalPermits } from "../../parcel/permit-search.js";
 
 const BASE = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
 const OPTS = { headers: { SourceId: "2" }, timeout: 12000, maxBytes: 10_000_000 };
@@ -39,6 +40,18 @@ export default {
     if (process.env.VERCEL_ENV !== "preview" || request.method !== "GET")
       return new Response("Not found", { status: 404 });
     const mode = new URL(request.url).searchParams.get("mode");
+    if (mode === "cross-search") {
+      const data = await searchMunicipalPermits({ neighborhood: "Westville",
+        permit_type: "Water Heater", permit_status: "Issued", days_back: 90,
+        review_status: "Approved", contact_role: "Contractor" });
+      return Response.json({ criteria: data.criteria, coverage: data.coverage, partial: data.partial,
+        items: data.items.map((item) => ({ city_address: item.city_address,
+          city_parcel_id: item.city_parcel_id, permit: item.permit,
+          application: item.application, review_tasks: item.review_tasks,
+          contacts: item.contacts, detail_partial: item.detail_partial,
+          detail_warnings: item.detail_warnings })),
+      }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     if (mode === "extra-child-schema") {
       const targets = [{ entity: "Permit", id: 589760 }, { entity: "Permit", id: 590645 },
         { entity: "Application", id: 50838 }, { entity: "Application", id: 51953 }];

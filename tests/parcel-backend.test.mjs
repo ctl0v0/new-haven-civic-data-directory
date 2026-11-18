@@ -9,6 +9,7 @@ import { addressEvidence } from "../parcel/address-evidence.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getGroup, getSourceRecords } from "../parcel/adapters.js";
 import { permitDetails, applicationDetails } from "../parcel/permit-details.js";
+import { searchMunicipalPermits } from "../parcel/permit-search.js";
 import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import sourcesRoute from "../api/v1/sources.js";
@@ -19,6 +20,7 @@ import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
 import permitDetailsRoute from "../api/v1/permit-details.js";
 import applicationDetailsRoute from "../api/v1/application-details.js";
+import searchPermitsRoute from "../api/v1/search-permits.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -718,8 +720,15 @@ test("verified municipal permit details expose fees and reviews once with explic
         { Document_ID: 327612, Name: "Private document", Public: false,
           UrlExists: true, Url: "https://www.municitymedia.com/private/permit.pdf" }],
         Contact: [{ Contact_ID: 639971, Fullname: "Example Owner", ContactRole: "Owner",
-          Phone: "555-0100", Email: "private@example.org" }],
+          Phone: "555-0100", Email: "private@example.org" },
+        { Contact_ID: 639972, Fullname: "Licensed Contractor", ContactRole: "Contractor",
+          CompanyName: "Example Plumbing", Role: { IsPublic: 1 },
+          Phone: "203-555-0188", Email: "contractor@example.org", Addr1: "20 MAIN ST" }],
         Communication: [{ Communication_ID: 343495, Title: "Permit notice", Body: "private message" }],
+        Inspection: [{ Inspection_ID: 90001, InspType: "Plumbing", Status: "Passed",
+          SchedDate: "2026-09-01", Notes: "private inspection notes" }],
+        Flag: [{ Flag_ID: 80001, FlagType: "Property Flag", Description: "Historic District",
+          Notes: "private flag notes" }],
       });
     throw Error(`Unexpected source: ${u}`);
   };
@@ -730,9 +739,16 @@ test("verified municipal permit details expose fees and reviews once with explic
   assert.equal(result.items.filter((item) => item.category === "Fee").length, 1);
   assert.equal(result.items.find((item) => item.category === "Task").linked_from.length, 2);
   assert.equal(result.category_counts.Document, 1);
+  assert.equal(result.category_counts.Inspection, 1);
+  assert.equal(result.category_counts.Flag, 1);
+  assert.equal(result.items.find((item) => item.category === "Inspection").attributes.Status, "Passed");
+  const contractor = result.items.find((item) => item.category === "Contact" && item.attributes.ContactRole === "Contractor");
+  assert.equal(contractor.attributes.CompanyName, "Example Plumbing");
+  assert.equal(contractor.attributes.Phone, "203-555-0188");
+  assert.equal(contractor.linked_from.length, 2);
   assert.equal(result.items.find((item) => item.category === "Document").source_url,
     "https://www.municitymedia.com/public/permit.pdf");
-  assert.doesNotMatch(JSON.stringify(result), /omitted applicant|private fee notes|private review notes|Private document|555-0100|private@example.org|private message/);
+  assert.doesNotMatch(JSON.stringify(result), /omitted applicant|private fee notes|private review notes|Private document|555-0100|private@example.org|private message|private inspection notes|private flag notes/);
   await assert.rejects(permitDetails(parcel(id), "777777"), { status: 404 });
   const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
   const rest = await permitDetailsRoute.fetch(new Request(
@@ -788,6 +804,76 @@ test("a linked application search without parcel ID needs a matching parcel chil
   assert.equal(result.application, null);
   assert.equal(result.partial, true);
   assert.equal(result.items.length, 0);
+});
+
+test("cross-source permit search distinguishes approved review tasks from application status", async () => {
+  const id = 999072;
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Neighborhoods") && u.pathname.endsWith("/query"))
+      return response({ features: [{ attributes: { objectid: 16, neighborhood: "WESTVILLE" }, geometry: polygon }],
+        spatialReference: { wkid: 4326 } });
+    if (u.pathname.includes("Parcel_Viewer") && u.pathname.endsWith("/query"))
+      return response({ features: [{ attributes: { ...parcel(id).attributes,
+        property_address: "189 MARVELWOOD DR" } }], spatialReference: { wkid: 4326 } });
+    if (u.pathname.endsWith("/GetM5Data")) {
+      if (u.searchParams.get("searchfield") === "PermitType")
+        return response({ total: 2, rows: [
+          { Permit_ID: 1001, Application_ID: 2001, PermitNo: "P-26-1", PermitType: "Water Heater",
+            PermStatus: "Issued", PermitDate: "2026-10-02T09:00:00", PrintKey: "12 34",
+            LegalAddress: "189 MARVELWOOD DR" },
+          { Permit_ID: 1002, Application_ID: 2002, PermitNo: "P-26-2", PermitType: "Water Heater",
+            PermStatus: "Issued", PermitDate: "2026-10-02T09:00:00", PrintKey: "99 99" },
+        ] });
+      if (u.searchParams.get("entity") === "Parcel")
+        return response({ rows: [{ PrintKey: "12 34", Parcel_ID: 555 }] });
+      if (u.searchParams.get("entity") === "Permit")
+        return response({ rows: [{ Permit_ID: 1001, Parcel_ID: 555, PrintKey: "12 34",
+          Application_ID: 2001, PermitNo: "P-26-1", PermitType: "Water Heater",
+          PermStatus: "Issued", PermitDate: "2026-10-02T09:00:00" }] });
+      return response({ rows: [{ Application_ID: 2001, PrintKey: "12 34",
+        ApplicationNumber: "P-26-1", PermitApplicationStatus: "Issued" }] });
+    }
+    if (u.pathname.endsWith("/Parcel/555/Children"))
+      return response({ Permit: [{ Permit_ID: 1001, Application_ID: 2001 }],
+        Application: [{ Application_ID: 2001 }] });
+    if (u.pathname.endsWith("/Permit/1001/Children") || u.pathname.endsWith("/Application/2001/Children"))
+      return response({ Fee: [], Document: [], Inspection: [], Flag: [], Communication: [],
+        Task: [{ Task_ID: 77, Entity: "Application", Entity_ID: 2001, TaskType: "Plumbing Review",
+          ApprovalStatus: "Approved", DateCompleted: "10/2/2026 8:05:30 AM" }],
+        Contact: [{ Contact_ID: 88, Fullname: "Example Contractor", ContactRole: "Contractor",
+          CompanyName: "Official Plumbing", Role: { IsPublic: 1 }, Phone: "203-555-0188" }],
+      });
+    throw Error(`Unexpected source: ${u}`);
+  };
+  const criteria = { neighborhood: "Westville", permit_type: "Water Heater", permit_status: "Issued",
+    permit_date_from: "2026-09-01", review_status: "Approved",
+    review_completed_from: "2026-09-01", contact_role: "Contractor" };
+  const found = await searchMunicipalPermits(criteria);
+  assert.equal(found.partial, false);
+  assert.equal(found.coverage.municipal_type_rows_returned, 2);
+  assert.equal(found.coverage.joined_parcel_candidates, 1);
+  assert.equal(found.items.length, 1);
+  assert.equal(found.items[0].application.PermitApplicationStatus, "Issued");
+  assert.equal(found.items[0].review_tasks[0].ApprovalStatus, "Approved");
+  assert.equal(found.items[0].contacts[0].Phone, "203-555-0188");
+  assert.equal((await searchMunicipalPermits({ ...criteria, application_status: "Approved" })).items.length, 0);
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const query = new URLSearchParams(criteria);
+  const rest = await searchPermitsRoute.fetch(new Request(`https://example.com/api/v1/search-permits?${query}`,
+    { headers: auth }));
+  assert.equal(rest.status, 200);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 13, method: "tools/call",
+      params: { name: "search_municipal_permits", arguments: criteria } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  const restResult = await rest.json();
+  assert.deepEqual({ ...payload.result.structuredContent, retrieved_at: null },
+    { ...restResult, retrieved_at: null });
 });
 
 test("municipal occupants use only public fields attached to the verified parcel", async () => {
