@@ -38,7 +38,7 @@ jobs:
           SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
         run: npm run index:verify-writer
   refresh:
-    if: github.event_name != 'push' && vars.PARCEL_INDEX_ENABLED == 'true'
+    if: vars.PARCEL_INDEX_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -47,10 +47,13 @@ jobs:
         env:
           REQUESTED_MODE: ${{ inputs.mode }}
           SCHEDULE: ${{ github.event.schedule }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$SCHEDULE" = '17 * * * *' ]; then
             mode=hourly
           elif [ "$SCHEDULE" = '47 7 * * *' ]; then
+            mode=daily
+          elif [ "$EVENT_NAME" = push ]; then
             mode=daily
           else
             mode="$REQUESTED_MODE"
