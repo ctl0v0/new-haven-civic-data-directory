@@ -87,6 +87,10 @@ jobs:
           SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
           REFRESH_MODE: ${{ steps.mode.outputs.value }}
         run: |
+          set +e
           npm run index:refresh:all -- "$REFRESH_MODE"
-          if [ "$REFRESH_MODE" = daily ]; then npm run index:prune; fi
+          refresh_status=$?
+          set -e
+          if [ "$REFRESH_MODE" = daily ] && [ "$refresh_status" -eq 0 ]; then npm run index:prune; fi
           if [ "$REFRESH_MODE" != daily ]; then npm run index:smoke; fi
+          exit "$refresh_status"
