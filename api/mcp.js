@@ -15,6 +15,7 @@ import {
   parcelPermitDetails,
   parcelApplicationDetails,
   searchMunicipalPermits,
+  municipalPermitTypes,
   parcelFeed,
   sourceCoverage,
 } from "../parcel/service.js";
@@ -179,6 +180,14 @@ export function createServer() {
     "Return all published fields for an application on the selected parcel and its public fee, review task, inspection, document, contact-role, communication and source-flag metadata. No permit is inferred from a shared number.",
     z.object({ ...common, application_id: z.string().regex(/^\d{1,12}$/) }),
     ({ parcel_id, objectid, application_id }) => parcelApplicationDetails(parcel_id, application_id, objectid),
+  );
+  tool(
+    server,
+    "list_municipal_permit_types",
+    "List municipal permit types",
+    "Return the live City permit type catalog with exact published type names and groups. A catalog entry does not establish that any permit was issued.",
+    z.object({}),
+    () => municipalPermitTypes(),
   );
   tool(
     server,

@@ -10,10 +10,12 @@ import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords }
 import { checkedFilters, filterRecords, recordFacets } from "./filters.js";
 import { permitDetails, applicationDetails } from "./permit-details.js";
 import { searchMunicipalPermits } from "./permit-search.js";
+import { municipalPermitTypes } from "./permit-types.js";
 
 export { resolveParcel };
 export { parcelMapContext };
 export { searchMunicipalPermits };
+export { municipalPermitTypes };
 
 export async function parcelGeometry(id, objectid = null) {
   return parcelFeatureToGeoJSON(await loadParcel(id, objectid));

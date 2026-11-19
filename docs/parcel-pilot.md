@@ -64,6 +64,7 @@ Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed b
 | `GET /api/v1/feed?parcel_id=...&objectid=...&limit=25&cursor=...` | Filtered dated source records, newest first. |
 | `GET /api/v1/permit-details?parcel_id=...&permit_id=...` and `GET /api/v1/application-details?parcel_id=...&application_id=...` | Public child rows and source fields for an exact municipal work ID on the selected parcel. |
 | `GET /api/v1/schema` | Protected method, filter, field and official source guide. |
+| `GET /api/v1/permit-types` | Live City permit type catalog, grouped by its published `TypeGroup`. These are configured type names, not counts of issued permits. |
 | `GET /api/v1/sources` | Source catalog, modes, limitations and deliberate exclusions. |
 
 `objectid` is required when an official `parcel_id` maps to more than one source feature. Page size is capped at 50. Each record carries its source ID, source record ID, fields, match method, source URL, source event date where known, and retrieval time. Municipal and LCI records also expose the official identifier fields used for their parcel match; LCI requires the property address to match as well. The feed contains dated source records; it does not detect changes between requests. The API does not claim that an empty source response proves that no event exists. Vacancy status is handled outside this data layer. One-off reports and studies are not source resources in this pilot.
@@ -76,7 +77,7 @@ For Ownership, Business and Activity, `GET /api/v1/records` and the matching MCP
 
 ## MCP
 
-`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers the matching parcel, geometry, photo, overview, record, feed, trash pickup, map, permit detail, application detail, cross-parcel permit search and source catalog tools. The protected `newhaven://parcel/schema` resource is the same guide served by REST; source-coverage and matching-method resources remain available. Start with `resolve_parcel`, then `get_parcel_overview`; request geometry, map context or one record group only when needed. The MCP tools call the same service and filters as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <individual pilot token>` on each request. Keep this token in the client's private secret store.
+`/mcp` exposes Streamable HTTP MCP with stateless requests and bearer authentication. It registers the matching parcel, geometry, photo, overview, record, feed, trash pickup, map, permit detail, application detail, cross-parcel permit search, municipal permit type catalog and source catalog tools. The protected `newhaven://parcel/schema` resource is the same guide served by REST; source-coverage and matching-method resources remain available. Start with `resolve_parcel`, then `get_parcel_overview`; request geometry, map context or one record group only when needed. The MCP tools call the same service and filters as REST, including ambiguity and partial-source behavior. Point an MCP client at `https://<deployment>/mcp` and send `Authorization: Bearer <individual pilot token>` on each request. Keep this token in the client's private secret store.
 
 ## Source coverage
 

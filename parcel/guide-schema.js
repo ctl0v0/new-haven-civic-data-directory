@@ -14,6 +14,7 @@ const methods = [
   ["map", "Map layers", "GET /api/v1/map-context", "get_parcel_map_context", "Return City and State mapped features on the parcel and separately labeled nearby context.", "parcel_id, objectid"],
   ["trash", "Trash pickup zones", "GET /api/v1/trash-pickup", "get_parcel_trash_pickup", "Return mapped City pickup zones at City address points on the parcel; service eligibility is not established.", "parcel_id, objectid, query_address"],
   ["permit-search", "Cross parcel permit search", "GET /api/v1/search-permits", "search_municipal_permits", "Search municipal permits by exact type and City neighborhood with separately labeled linked application, review task and contact fields. Coverage limits remain explicit.", "neighborhood, permit_type, optional status/date/contact filters"],
+  ["permit-types", "Municipal permit type catalog", "GET /api/v1/permit-types", "list_municipal_permit_types", "Return the City's live configured permit type names and groups. A catalog entry does not establish an issued permit.", "none"],
   ["catalog", "Source catalog", "GET /api/v1/sources", "list_sources", "Explain each source's access mode, coverage and known gaps.", "none"],
 ].map(([id, title, rest, mcp, description, inputs]) => ({ id, title, rest, mcp, description, inputs }));
 
