@@ -1,5 +1,6 @@
 name: Refresh private parcel search index
 # Updating this workflow on main refreshes every cataloged municipal permit type.
+# This refresh retains published vendor Parcel_ID and PrintKey_Parcel for linkage audit.
 # Hourly runs refresh one stable type shard; the daily run refreshes City and State baselines.
 on:
   push:
