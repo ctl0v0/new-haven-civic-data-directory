@@ -71,6 +71,10 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Validate private index revision
+        run: |
+          git rev-parse --short=12 HEAD
+          npm test
       - name: Migrate and verify read-only access
         env:
           SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
