@@ -29,8 +29,22 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE a.source_id = $1 AND a.scope_key = $2`, [sourceId, scopeKey]);
     const run = runs[0];
-    if (!run) return { ...key, found: false, complete_for_query: false,
-      coverage: { index_status: "not_indexed" } };
+    if (!run) {
+      let attempt = null;
+      if (sourceId === "municity") try {
+        const attempts = await query(`SELECT status, warning, started_at
+          FROM search_source_runs WHERE source_id = 'municity' AND scope_key = $1
+          ORDER BY started_at DESC, id DESC LIMIT 1`, [scopeKey]);
+        attempt = attempts[0] ?? null;
+      } catch { /* An absent run remains absent if attempt history cannot be read. */ }
+      return { ...key, found: false, complete_for_query: false,
+        coverage: { index_status: "not_indexed",
+          ...(attempt ? { latest_attempt_status: attempt.status === "failed" &&
+            attempt.warning?.startsWith("MUNICIPAL_TYPE_CAP:")
+            ? "blocked" : attempt.status,
+          latest_attempt_warning: attempt.warning ?? null,
+          latest_attempt_started_at: attempt.started_at } : {}) } };
+    }
     const fresh = Date.now() - Date.parse(run.finished_at) <= 48 * 3600_000;
     const complete = fresh && run.status === "complete" &&
       run.latest_attempt_status !== "failed" &&
