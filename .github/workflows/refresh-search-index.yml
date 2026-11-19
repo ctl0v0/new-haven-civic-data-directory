@@ -91,11 +91,12 @@ jobs:
           SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
           REFRESH_MODE: ${{ steps.mode.outputs.value }}
         run: |
+          npm run index:prune
           set +e
           npm run index:refresh:all -- "$REFRESH_MODE"
           refresh_status=$?
           set -e
-          if [ "$REFRESH_MODE" = daily ] && [ "$refresh_status" -eq 0 ]; then npm run index:prune; fi
+          npm run index:prune
           if [ "$REFRESH_MODE" = daily ]; then
             npm run index:audit-use-codes || echo 'Official City use-code audit unavailable; commercial query remains gated'
           fi
