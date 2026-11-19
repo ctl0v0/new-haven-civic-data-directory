@@ -18,6 +18,12 @@ A community guide to finding and using New Haven civic data. People and their ag
 
 **[Browse the live directory](https://new-haven-civic-data-directory.vercel.app/).** Deployment and local preview instructions are in [site/README.md](site/README.md).
 
+## Parcel data pilot
+
+The repository now includes a private, parcel-first backend and a review page at `/parcel`. It resolves an address or official identifier, calls public sources on demand, and groups parcel records by property, geography, representation, activity, environment, and business. A separate map context endpoint supplies official mapped features on the parcel and nearby street context without adding them to parcel records. The REST API and MCP server use the same resolver and source adapters. Live results are cached for five minutes. An optional private [search index](docs/search-index.md) stores selected official source facts and exact parcel joins for cross-parcel queries; parcel detail remains live. See [pilot setup and API reference](docs/parcel-pilot.md).
+
+The pilot requires server-side access secrets before `/parcel`, `/api/v1/*`, or `/mcp` can return data. The existing directory stays public. Source failures and unverified lookups appear as coverage gaps; the dated feed is a timeline of source records, not a log of changes to source data.
+
 ## Understand the status
 
 - **Source located:** a source was identified, but its access instructions have not been fully tested.
@@ -31,13 +37,15 @@ A source being public does not establish its reuse license, currentness, complet
 
 ## Build
 
-Requires Node.js 22 or later. No dependency installation is needed.
+Requires Node.js 24 or later.
 
 ```sh
+npm ci
 npm run build
+npm test
 ```
 
-This validates sources/*.json and generates dist/index.html, an individual HTML page per source under dist/sources/, and dist/catalog.json, then copies the website styles and search script. Open dist/index.html directly in a browser. Each source has its own static HTML detail page linked from the directory table, so the site also works without JavaScript. Search and category filtering enhance browsing when JavaScript is available.
+This validates sources/*.json and generates dist/index.html, an individual HTML page per source under dist/sources/, dist/catalog.json and dist/parcel-source-catalog.json, then copies the website assets. Open dist/index.html directly in a browser to review the static directory. The parcel page and API need a Vercel function runtime and pilot secrets.
 
 ## Contribute and maintain
 
@@ -47,7 +55,7 @@ At weekly meetings, contributors can take one investigation or review one entry.
 
 ## Scope
 
-V1 provides documentation, a simple directory website, requests and an investigation roadmap. Data acquisition infrastructure, dataset explorers, accounts, databases and MCP servers are future work driven by actual requests.
+V1 provides documentation, a simple directory website, requests and an investigation roadmap. The separate parcel pilot adds on-demand data access and an MCP server for review; it does not change the public directory's source claims.
 
 
 The directory is independent of city government. City outreach is drafted for review before sending. No city or vendor data is redistributed here.

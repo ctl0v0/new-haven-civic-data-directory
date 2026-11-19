@@ -1,6 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "echo 'No dependencies to install'",
+  "installCommand": "npm ci",
+  "rewrites": [{"source":"/mcp","destination":"/api/mcp"},{"source":"/parcel","destination":"/api/pilot-page"}],
   "framework": null
 }

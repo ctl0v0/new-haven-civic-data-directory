@@ -1,0 +1,9 @@
+# Official parcel photos
+
+Checked November 18, 2026 against the City of New Haven GIS parcel layer, the City's public Municity parcel service and media host, and the City assessor's Vision card.
+
+For the selected City parcel [10386 / OBJECTID 20011](https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0/20011) (990 State St), one municipal parcel search row had a `PrintKey` matching the City MBLU and returned municipal `Parcel_ID` **10092**. The [municipal street-view image](https://www.municitymedia.com/NewHavenCityCT/Parcel/10092/streetview.jpg) returned HTTP 200, `image/jpeg`, and 95,753 bytes. A second real municipal parcel image at ID 13303 returned a different JPEG length; an impossible ID 999999999 returned 404. The municipal search row did not include an explicit photo field. The image path uses only the exact, uniquely matched municipal Parcel_ID; it is never built from a City PID or address.
+
+The [City assessor card for PID 10386](https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=10386) confirmed the same PID and published a `MainContent_ctl02_imgPhoto` element labeled “Building Photo.” Its source image returned HTTP 200 and `image/jpeg`. This is the fallback when no verified municipal street-view JPEG is available.
+
+`GET /api/v1/parcel-photo` and the MCP tool `get_parcel_photo` are private and on demand. They check the City parcel ID and OBJECTID, then verify a unique municipal PrintKey match and a JPEG response before returning a municipal photo URL. The assessor fallback requires the card's published PID to match and accepts only image paths on the assessor's official photo host. The record page and map selection show the source and label the photo as undated. The endpoint returns no inferred image when a source cannot be verified. This project does not download or store the image bytes.
