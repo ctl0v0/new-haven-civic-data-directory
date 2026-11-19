@@ -52,7 +52,8 @@ async function linkCityParcels(runId) {
     SELECT $1, 'parcels', record_id,
       (fields->>'parcel_id')::bigint, (fields->>'objectid')::bigint,
       'city-parcel-record'
-    FROM search_records WHERE run_id = $1 AND source_id = 'parcels'`, [runId]);
+    FROM search_records WHERE run_id = $1 AND source_id = 'parcels'
+      AND NULLIF(fields->>'parcel_id', '') IS NOT NULL`, [runId]);
 }
 
 async function linkSpatial(runId, sourceId, { addressZone = false } = {}) {
@@ -107,7 +108,7 @@ async function linkSpatial(runId, sourceId, { addressZone = false } = {}) {
   SELECT run_id, source_id, record_id, city_parcel_id, city_objectid,
     $4, CASE WHEN $3 = 'addresses' AND hit_count <> 1
       THEN 'ambiguous' ELSE 'exact' END
-  FROM hits`, [runId, parcelId, sourceId,
+  FROM hits WHERE city_parcel_id IS NOT NULL`, [runId, parcelId, sourceId,
     sourceId === "addresses" ? "address-point-intersection" : "parcel-polygon-intersection"]);
 }
 
@@ -124,6 +125,7 @@ async function linkExactParcelKey(runId, sourceId, keyField, { mbluOnly = false 
         THEN 'exact' ELSE 'ambiguous' END
     FROM search_records r
     JOIN search_records p ON p.run_id = $2 AND p.source_id = 'parcels'
+      AND NULLIF(p.fields->>'parcel_id', '') IS NOT NULL
       AND (${mbluOnly ? "" : "upper(trim(r.fields->>$3)) = upper(p.fields->>'parcel_id') OR"}
         regexp_replace(upper(replace(r.fields->>$3, '/', ' ')), '[[:space:]]+', ' ', 'g') =
         regexp_replace(upper(replace(p.fields->>'mblu', '/', ' ')), '[[:space:]]+', ' ', 'g'))
@@ -181,16 +183,19 @@ export async function finishRun(runId, sourceId, expectedCount) {
     FROM search_record_parcels WHERE run_id = $1`, [runId]))[0].n);
   const unlinked = ["metered-parking-spaces", "transit-stops"].includes(sourceId)
     ? 0 : Math.max(0, returned - distinctLinked);
+  const warning = sourceId === "parcels" && unlinked > 0
+    ? `${unlinked} official City parcel features lack a published parcel ID`
+    : null;
   await write(`WITH finished AS (
     UPDATE search_source_runs SET status = 'complete', finished_at = now(),
       returned_count = $2, linked_count = $3, ambiguous_count = $4,
-      unlinked_count = $5
+      unlinked_count = $5, warning = $6
     WHERE id = $1 AND status = 'running' RETURNING id, source_id, scope_key
   )
   INSERT INTO search_active_runs (source_id, scope_key, run_id)
   SELECT source_id, scope_key, id FROM finished
   ON CONFLICT (source_id, scope_key) DO UPDATE SET run_id = EXCLUDED.run_id`,
-  [runId, returned, linked, ambiguous, unlinked]);
+  [runId, returned, linked, ambiguous, unlinked, warning]);
   return { run_id: runId, returned, linked, ambiguous, unlinked };
 }
 
