@@ -11,7 +11,7 @@ import { schemaGuide } from "../parcel/guide-schema.js";
 import { parseLciProperty } from "../parcel/lci.js";
 import { getGroup, getSourceRecords } from "../parcel/adapters.js";
 import { permitDetails, applicationDetails } from "../parcel/permit-details.js";
-import { searchMunicipalPermits } from "../parcel/permit-search.js";
+import { searchMunicipalPermits, searchParcelPermits } from "../parcel/permit-search.js";
 import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
@@ -29,6 +29,7 @@ import parcelPhotoRoute from "../api/v1/parcel-photo.js";
 import permitDetailsRoute from "../api/v1/permit-details.js";
 import applicationDetailsRoute from "../api/v1/application-details.js";
 import searchPermitsRoute from "../api/v1/search-permits.js";
+import searchParcelPermitsRoute from "../api/v1/search-parcel-permits.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -1087,6 +1088,151 @@ test("cross-source permit search distinguishes approved review tasks from applic
   const restResult = await rest.json();
   assert.deepEqual({ ...payload.result.structuredContent, retrieved_at: null },
     { ...restResult, retrieved_at: null });
+});
+
+test("citywide multi-type permit search pages exact parcel joins and filters review completion independently", async () => {
+  const rows = {
+    "Hood - C": { Permit_ID: 9101, Application_ID: 9201, PermitNo: "M-23-1",
+      PermitType: "Hood - C", PermStatus: "Issued", PermitDate: "2023-06-08T12:17:20",
+      PrintKey: "12 34", LegalAddress: "486 ORANGE ST" },
+    "Fire Suppression-Hood - C": { Permit_ID: 9102, Application_ID: 9202, PermitNo: "P-25-2",
+      PermitType: "Fire Suppression-Hood - C", PermStatus: "Closed",
+      PermitDate: "2025-06-08T12:17:20", PrintKey: "56 78", LegalAddress: "20 MAIN ST" },
+  };
+  const byPermit = Object.fromEntries(Object.values(rows).map((row) => [row.Permit_ID, row]));
+  const byApplication = Object.fromEntries(Object.values(rows).map((row) => [row.Application_ID, row]));
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.includes("Parcel_Viewer") && u.pathname.endsWith("/query")) {
+      const where = u.searchParams.get("where") ?? "";
+      const features = [
+        { ...parcel(999081), attributes: { ...parcel(999081).attributes,
+          mblu: "12/34", property_address: "486 ORANGE ST" } },
+        { ...parcel(999082), attributes: { ...parcel(999082).attributes,
+          mblu: "56/78", property_address: "20 MAIN ST" } },
+      ].filter((feature) => where.includes(feature.attributes.mblu.replace("/", " ")));
+      return response({ features });
+    }
+    if (u.pathname.endsWith("/GetM5Data")) {
+      const entity = u.searchParams.get("entity");
+      if (u.searchParams.get("searchfield") === "PermitType") {
+        const row = rows[u.searchParams.get("value")];
+        return response({ total: Number(Boolean(row)), rows: row ? [row] : [] });
+      }
+      if (entity === "Parcel") {
+        const key = u.searchParams.get("value");
+        return response({ rows: [{ PrintKey: key, Parcel_ID: key === "12 34" ? 8101 : 8102 }] });
+      }
+      if (entity === "Permit") {
+        const row = byPermit[Number(u.searchParams.get("value"))];
+        return response({ rows: [{ ...row, Parcel_ID: row.Permit_ID === 9101 ? 8101 : 8102 }] });
+      }
+      const row = byApplication[Number(u.searchParams.get("value"))];
+      return response({ rows: [{ Application_ID: row.Application_ID,
+        PrintKey: row.PrintKey, ApplicationNumber: row.PermitNo,
+        PermitApplicationStatus: "Issued" }] });
+    }
+    const child = u.pathname.match(/\/(Parcel|Permit|Application)\/(\d+)\/Children$/);
+    if (child?.[1] === "Parcel") {
+      const row = Number(child[2]) === 8101 ? rows["Hood - C"] : rows["Fire Suppression-Hood - C"];
+      return response({ Permit: [row], Application: [{ Application_ID: row.Application_ID,
+        PrintKey: row.PrintKey }] });
+    }
+    if (child && ["Permit", "Application"].includes(child[1])) {
+      const permit = child[1] === "Permit"
+        ? byPermit[Number(child[2])]
+        : byApplication[Number(child[2])];
+      return response({ Fee: [], Inspection: [], Document: [], Contact: [], Communication: [], Flag: [],
+        Task: [{ Task_ID: permit.Permit_ID, Entity: "Application", Entity_ID: permit.Application_ID,
+          TaskType: "Mechanical Review", ApprovalStatus: "Approved",
+          DateCompleted: permit.Permit_ID === 9101 ? "6/6/2026 5:55:38 AM" : "6/6/2024 5:55:38 AM" }] });
+    }
+    throw Error(`Unexpected source: ${u}`);
+  };
+  const criteria = { scope: "city", permit_types: ["Hood - C", "Fire Suppression-Hood - C"],
+    review_type: "Mechanical Review", review_status: "Approved",
+    review_completed_from: "2026-01-01", review_completed_to: "2026-12-31",
+    scan_limit: 1 };
+  const first = await searchParcelPermits(criteria);
+  assert.equal(first.items.length, 0);
+  assert.equal(first.complete_for_query, false);
+  assert.equal(first.coverage.candidate_permits_after_source_filters, 2);
+  assert.ok(first.next_cursor);
+  const second = await searchParcelPermits({ ...criteria, cursor: first.next_cursor });
+  assert.equal(second.items.length, 1);
+  assert.equal(second.items[0].city_parcel_id, 999081);
+  assert.equal(second.items[0].permit.PermitDate, "2023-06-08T12:17:20");
+  assert.equal(second.items[0].review_tasks[0].DateCompleted, "6/6/2026 5:55:38 AM");
+  assert.equal(second.items[0].match.method, "municipal-printkey-city-mblu-exact");
+  assert.equal(second.complete_for_query, true);
+  assert.equal(second.next_cursor, null);
+  await assert.rejects(searchParcelPermits({ ...criteria,
+    review_completed_to: "2025-12-31", cursor: first.next_cursor }), { status: 400 });
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const query = new URLSearchParams({ ...criteria, cursor: first.next_cursor });
+  query.delete("permit_types");
+  for (const type of criteria.permit_types) query.append("permit_type", type);
+  const rest = await searchParcelPermitsRoute.fetch(new Request(
+    `https://example.com/api/v1/search-parcel-permits?${query}`, { headers: auth }));
+  assert.equal(rest.status, 200);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json",
+      accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 67, method: "tools/call",
+      params: { name: "search_parcel_permits", arguments: { ...criteria,
+        cursor: first.next_cursor } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual({ ...payload.result.structuredContent, retrieved_at: null },
+    { ...await rest.json(), retrieved_at: null });
+});
+
+test("citywide permit search reports the municipal row cap instead of claiming completeness", async () => {
+  const permitType = "Hood - C row-cap fixture";
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data"))
+      return response({ rows: Array.from({ length: 2000 }, (_, index) => ({
+        Permit_ID: index + 1, PermitType: permitType, PermitDate: "2023-06-08",
+        PrintKey: `${index + 1} 34`,
+      })) });
+    if (u.pathname.includes("Parcel_Viewer") && u.pathname.endsWith("/query"))
+      return response({ features: [] });
+    throw Error("Unexpected source");
+  };
+  const data = await searchParcelPermits({ scope: "city", permit_types: [permitType],
+    permit_date_from: "2023-06-01", permit_date_to: "2023-06-30", scan_limit: 1 });
+  assert.equal(data.coverage.source_checks[0].status, "partial");
+  assert.equal(data.coverage.source_checks[0].limit_reached, true);
+  assert.equal(data.coverage.municipal_rows_returned, 2000);
+  assert.equal(data.complete_for_query, false);
+});
+
+test("citywide permit search keeps failed sources and ambiguous parcel joins incomplete", async () => {
+  const unavailableType = "Unavailable permit fixture";
+  const ambiguousType = "Ambiguous permit fixture";
+  globalThis.fetch = async (input) => {
+    const u = new URL(input);
+    if (u.pathname.endsWith("/GetM5Data")) {
+      if (u.searchParams.get("value") === unavailableType)
+        return new Response("missing", { status: 404 });
+      return response({ rows: [{ Permit_ID: 91991, PermitType: ambiguousType,
+        PermitDate: "2023-06-08", PrintKey: "12 34" }] });
+    }
+    if (u.pathname.includes("Parcel_Viewer") && u.pathname.endsWith("/query"))
+      return response({ features: [parcel(91992), parcel(91993)] });
+    throw Error("Unexpected source");
+  };
+  const data = await searchParcelPermits({ scope: "city",
+    permit_types: [unavailableType, ambiguousType] });
+  assert.equal(data.items.length, 0);
+  assert.equal(data.next_cursor, null);
+  assert.equal(data.complete_for_query, false);
+  assert.equal(data.coverage.source_checks.find((check) =>
+    check.permit_type === unavailableType).status, "unavailable");
+  assert.equal(data.coverage.cumulative.ambiguous, 1);
 });
 
 test("municipal occupants use only public fields attached to the verified parcel", async () => {

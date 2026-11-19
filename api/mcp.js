@@ -16,6 +16,7 @@ import {
   parcelPermitDetails,
   parcelApplicationDetails,
   searchMunicipalPermits,
+  searchParcelPermits,
   municipalPermitTypes,
   parcelFeed,
   sourceCoverage,
@@ -221,6 +222,30 @@ export function createServer() {
       require_contact_role: z.boolean().optional(),
     }),
     (args) => searchMunicipalPermits(args),
+  );
+  tool(
+    server,
+    "search_parcel_permits",
+    "Search municipal permits across verified City parcels",
+    "Scan one bounded page of exact municipal permit types citywide or within a City neighborhood. Filter published permit status/date independently from linked application review type/status/completion date. Returns exact parcel joins, source links, coverage and a cursor; follow every page before relying on completeness. This does not infer approval from PermitDate.",
+    z.object({
+      scope: z.enum(["city", "neighborhood"]).optional(),
+      neighborhood: z.string().min(1).max(80).optional(),
+      permit_types: z.array(z.string().min(1).max(100)).min(1).max(6),
+      permit_status: z.string().min(1).max(100).optional(),
+      permit_date_from: z.iso.date().optional(),
+      permit_date_to: z.iso.date().optional(),
+      application_status: z.string().min(1).max(100).optional(),
+      review_type: z.string().min(1).max(100).optional(),
+      review_status: z.string().min(1).max(100).optional(),
+      review_completed_from: z.iso.date().optional(),
+      review_completed_to: z.iso.date().optional(),
+      contact_role: z.string().min(1).max(100).optional(),
+      require_contact_role: z.boolean().optional(),
+      scan_limit: z.number().int().min(1).max(12).optional(),
+      cursor: z.string().max(1500).optional(),
+    }),
+    (args) => searchParcelPermits(args),
   );
   tool(
     server,

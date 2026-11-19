@@ -25,6 +25,25 @@ The source join has three checks:
 
 The response includes permit, application, review-task, contact, parcel and neighborhood source fields or URLs, plus source counts and a `partial` flag scoped to the query criteria. Optional child-detail gaps, such as a missing Inspection or Flag array, remain visible through each item's `detail_partial` and `detail_warnings`; they do not make an otherwise complete permit/review/contact search partial. Contractor phone, email, company and address are returned only when the source row's `ContactRole` is `Contractor` and its `Role.IsPublic` flag is true. Contacts under both permit and application are deduplicated by their source ID. Source rows with no exact parcel join or an ambiguous MBLU are excluded and counted. Queries that would require more than 50 parcel-linked permit detail checks must be narrowed by date. The tool does not use a status change log, infer an approval date from application status, or claim complete inspection coverage.
 
-## Citywide, multi-type questions
+## Paged citywide and multi-type search
 
-The current tool requires one exact permit type, one named neighborhood, and a permit-date bound. It cannot return a complete citywide list for a question such as “parcels with hood permits approved in the past year.” The official municipal type catalog has separate `Hood`, `Hood - C`, `Fire Suppression-Hood`, and `Fire Suppression-Hood - C` entries. A request must select which of these types to include. The published `PermStatus` on checked hood rows includes `Issued` and `Closed`; an `Approved` review task, an application status, and an issued permit are distinct fields. A review task's `DateCompleted` can bound an approval task when the task is explicitly linked to the application. `PermitDate` alone is not an approval date. Citywide completeness also requires paging past the service's 2,000-row type-search bound, checking parcel joins across the entire City, and processing more than 50 matching details when needed. A future small, refreshed index of official permit identifiers, type/status/date fields and exact City parcel joins could make these questions reliable while full source records and linked details remain live lookups. Such an index would need source retrieval timestamps, refresh checks, and explicit partial coverage rather than being treated as a new source of truth.
+The private MCP tool `search_parcel_permits` and protected REST route `/api/v1/search-parcel-permits` add citywide or named City-neighborhood scope, up to six exact published `PermitType` values, and independently bounded source dates. They are backend-only; the public data guide and parcel result UI do not present a question interface. The original `search_municipal_permits` remains available for its narrower contract.
+
+For a review-date question, send `review_status`, optional `review_type`, and `review_completed_from` / `review_completed_to`. Those bounds apply only to a verified linked application's `Task.DateCompleted`; `PermitDate` is returned but is not implicitly filtered. `permit_date_from` / `permit_date_to` separately filter `PermitDate`. `application_status` filters `PermitApplicationStatus`, while `permit_status` filters `PermStatus`. Each returned row retains the published status and date fields, source URLs, exact municipal `PrintKey` to City `mblu` join, and source-public contacts when requested.
+
+Example MCP arguments for a bounded page of the reviewed Hood - C type:
+
+```json
+{
+  "scope": "city",
+  "permit_types": ["Hood - C"],
+  "review_status": "Approved",
+  "review_completed_from": "2023-06-01",
+  "review_completed_to": "2023-06-30",
+  "scan_limit": 8
+}
+```
+
+The response is a **candidate scan page**, not an arbitrary-sized result page. Continue with `next_cursor` and the same criteria until the cursor is absent. Only then can `complete_for_query` be true. Coverage reports scanned candidates, returned permits and distinct City parcels, failed detail checks, ambiguous or absent MBLU joins, source-row gaps, and each type search's status. The cursor is signed and rejects changed criteria or changed municipal results. The official municipal service did not yield a verified stable next page in testing; any type returning 2,000 rows or a larger reported total is marked `partial`, and `complete_for_query` remains false even after all returned rows are scanned. There is still no durable permit database. A future small, refreshed search index of official permit IDs, fields and exact City joins may be needed for broad types; its refresh and coverage would have to be explicit.
+
+The official type catalog has separate `Hood`, `Hood - C`, `Fire Suppression-Hood`, and `Fire Suppression-Hood - C` entries. A request must select which types to include. An `Approved` review task, an application status, and an issued permit remain distinct published fields. The new search does not claim a complete inspection history or infer an approval date from a permit or application status.

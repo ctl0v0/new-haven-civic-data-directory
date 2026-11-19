@@ -9,12 +9,13 @@ import { parcelPhoto as photoForParcel } from "./photo.js";
 import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords } from "./record-state.js";
 import { checkedFilters, filterRecords, recordFacets } from "./filters.js";
 import { permitDetails, applicationDetails } from "./permit-details.js";
-import { searchMunicipalPermits } from "./permit-search.js";
+import { searchMunicipalPermits, searchParcelPermits } from "./permit-search.js";
 import { municipalPermitTypes } from "./permit-types.js";
 
 export { resolveParcel };
 export { parcelMapContext };
 export { searchMunicipalPermits };
+export { searchParcelPermits };
 export { municipalPermitTypes };
 
 export async function parcelGeometry(id, objectid = null) {
