@@ -100,8 +100,11 @@ export function searchCapabilities() {
     ],
     not_yet_available: [
       "Cross-parcel inspection predicates; the indexed permit search already supports ward scope",
+      "Citywide permit fee, review task, application and contact-role predicates; these linked details are available only through bounded live permit searches and per-work detail tools",
       "Citywide address-level school and trash search with returned street-address labels",
       "Cross-parcel search over municipal business-license and occupant entities; indexed State location searches are available",
+      "Citywide assessor ownership and valuation history, building subareas and outbuildings; exact-PID card detail is available per parcel",
+      "Cross-parcel State LLC principal and agent search; the verified owner-LLC registry join is available per parcel",
       "Citywide LCI case search and official marketed-space availability search",
     ],
     spatial_summary: {
