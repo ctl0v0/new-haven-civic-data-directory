@@ -1407,13 +1407,13 @@ async function municityRecords(parcel) {
     ...result("municity", items, {
       partial: Boolean(missingCategories.length || truncatedCategories.length),
       warning: [
-        "Category counts reflect returned public records. Private or deleted documents are omitted.",
         missingCategories.length
           ? `Missing vendor categories: ${missingCategories.join(", ")}.`
           : null,
         truncatedCategories.length
           ? `Vendor categories exceeded the 500-record limit: ${truncatedCategories.join(", ")}.`
           : null,
+        "Category counts reflect returned public records. Private or deleted documents are omitted.",
       ]
         .filter(Boolean)
         .join(" "),

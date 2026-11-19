@@ -384,8 +384,18 @@ function sourceName(id) {
 function incompleteSources(sources) {
   return (sources ?? []).filter((source) => ["partial", "unavailable"].includes(source.status));
 }
+function sourceIssueReason(source) {
+  const missing = source.missing_categories ?? [];
+  const truncated = source.truncated_categories ?? [];
+  if (source.source_id === "municity" && (missing.length || truncated.length))
+    return [
+      missing.length ? `${missing.join(", ")} ${missing.length === 1 ? "category was" : "categories were"} not returned by the municipal service` : null,
+      truncated.length ? `${truncated.join(", ")} ${truncated.length === 1 ? "category exceeded" : "categories exceeded"} the 500-row display limit` : null,
+    ].filter(Boolean).join("; ");
+  return source.warning ?? source.coverage ?? source.status;
+}
 function sourceIssueLabels(sources) {
-  return sources.map((source) => `${sourceName(source.source_id)} (${source.status})`).join(", ");
+  return sources.map((source) => `${sourceName(source.source_id)} (${source.status}): ${sourceIssueReason(source)}`).join("; ");
 }
 function recordStatus(item) {
   const a = item.attributes ?? {};
@@ -844,7 +854,7 @@ function sourceLine(parent, source) {
   top.append(el("span", source.status.replaceAll("_", " "), `badge ${source.status}`));
   row.append(top);
   if (source.status === "unavailable" || source.status === "partial")
-    row.append(el("p", source.warning ?? source.coverage, "source-warning"));
+    row.append(el("p", sourceIssueReason(source), "source-warning"));
   if (source.status === "not_linked")
     row.append(el("p", source.warning, "source-note"));
   if (source.category_counts)
