@@ -50,7 +50,7 @@ export const DATA_CONTEXT = Object.freeze([
     official_source_url: vendor,
     source_fact: "The municipal service supplies rows and count information for its searches.",
     reading_rule: "A source limit, stale refresh, missing row, or unlinked permit makes an 'all parcels' answer incomplete; an empty result cannot be called zero." },
-]);
+].map((entry) => Object.freeze({ ...entry, context_reviewed_on: "2026-11-19" })));
 
 export function getDataContext(input = {}) {
   const term = String(input.term ?? "").trim().toLowerCase();
@@ -61,7 +61,10 @@ export function getDataContext(input = {}) {
   const entries = DATA_CONTEXT.filter((item) =>
     (!term || `${item.id} ${item.term} ${item.source_fact} ${item.reading_rule}`.toLowerCase().includes(term)) &&
     (!sourceId || item.source_id === sourceId) && (!field || item.field === field));
-  return { entries, use_code_review: {
+  const useCodeDefinitions = (!sourceId || sourceId === "parcels") &&
+    (!field || field === "use_code") ? useCodes.codes.filter((row) =>
+      !term || `${row.code} ${row.published_label}`.toLowerCase().includes(term)) : [];
+  return { entries, use_code_definitions: useCodeDefinitions, use_code_review: {
     status: useCodes.reviewed_on && useCodes.codes.length ? "reviewed" : "awaiting_official_definitions",
     source_url: useCodes.source_url, reviewed_on: useCodes.reviewed_on,
     reviewed_codes: useCodes.codes.length,

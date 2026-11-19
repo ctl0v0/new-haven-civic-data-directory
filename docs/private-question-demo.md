@@ -39,7 +39,9 @@ own source limitations when called directly.
 4. In Preview, run “Show commercial parcels with electrical permits pulled in
    the past 30 days.” Check the interpreted date range and use-code set, page
    through every result, then verify several returned permit IDs and parcel
-   keys on their linked official records. Only then enable the tab.
+   keys on their linked official records. Confirm the deployment can use AI
+   Gateway through its OIDC token before setting `QUERY_DEMO_ENABLED=true`.
+   Only then enable the tab.
 
 “Pulled” is the published `PermitDate`. The permit's published status remains
 separate. “Commercial” means City parcels whose published `use_code` is in the

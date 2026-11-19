@@ -4,7 +4,7 @@ import { NUMBER_FIELDS, SEARCH_FIELDS } from "../search-index/search.js";
 
 export function searchCapabilities() {
   return {
-    version: 1,
+    version: 2,
     available: [
       {
         tool: "search_parcel_permits",
@@ -97,6 +97,24 @@ export function searchCapabilities() {
         paging: "1–50 matching source record and parcel-link pairs per page; continue next_cursor",
         completeness: "Requires fresh validated source and City parcel runs, exact joins, no source row gaps and the last result page. It does not include source rows without an exact parcel link. Address-linked sources include City address-point fields for each exact address join.",
         follow_up_tools: ["get_indexed_record", "get_parcel_manifest", "get_parcel_records"],
+      },
+      {
+        tool: "ask_indexed_parcels",
+        rest: "POST /api/v1/ask-parcels",
+        sources: ["parcels", "neighborhoods", "municity"],
+        scopes: ["Private, bounded natural-language interpretation of reviewed City parcel and municipal permit fields"],
+        filter_fields: { question: "Commercial use codes, one exact published PermitType, optional published permit status/date, and City neighborhood" },
+        paging: "First parcel page is returned with validated criteria; use search_indexed_parcels and its cursor for later pages",
+        completeness: "The model supplies no source facts. The checked index and official code review control completeness; unsupported or ambiguous questions return clarification.",
+        follow_up_tools: ["get_data_context", "get_search_coverage", "search_indexed_parcels"],
+      },
+      {
+        tool: "get_data_context",
+        rest: "GET /api/v1/data-context",
+        sources: ["parcels", "neighborhoods", "cmt", "municity"],
+        scopes: ["Reviewed official-source meanings and separately labeled service reading rules"],
+        filter_fields: { term: "Optional text", source_id: "Optional source", field: "Optional published field" },
+        completeness: "Only reviewed entries are returned; City use-code definitions are withheld until an official dictionary is reviewed.",
       },
     ],
     not_yet_available: [

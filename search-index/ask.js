@@ -36,6 +36,8 @@ export async function interpretQuestion(question, typeNames) {
     "city-neighborhood", "search-coverage"].includes(entry.id));
   const { output } = await generateText({
     model: "openai/gpt-4.1-mini",
+    maxOutputTokens: 256,
+    abortSignal: AbortSignal.timeout(12_000),
     output: Output.object({ schema: interpretationSchema }),
     system: `Translate a New Haven parcel question to a bounded search intent. Use only the listed official field meanings and exact published permit type names. Do not answer the question or invent records. If the type or meaning is ambiguous, return clarify. 'Pulled' means PermitDate, not issued. A relative number of days is a calendar-date window; return the number, not calculated dates. Commercial is a service grouping of reviewed City use codes, never zoning or units_commercial. Only commercial, permit type/status/date, and City neighborhood are supported. Return unsupported for other requested criteria. Context: ${JSON.stringify(context)}. Official permit type names: ${JSON.stringify(typeNames)}.`,
     prompt: question,
@@ -103,8 +105,27 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
   }
   if (codeReview) return { status: "blocked", question, interpretation: parsed,
     reason: codeReview, context: getDataContext({ term: "use code" }).entries };
-  if (parsed.neighborhood) requirements.push({ source_id: "neighborhoods",
-    equals: { neighborhood: parsed.neighborhood.trim() } });
+  if (parsed.neighborhood?.trim()) {
+    let neighborhood = parsed.neighborhood.trim();
+    let neighborhoodField = "neighborhood";
+    if (indexConfigured()) try {
+      const names = await query(`SELECT DISTINCT fields->>'neighborhood' AS name,
+        fields->>'neighborhood_label' AS label FROM search_records
+        WHERE source_id = 'neighborhoods' AND run_id =
+          (SELECT run_id FROM search_active_runs WHERE source_id = 'neighborhoods' AND scope_key = 'all')`);
+      if (names.length) {
+        const found = names.find((row) => [row.name, row.label].some((value) =>
+          String(value ?? "").trim().toUpperCase() === neighborhood.toUpperCase()));
+        if (!found) return { status: "clarify", question,
+          clarification: `The City neighborhood index does not publish "${neighborhood}" as a neighborhood name.` };
+        if (!found.name) neighborhoodField = "neighborhood_label";
+        neighborhood = found.name || found.label;
+      }
+    } catch { return { status: "unavailable", question,
+      reason: "The official City neighborhood names could not be checked." }; }
+    requirements.push({ source_id: "neighborhoods",
+      equals: { [neighborhoodField]: neighborhood } });
+  }
   let dateWindow = null;
   if (permitType) {
     const requirement = { source_id: "municity", equals: { PermitType: permitType } };

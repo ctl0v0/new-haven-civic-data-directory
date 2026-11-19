@@ -10,10 +10,10 @@ const LIMIT = 10000;
 const INDEX_FIELDS = ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
   "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
   "LegalAddress"];
-const municipalUrl = (searchfield, value, numrecs = LIMIT) => {
+const municipalUrl = (searchfield, value, numrecs = LIMIT, fieldtype = "text") => {
   const url = new URL(VENDOR);
   for (const [key, fieldValue] of Object.entries({ Customer: "NewHavenCityCT",
-    entity: "Permit", entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
+    entity: "Permit", entity_id: "", fieldtype, mapid: "", mapobject: "",
     module: "", numrecs: String(numrecs), operator: "=", pid: "",
     searchfield, section: "", value })) url.searchParams.set(key, fieldValue);
   return url;
@@ -21,8 +21,8 @@ const municipalUrl = (searchfield, value, numrecs = LIMIT) => {
 const vendorOptions = { headers: { SourceId: "2" }, timeout: 60000,
   maxBytes: 75_000_000 };
 
-async function municipalSearch(searchfield, value, numrecs, get) {
-  const data = await get(municipalUrl(searchfield, value, numrecs), vendorOptions);
+async function municipalSearch(searchfield, value, numrecs, get, fieldtype = "text") {
+  const data = await get(municipalUrl(searchfield, value, numrecs, fieldtype), vendorOptions);
   const rows = data.rows === "" && Number(data.total) === 0 ? [] : data.rows;
   const total = Number(data.total);
   if (!Array.isArray(rows) || !Number.isSafeInteger(total) || total < rows.length)
@@ -134,21 +134,52 @@ export async function municipalDateSearchFormat(type = "Electrical Permit", { ge
     municipalDate(row.PermitDate));
   if (!dated) throw new SourceError("Municipal date-search probe found no dated permit row");
   const date = municipalDate(dated.PermitDate);
-  for (const value of [date.slice(5, 7) + "/" + date.slice(8, 10) + "/" + date.slice(0, 4), date]) {
-    const result = await municipalSearch("PermitDate", value, LIMIT, get);
-    if (result.rows.length >= LIMIT || result.total !== result.rows.length) continue;
-    if (result.rows.some((row) => municipalDate(row.PermitDate) !== date)) continue;
-    if (result.rows.some((row) => String(row.Permit_ID) === String(dated.Permit_ID)))
-      return value === date ? "iso" : "us";
+  const encodings = ["us", "us_short", "iso"];
+  const formats = ["text", "date", "datetime"].flatMap((fieldtype) =>
+    encodings.map((encoding) => ({ fieldtype, encoding })));
+  const attempts = [];
+  for (const format of formats) {
+    const value = municipalDateValue(date, format.encoding);
+    try {
+      let result = await municipalSearch("PermitDate", value, 100, get, format.fieldtype);
+      if (result.total > 100 && result.total < LIMIT)
+        result = await municipalSearch("PermitDate", value, LIMIT, get, format.fieldtype);
+      const exact = result.total === result.rows.length && result.rows.length < LIMIT &&
+        result.rows.every((row) => municipalDate(row.PermitDate) === date);
+      const reproduced = result.rows.some((row) => String(row.Permit_ID) === String(dated.Permit_ID));
+      attempts.push({ fieldtype: format.fieldtype, encoding: format.encoding,
+        total: result.total, returned: result.rows.length, exact, reproduced });
+      if (exact && reproduced) {
+        console.log(JSON.stringify({ event: "municipal_date_search_probe",
+          result: "verified", sample_date: date,
+          sample_value: String(dated.PermitDate), format, attempts }));
+        return format;
+      }
+    } catch (error) {
+      attempts.push({ fieldtype: format.fieldtype, encoding: format.encoding,
+        error: error instanceof SourceError ? error.message : "request failed" });
+    }
   }
-  throw new SourceError("Municipal PermitDate query did not reproduce a known official permit; recent window is unverified");
+  console.log(JSON.stringify({ event: "municipal_date_search_probe",
+    result: "unverified", sample_date: date,
+    sample_value: String(dated.PermitDate), attempts }));
+  throw new SourceError("Municipal PermitDate search did not reproduce a known official permit; recent window is unverified");
+}
+
+function municipalDateValue(date, encoding) {
+  if (encoding === "iso") return date;
+  const month = encoding === "us_short" ? String(Number(date.slice(5, 7))) : date.slice(5, 7);
+  const day = encoding === "us_short" ? String(Number(date.slice(8, 10))) : date.slice(8, 10);
+  return `${month}/${day}/${date.slice(0, 4)}`;
 }
 
 export async function municipalPermitDateRows(date, type, format, { get = fetchJson } = {}) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !["us", "iso"].includes(format))
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !["us", "us_short", "iso"].includes(format?.encoding) ||
+      !["text", "date", "datetime"].includes(format?.fieldtype))
     throw new SourceError("Invalid municipal date search", 400);
-  const value = format === "iso" ? date : `${date.slice(5, 7)}/${date.slice(8, 10)}/${date.slice(0, 4)}`;
-  const { rows, total } = await municipalSearch("PermitDate", value, LIMIT, get);
+  const value = municipalDateValue(date, format.encoding);
+  const { rows, total } = await municipalSearch("PermitDate", value, LIMIT, get, format.fieldtype);
   if (rows.length >= LIMIT || total !== rows.length)
     throw new MunicipalPermitCapError(`PermitDate ${date}`, total);
   if (rows.some((row) => municipalDate(row.PermitDate) !== date ||

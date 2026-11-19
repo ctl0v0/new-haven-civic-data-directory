@@ -96,7 +96,7 @@ jobs:
           refresh_status=$?
           set -e
           if [ "$REFRESH_MODE" = daily ] && [ "$refresh_status" -eq 0 ]; then npm run index:prune; fi
-          if [ "$REFRESH_MODE" = daily ] && [ "$refresh_status" -eq 0 ]; then
+          if [ "$REFRESH_MODE" = daily ]; then
             npm run index:audit-use-codes || echo 'Official City use-code audit unavailable; commercial query remains gated'
           fi
           if [ "$REFRESH_MODE" != daily ]; then npm run index:smoke; fi

@@ -93,6 +93,18 @@ test("City code audit reports missing official labels without inventing classifi
   assert.equal(report.unreviewed_codes, 1);
 });
 
+test("a model-supplied neighborhood must match an indexed City name", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const answer = await askIndexedParcels({ question: "electrical permits in an unknown neighborhood" }, {
+    catalog, interpret: async () => ({ ...interpreted,
+      neighborhood: "Invented Neighborhood" }),
+    query: async () => [{ name: "Westville", label: "Westville" }],
+    search: async () => { throw Error("must not search"); },
+  });
+  assert.equal(answer.status, "clarify");
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
 test("one-of use-code SQL is parameterized and a date-bound permit run cannot answer outside its window", async () => {
   const sql = buildIndexedSearchQuery([{ source_id: "parcels", equals: {},
     one_of: { use_code: ["RET", "MIX"] } }], { parcels: 4 }, 0, 25);
@@ -130,11 +142,11 @@ test("date search must reproduce a known vendor permit and reconcile the exact d
       ? { rows: [sample], total: 1 } : { rows: "", total: 0 };
   };
   const format = await municipalDateSearchFormat("Electrical Permit", { get });
-  assert.equal(format, "us");
+  assert.deepEqual(format, { fieldtype: "text", encoding: "us" });
   const day = await municipalPermitDateRows("2026-11-18", "Electrical Permit", format, { get });
   assert.equal(day.rows[0].record_id, "99");
   assert.equal(day.rows[0].event_date, "2026-11-18");
-  await assert.rejects(municipalPermitDateRows("2026-11-18", "Electrical Permit", "us", {
+  await assert.rejects(municipalPermitDateRows("2026-11-18", "Electrical Permit", format, {
     get: async () => ({ rows: [{ ...sample, PermitDate: "11/17/2026" }], total: 1 }),
   }), /unverified row or date/);
 });
