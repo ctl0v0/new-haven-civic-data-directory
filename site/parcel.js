@@ -17,6 +17,8 @@ const sourceNames = {
   addresses: "City address points",
   "trash-pickup": "City trash pickup zones",
   "school-attendance": "NHPS attendance-zone schools",
+  "tax-bills": "City real estate tax bills",
+  "land-records": "City Clerk land records",
   assessor: "Assessor card",
   "assessor-owner": "Assessor card owner",
   "assessor-sales": "Assessor ownership history",
@@ -39,6 +41,7 @@ const sourceNames = {
   "lci-cases": "LCI cases",
   "managed-lots": "LCI managed lots",
   planning: "Planning cases",
+  inspections: "Inspections and enforcement",
   zoning: "City zoning",
   wards: "City wards",
   neighborhoods: "City neighborhoods",
@@ -258,7 +261,24 @@ async function loadOverview(qs, version) {
     const counts = $("overview-counts");
     counts.replaceChildren();
     const total = data.groups.reduce((sum, group) => sum + group.record_count, 0);
-    counts.append(el("p", `${total} returned rows across ${data.groups.length} groups${data.partial ? " · some source checks incomplete" : ""}. Counts describe this response, and a record may appear in more than one group.`, "overview-summary"));
+    const incompleteGroups = data.groups.filter((group) => incompleteSources(group.sources).length).length;
+    counts.append(el("p", `${total} returned rows across ${data.groups.length} groups${incompleteGroups ? ` · ${incompleteGroups} ${incompleteGroups === 1 ? "group has" : "groups have"} incomplete live checks` : ""}. Counts describe this response, and a record may appear in more than one group.`, "overview-summary"));
+    const knownGaps = data.groups.flatMap((group) =>
+      group.sources.filter((source) => ["not_integrated", "not_linked"].includes(source.status))
+        .map((source) => ({ group: group.id, source })));
+    if (knownGaps.length) {
+      const details = el("details", null, "overview-known-gaps");
+      details.append(el("summary", `Known coverage limits · ${knownGaps.length} ${knownGaps.length === 1 ? "source" : "sources"} not integrated or not linked`));
+      const list = el("ul");
+      for (const { group, source } of knownGaps) {
+        const row = el("li");
+        row.append(el("strong", `${groups.find(([id]) => id === group)?.[1] ?? group} · ${sourceName(source.source_id)}: `));
+        row.append(document.createTextNode(source.warning ?? source.coverage));
+        list.append(row);
+      }
+      details.append(list);
+      counts.append(details);
+    }
     const grid = $("snapshot-grid");
     grid.replaceChildren();
     for (const [id, title] of groups) {
@@ -270,8 +290,9 @@ async function loadOverview(qs, version) {
       open.addEventListener("click", () => showDataSection(id));
       heading.append(open, el("span", `${group?.record_count ?? 0} returned`, "group-count"));
       section.append(heading);
-      if (group?.sources.some((source) => ["partial", "unavailable"].includes(source.status)))
-        section.append(el("p", "Some source checks were incomplete; review coverage in this group.", "source-warning"));
+      const issues = incompleteSources(group?.sources);
+      if (issues.length)
+        section.append(el("p", `Incomplete live checks: ${sourceIssueLabels(issues)}. Open this group for details.`, "source-warning"));
       const items = data.highlights?.[id] ?? [];
       if (items.length) {
         const list = el("ul", null, "overview-highlights");
@@ -359,6 +380,12 @@ function brief(value, max = 170) {
 }
 function sourceName(id) {
   return sourceNames[id] ?? id.replaceAll("-", " ");
+}
+function incompleteSources(sources) {
+  return (sources ?? []).filter((source) => ["partial", "unavailable"].includes(source.status));
+}
+function sourceIssueLabels(sources) {
+  return sources.map((source) => `${sourceName(source.source_id)} (${source.status})`).join(", ");
 }
 function recordStatus(item) {
   const a = item.attributes ?? {};
@@ -808,11 +835,18 @@ function sourceLine(parent, source) {
   const row = el("div", null, "source-status");
   const top = el("div", null, "source-status-top");
   top.append(el("strong", sourceName(source.source_id)));
-  top.append(el("span", `${source.count} ${source.count === 1 ? "record" : "records"}`, "source-count"));
+  const count = source.status === "not_integrated" ? "Not queried"
+    : source.status === "not_linked" ? "No verified link"
+      : source.status === "unavailable" ? "Check unavailable"
+        : source.status === "partial" ? `${source.count} shown`
+          : `${source.count} ${source.count === 1 ? "record" : "records"}`;
+  top.append(el("span", count, "source-count"));
   top.append(el("span", source.status.replaceAll("_", " "), `badge ${source.status}`));
   row.append(top);
   if (source.status === "unavailable" || source.status === "partial")
     row.append(el("p", source.warning ?? source.coverage, "source-warning"));
+  if (source.status === "not_linked")
+    row.append(el("p", source.warning, "source-note"));
   if (source.category_counts)
     row.append(
       el(
@@ -828,7 +862,7 @@ function sourceLine(parent, source) {
   const info = el("details", null, "source-coverage");
   info.append(el("summary", "Coverage and source"));
   info.append(el("p", source.coverage, "meta"));
-  if (source.warning && source.status !== "unavailable" && source.status !== "partial")
+  if (source.warning && !["unavailable", "partial", "not_linked"].includes(source.status))
     info.append(el("p", source.warning, "meta"));
   if (source.source_url) info.append(link(source.source_url, "Open source"));
   if (source.verification_url) info.append(link(source.verification_url, "Confirm with city"));
@@ -1504,6 +1538,15 @@ function renderTimelineFilters(data, qs, version) {
       }
     container.append(active);
   }
+  const sourceCoverage = el("details", null, "sources-panel timeline-coverage");
+  const issues = incompleteSources(data.sources);
+  sourceCoverage.append(el("summary", `Timeline source coverage · ${data.sources.length} checks${issues.length ? ` · ${issues.length} incomplete` : ""}`));
+  const sourceList = el("div", null, "source-list");
+  for (const source of data.sources) sourceLine(sourceList, source);
+  sourceCoverage.append(sourceList);
+  container.append(sourceCoverage);
+  if (issues.length)
+    container.append(el("p", `Incomplete timeline checks: ${sourceIssueLabels(issues)}. Open Timeline source coverage for details.`, "source-warning"));
   const details = el("details", null, "filter-drawer");
   details.append(el("summary", `More filters${filterCount(timelineFilters) ? ` · ${filterCount(timelineFilters)} applied` : ""}`));
   const form = el("form", null, "filter-form");
@@ -1815,13 +1858,15 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       section.append(renderFilters(id, data, qs, version));
       renderCategoryIndex(section, id, data, qs, version);
       const coverage = el("details", null, "sources-panel");
-      const gaps = data.sources.filter((source) => ["partial", "unavailable"].includes(source.status)).length;
-      coverage.append(el("summary", `Sources checked: ${data.sources.length}${gaps ? ` · ${gaps} with gaps` : ""}`));
+      const issues = incompleteSources(data.sources);
+      const notIntegrated = data.sources.filter((source) => source.status === "not_integrated").length;
+      const notLinked = data.sources.filter((source) => source.status === "not_linked").length;
+      coverage.append(el("summary", `Source coverage · ${data.sources.length - notIntegrated - notLinked} live checks${issues.length ? ` · ${issues.length} incomplete` : ""}${notIntegrated ? ` · ${notIntegrated} not integrated` : ""}${notLinked ? ` · ${notLinked} not linked` : ""}`));
       const sourceList = el("div", null, "source-list");
       for (const source of data.sources) sourceLine(sourceList, source);
       coverage.append(sourceList);
       section.append(coverage);
-      if (gaps) section.append(el("p", `${gaps} source checks were incomplete; counts describe returned rows.`, "source-warning"));
+      if (issues.length) section.append(el("p", `Incomplete live checks: ${sourceIssueLabels(issues)}. Returned counts may be limited; open Source coverage for the source's reason.`, "source-warning"));
       const grouped = ["activity", "business", "ownership"].includes(id);
       const records = el("div", null, grouped ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
@@ -1906,15 +1951,12 @@ async function loadFeed(qs, version, cursor = null) {
     if (!cursor) {
       $("feed").replaceChildren();
       renderTimelineFilters(data, qs, version);
-      const gaps = data.sources.filter((source) => ["unavailable", "partial"].includes(source.status));
-      if (gaps.length)
-        $("feed").append(el("li", `${gaps.length} timeline sources have limited coverage. Review source status in the groups below.`, "timeline-note"));
     }
     for (const item of data.items) appendTimelineEvent($("feed"), item);
     timelineReturnedCount = data.returned_total;
     updateDataNavCounts();
     const summary = $("timeline-result-count");
-    if (summary) summary.textContent = `${$("feed").querySelectorAll(".timeline-entry").length} shown of ${data.total} matching dated rows · ${data.returned_total} returned by sources${data.partial ? " · some source checks incomplete" : ""}`;
+    if (summary) summary.textContent = `${$("feed").querySelectorAll(".timeline-entry").length} shown of ${data.total} matching dated rows · ${data.returned_total} returned by sources`;
     if (!data.items.length && !cursor)
       $("feed").append(
         el("li", "No dated records were returned by the checked sources.", "timeline-note"),

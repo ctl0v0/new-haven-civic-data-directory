@@ -53,6 +53,26 @@ const unavailable = (sourceId, reason = null) => ({
   verification_url: source(sourceId)?.verification_url ?? null,
   retrieved_at: null,
 });
+const notIntegrated = (sourceId) => ({
+  source_id: sourceId,
+  status: "not_integrated",
+  items: [],
+  warning: null,
+  coverage: source(sourceId)?.coverage ?? "",
+  source_url: source(sourceId)?.url ?? null,
+  verification_url: source(sourceId)?.verification_url ?? null,
+  retrieved_at: null,
+});
+const notLinked = (sourceId, reason) => ({
+  source_id: sourceId,
+  status: "not_linked",
+  items: [],
+  warning: reason ?? "No verified parcel-to-source link was established.",
+  coverage: source(sourceId)?.coverage ?? "",
+  source_url: source(sourceId)?.url ?? null,
+  verification_url: source(sourceId)?.verification_url ?? null,
+  retrieved_at: null,
+});
 const coded = (error) =>
   error instanceof SourceError
     ? error.message
@@ -1024,10 +1044,12 @@ async function cmtContactRecords(parcel) {
     ),
   );
   return result("cmt-contacts", items, {
-    partial: Boolean(items.length || data.exceededTransferLimit),
-    warning: items.length
-      ? "GIS-published contacts are provisional. Confirm them on the linked city CMT page."
-      : null,
+    partial: Boolean(data.exceededTransferLimit),
+    warning: data.exceededTransferLimit
+      ? "CMT contact query was truncated. Confirm contacts on the linked city CMT page."
+      : items.length
+        ? "GIS-published contacts may differ from the city CMT page. Confirm current contacts there."
+        : null,
   });
 }
 
@@ -1569,7 +1591,7 @@ function registryNoLink(sourceId, parcel, reason) {
   const owner = parcel.attributes.owner_name_1;
   return owner && !legalName(owner).endsWith(" LLC")
     ? result(sourceId, [], { warning: reason })
-    : unavailable(sourceId, reason);
+    : notLinked(sourceId, reason);
 }
 
 async function registryChildRecords(parcel, sourceId, dataset, joinField) {
@@ -1653,6 +1675,7 @@ const ADAPTERS = Object.freeze({
 export async function getSourceRecords(sourceId, parcel) {
   const definition = source(sourceId);
   if (!definition) throw new SourceError("Unknown source", 400);
+  if (definition.mode !== "live") return notIntegrated(sourceId);
   if (!ADAPTERS[sourceId]) return unavailable(sourceId);
   const id = Number(parcel.attributes.parcel_id);
   try {

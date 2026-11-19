@@ -56,7 +56,8 @@ export function schemaGuide() {
       "Resolve the City parcel before requesting parcel records.",
       "Only official City and State records are returned; a map background is visual context.",
       "A zero count covers the returned records, not every possible record held by the publisher.",
-      "Unavailable and partial source checks are reported alongside results.",
+      "A known source without an integrated parcel join is not_integrated; an owner LLC without a verified State match is not_linked. Neither means a live check failed.",
+      "Partial and unavailable live source checks are reported alongside results with their reason.",
       "A published status or date does not prove current occupancy, work underway or a complete history.",
     ],
   };

@@ -150,6 +150,8 @@ summary:focus-visible {
 .badge.partial {
   background: #ffebcf;
 }
+.badge.not_integrated,
+.badge.not_linked { background: #e9edf0; color: #40586a; }
 .badge.no_records {
   background: #e9edf0;
 }
@@ -460,6 +462,11 @@ details.display-section > summary strong { margin-right: auto; }
   font-weight: 800;
 }
 .overview-summary { margin: .25rem 0 .75rem; color: #425d52; font-size: .87rem; }
+.overview-known-gaps { margin: .35rem 0 .85rem; color: #445f53; font-size: .8rem; }
+.overview-known-gaps > summary { cursor: pointer; font-weight: 700; }
+.overview-known-gaps ul { margin: .45rem 0 .65rem; padding-left: 1.25rem; }
+.overview-known-gaps li { margin: .35rem 0; }
+.source-note { margin: .35rem 0; color: #4c655d; font-size: .8rem; }
 .overview-group { display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); gap: .2rem 1rem; padding: .9rem .15rem; border-bottom: 1px solid #d7e2d9; }
 .overview-group-heading { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; }
 .overview-link { width: auto; padding: 0; background: transparent; border-radius: 0; color: #15583f; font-size: .95rem; text-align: left; text-decoration: underline; text-underline-offset: .2rem; }

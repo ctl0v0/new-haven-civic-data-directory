@@ -1100,9 +1100,25 @@ test("state records without an owner LLC and manually selected planning sources 
   p.attributes.property_address = "181 CROWN ST";
   for (const sourceId of ["business-master", "business-principals", "business-agents", "state-licenses", "planning"]) {
     const out = await getSourceRecords(sourceId, p);
-    assert.equal(out.status, "unavailable");
+    assert.equal(out.status, ["state-licenses", "planning"].includes(sourceId) ? "not_integrated" : "not_linked");
     assert.deepEqual(out.items, []);
   }
+});
+
+test("a catalog gap does not turn a complete live business check into a partial group", async () => {
+  const p = parcel(999099);
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ Parcel_ID: 42, PrintKey: "12/34" }], total: 1 });
+    if (url.pathname.endsWith("/Parcel/42/Children"))
+      return response(Object.fromEntries(["Document", "Application", "Complaint", "Contact", "License", "Permit", "Occupant", "Certificate"].map((category) => [category, []])));
+    throw Error(`Unexpected source: ${url.hostname}`);
+  };
+  const out = await getGroup("business", p);
+  assert.equal(out.partial, false);
+  assert.equal(out.sources.find((source) => source.source_id === "state-licenses").status, "not_integrated");
+  assert.deepEqual(out.items, []);
 });
 
 test("owner LLC join requires matching legal name and complete mailing address", () => {
@@ -1567,7 +1583,7 @@ test("CMT districts come from live parcel intersections and contacts stay provis
   assert.equal(contacts[0].attributes.cmt_chair, "GIS Contact");
   assert.equal(
     out.sources.find((s) => s.source_id === "cmt-contacts").status,
-    "partial",
+    "ok",
   );
   assert.match(
     out.sources.find((s) => s.source_id === "cmt-contacts").verification_url,
@@ -1617,7 +1633,7 @@ test("overview keeps source gaps and links visible without raw source fields", a
   const out = await parcelOverview("999007");
   assert.equal(out.groups.length, 7);
   const property = out.groups.find((group) => group.id === "property");
-  assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "unavailable");
+  assert.equal(property.sources.find((s) => s.source_id === "tax-bills").status, "not_integrated");
   assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);
   assert.equal(out.recent_events[0].source_id, "parcel-sale");
   assert.doesNotMatch(JSON.stringify(out), /sale_date|property_address/);
