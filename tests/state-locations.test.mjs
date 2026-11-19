@@ -95,4 +95,10 @@ test("State site locations join only through exact City addresses with a unique 
   assert.ok(requests.filter((url) => url.pathname.includes("New_Haven_Addresses_Authoritative_view") &&
     url.searchParams.get("geometryType") === "esriGeometryPolygon").length === 1);
   assert.ok(requests.every((url) => ["data.ct.gov", "gis.newhavenct.gov"].includes(url.hostname)));
+  const unlinked = await getSourceRecords("ct-child-care-licenses", {
+    ...selected, attributes: { objectid: 4402, parcel_id: 77002 },
+  });
+  assert.equal(unlinked.status, "not_linked");
+  assert.deepEqual(unlinked.items, []);
+  assert.match(unlinked.warning, /non-unique City parcel joins/);
 });

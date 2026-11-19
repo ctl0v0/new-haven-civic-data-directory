@@ -131,10 +131,12 @@ export async function stateLocationMatches(sourceId, parcel) {
   for (const check of checks.values()) if (check.incomplete) incompleteChecks++;
   for (const check of checks.values()) if (check.ambiguous) ambiguousChecks++;
   const truncated = rows.length >= CITY_ROW_LIMIT;
+  const notLinked = matchingRows.length > 0 && matches.length === 0 && !truncated && incompleteChecks === 0;
   const warning = [
     truncated ? `The State returned at least ${CITY_ROW_LIMIT} New Haven rows; this roster check may be truncated.` : null,
     incompleteChecks ? `${incompleteChecks} candidate site address${incompleteChecks === 1 ? "" : "es"} could not be verified against City parcel geometry.` : null,
     ambiguousChecks ? `${ambiguousChecks} site address${ambiguousChecks === 1 ? "" : "es"} had non-unique City parcel joins and were excluded.` : null,
+    notLinked && !ambiguousChecks ? "State site address text matched a City address on this parcel, but did not establish a unique City parcel join." : null,
   ].filter(Boolean).join(" ") || null;
-  return { matches, partial: truncated || incompleteChecks > 0, warning };
+  return { matches, partial: truncated || incompleteChecks > 0, notLinked, warning };
 }
