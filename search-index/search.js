@@ -123,12 +123,13 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit) {
     const sourceRun = add(runs[requirement.source_id]);
     const filters = conditions(requirement, "r", add);
     return `(SELECT jsonb_build_object('source_id', ${add(requirement.source_id)}::text,
-      'matching_record_count', count(*),
+      'matching_record_count', count(DISTINCT r.record_id),
       'example_record', (jsonb_agg(jsonb_build_object(
         'record_id', r.record_id, 'source_url', r.source_url,
         'published_type', r.published_type, 'published_status', r.published_status,
-        'event_date', r.event_date) ORDER BY r.record_id)->0),
-      'example_city_address_objectid', min(j.city_address_objectid))
+        'event_date', r.event_date,
+        'city_address_objectid', j.city_address_objectid)
+        ORDER BY r.record_id, j.city_address_objectid)->0))
       FROM search_record_parcels j JOIN search_records r
         ON r.run_id = j.run_id AND r.source_id = j.source_id AND r.record_id = j.record_id
       WHERE j.run_id = ${sourceRun} AND j.source_id = ${add(requirement.source_id)}

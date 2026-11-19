@@ -147,6 +147,9 @@ test("indexed cross-source search uses exact parcel joins and refuses an unindex
     event_date_from: null, event_date_to: null }], { parcels: 10, zoning: 11 }, 0, 25);
   assert.match(sql.query, /j\.join_status = 'exact'/);
   assert.match(sql.query, /'example_record'/);
+  assert.match(sql.query, /count\(DISTINCT r\.record_id\)/);
+  assert.match(sql.query, /'city_address_objectid', j\.city_address_objectid/);
+  assert.ok(!sql.query.includes("example_city_address_objectid"));
   assert.ok(!sql.query.includes("BD"));
   assert.ok(sql.values.includes("BD"));
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
