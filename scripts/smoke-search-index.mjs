@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { indexQuery } from "../search-index/db.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { searchIndexedPermits } from "../search-index/permits.js";
@@ -12,6 +13,8 @@ const reader = new URL(writer);
 reader.username = role;
 reader.password = password;
 process.env.SEARCH_DATABASE_URL = reader.toString();
+// A smoke run needs cursor signing, but never needs the Preview login secret.
+process.env.PILOT_COOKIE_SECRET ??= randomBytes(32).toString("hex");
 
 const [identity] = await indexQuery(`SELECT current_user AS role,
   has_table_privilege(current_user, 'search_records', 'SELECT') AS can_read,
