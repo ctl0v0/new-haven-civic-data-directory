@@ -43,6 +43,7 @@ for (const type of selected) {
       record_id: row.record_id, reason: row.reason,
       legal_address_published: Boolean(row.legal_address),
       vendor_parcel_id_published: Boolean(row.vendor_parcel_id),
+      vendor_parcel_key_published: Boolean(row.print_key_parcel),
     })) });
 }
 console.log(JSON.stringify({ event: "municipal_linkage_audit",

@@ -55,6 +55,11 @@ export async function auditMunicipalPermitLinks(input = {}, { query = indexQuery
         NULLIF(btrim(r.fields->>'PrintKey'), '') IS NULL AND
         NULLIF(btrim(r.fields->>'Parcel_ID'), '') IS NOT NULL)::integer AS missing_print_key_with_vendor_parcel_id,
       count(*) FILTER (WHERE l.record_id IS NULL AND
+        NULLIF(btrim(r.fields->>'PrintKey_Parcel'), '') IS NOT NULL)::integer AS unlinked_with_vendor_parcel_key,
+      count(*) FILTER (WHERE l.record_id IS NULL AND
+        NULLIF(btrim(r.fields->>'PrintKey'), '') IS NULL AND
+        NULLIF(btrim(r.fields->>'PrintKey_Parcel'), '') IS NOT NULL)::integer AS missing_print_key_with_vendor_parcel_key,
+      count(*) FILTER (WHERE l.record_id IS NULL AND
         NULLIF(btrim(r.fields->>'LegalAddress'), '') IS NOT NULL)::integer AS unlinked_with_legal_address
       FROM search_records r LEFT JOIN links l ON l.record_id = r.record_id
       WHERE r.run_id = $1 AND r.source_id = 'municity'`, [run.run_id]);

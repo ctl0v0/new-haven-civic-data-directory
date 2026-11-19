@@ -126,7 +126,7 @@ export function searchCapabilities() {
       rest: "GET /api/v1/permit-linkage-audit",
       scope: "One exact published municipal permit type with an active indexed run",
       reports: ["exact parcel links", "ambiguous links", "missing PrintKey",
-        "unmatched nonblank PrintKey", "unlinked records with vendor Parcel_ID",
+        "unmatched nonblank PrintKey", "unlinked records with vendor Parcel_ID or PrintKey_Parcel",
         "unlinked records with LegalAddress"],
       note: "A published address in an unlinked record is evidence for review, not an inferred City parcel association.",
     },

@@ -392,6 +392,8 @@ test("municipal permit linkage audit separates missing keys from unmatched publi
         unlinked_records: 3, missing_print_key: 2, unmatched_print_key: 1,
         unlinked_with_vendor_parcel_id: 1,
         missing_print_key_with_vendor_parcel_id: 1,
+        unlinked_with_vendor_parcel_key: 1,
+        missing_print_key_with_vendor_parcel_key: 1,
         unlinked_with_legal_address: 1 }];
     }
     assert.deepEqual(values, [71, 2]);
@@ -401,6 +403,7 @@ test("municipal permit linkage audit separates missing keys from unmatched publi
   assert.equal(audited.counts.missing_print_key, 2);
   assert.equal(audited.counts.unmatched_print_key, 1);
   assert.equal(audited.counts.missing_print_key_with_vendor_parcel_id, 1);
+  assert.equal(audited.counts.missing_print_key_with_vendor_parcel_key, 1);
   assert.equal(audited.samples[0].reason, "missing_print_key");
   assert.match(countsSql, /NULLIF\(btrim\(r\.fields->>'PrintKey'\), ''\)/);
   const capped = await auditMunicipalPermitLinks({ permit_type: "Building Permit" },
