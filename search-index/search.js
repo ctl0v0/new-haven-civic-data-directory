@@ -21,7 +21,8 @@ export const SEARCH_FIELDS = Object.freeze({
   "ct-cannabis-retail": STATE_ROSTERS["ct-cannabis-retail"].fields,
   "school-attendance": ["street_name", "k8_school", "high_school"],
   municity: ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
-    "PermStatus", "PermitDate", "PrintKey", "LegalAddress"],
+    "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
+    "LegalAddress"],
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", "ct-liquor-permits",
   "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance"]);

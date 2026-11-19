@@ -1,6 +1,7 @@
 import { indexQuery } from "../search-index/db.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { auditMunicipalPermitLinks } from "../search-index/linkage-audit.js";
+import { auditMunicipalAddressCandidates } from "../search-index/address-candidate-audit.js";
 
 const writer = process.env.SEARCH_DATABASE_WRITE_URL;
 const password = process.env.SEARCH_DATABASE_READER_PASSWORD;
@@ -41,6 +42,7 @@ for (const type of selected) {
     sample_record_ids: result.samples.map((row) => ({
       record_id: row.record_id, reason: row.reason,
       legal_address_published: Boolean(row.legal_address),
+      vendor_parcel_id_published: Boolean(row.vendor_parcel_id),
     })) });
 }
 console.log(JSON.stringify({ event: "municipal_linkage_audit",
@@ -51,3 +53,10 @@ console.log(JSON.stringify({ event: "municipal_linkage_audit",
   unlinked_record_count: types.reduce((sum, type) =>
     sum + Number(type.unlinked_count ?? 0), 0),
   most_unlinked_types: audited }));
+
+const addressAudit = await auditMunicipalAddressCandidates([
+  "Hood - C", "Gas Service Lateral", "Dumpster/Pod/Container",
+  "Water Lateral", "Heating Permit",
+]);
+console.log(JSON.stringify({ event: "municipal_address_candidate_audit",
+  reader_role_verified: true, ...addressAudit }));

@@ -8,6 +8,8 @@ The City's public Municity permit type catalog listed 269 types in the November 
 
 The public parcel service can return Permit, Application, Complaint, Contact, License, Occupant, Document and Certificate children for a verified vendor parcel. A permit or application can return public Fee, Task, Inspection, Document, Contact, Flag and Communication metadata. The service sometimes omits category keys. An omitted category does not establish a zero count.
 
+An exact-ID check of official permit rows found `Hood - C` records `571466` and `572909` with nonblank `PrintKey`, `PrintKey_Parcel`, and vendor `Parcel_ID` values that did not join to the current City MBLU index. Another checked `Gas Service Lateral` row (`511821`) published `LegalAddress` but neither parcel field; record `513516` published all three. These are examples for crosswalk review, not inferred City parcel assignments. The index now retains the vendor identifiers when a type refresh returns them, and a read-only address-point audit measures candidate matches and disagreements before any address-based linkage is considered.
+
 ## Requested delivery
 
 Please identify a supported **recurring machine-readable export or documented paged API** for the public New Haven records below. CSV, JSON, or a documented API is suitable if it provides a stable snapshot or cursor, published record IDs, a total row count, an extraction or revision time, and a way to detect changed and deleted records. A one-time PDF or undocumented response-size increase would not meet the completeness requirement.

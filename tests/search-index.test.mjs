@@ -5,6 +5,7 @@ import { indexSourceCatalog } from "../search-index/catalog.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
 import { auditMunicipalPermitLinks } from "../search-index/linkage-audit.js";
+import { auditMunicipalAddressCandidates } from "../search-index/address-candidate-audit.js";
 import { buildIndexedSearchQuery, searchIndexedParcels, searchIndexedRecords,
   SEARCH_FIELDS } from "../search-index/search.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
@@ -224,7 +225,8 @@ test("indexed parcel ranges safely parse published JSON numbers and numeric stri
 test("municipal type import keeps only official Permit IDs and uses the checked larger bound", async () => {
   const catalog = async () => ({ groups: [{ types: [{ name: "Hood - C" }] }] });
   const row = { Permit_ID: 569338, PermitType: "Hood - C", PermStatus: "Issued",
-    PermitDate: "01/05/2026", PrintKey: "12/34/56", LegalAddress: "486 ORANGE ST" };
+    PermitDate: "01/05/2026", Parcel_ID: 32762, PrintKey: "12/34/56",
+    PrintKey_Parcel: "12/34/56", LegalAddress: "486 ORANGE ST" };
   const good = await municipalPermitTypeRows("Hood - C", { catalog,
     get: async (url, options) => {
       assert.equal(url.searchParams.get("numrecs"), "10000");
@@ -234,6 +236,8 @@ test("municipal type import keeps only official Permit IDs and uses the checked 
   assert.equal(good.rows[0].event_date, "2026-01-05");
   assert.equal(good.rows[0].record_id, "569338");
   assert.equal(good.rows[0].fields.PrintKey, "12/34/56");
+  assert.equal(good.rows[0].fields.Parcel_ID, 32762);
+  assert.equal(good.rows[0].fields.PrintKey_Parcel, "12/34/56");
   const larger = await municipalPermitTypeRows("Hood - C", { catalog,
     get: async () => ({ rows: Array.from({ length: 2001 }, (_, i) =>
       ({ ...row, Permit_ID: i + 1 })), total: 2001 }) });
@@ -249,6 +253,9 @@ test("municipal type import keeps only official Permit IDs and uses the checked 
   await assert.rejects(municipalPermitTypeRows("Hood - C", { catalog,
     get: async () => ({ rows: [row, { ...row, PrintKey: "99/88/77" }], total: 2 }) }),
   /conflicting published PrintKey/);
+  await assert.rejects(municipalPermitTypeRows("Hood - C", { catalog,
+    get: async () => ({ rows: [row, { ...row, Parcel_ID: 99999 }], total: 2 }) }),
+  /conflicting published Parcel_ID/);
 });
 
 test("municipal refresh compares published permit IDs independent of vendor row order", () => {
@@ -383,6 +390,8 @@ test("municipal permit linkage audit separates missing keys from unmatched publi
       assert.deepEqual(values, [71]);
       return [{ indexed_records: 4, exact_records: 1, ambiguous_records: 0,
         unlinked_records: 3, missing_print_key: 2, unmatched_print_key: 1,
+        unlinked_with_vendor_parcel_id: 1,
+        missing_print_key_with_vendor_parcel_id: 1,
         unlinked_with_legal_address: 1 }];
     }
     assert.deepEqual(values, [71, 2]);
@@ -391,6 +400,7 @@ test("municipal permit linkage audit separates missing keys from unmatched publi
   } });
   assert.equal(audited.counts.missing_print_key, 2);
   assert.equal(audited.counts.unmatched_print_key, 1);
+  assert.equal(audited.counts.missing_print_key_with_vendor_parcel_id, 1);
   assert.equal(audited.samples[0].reason, "missing_print_key");
   assert.match(countsSql, /NULLIF\(btrim\(r\.fields->>'PrintKey'\), ''\)/);
   const capped = await auditMunicipalPermitLinks({ permit_type: "Building Permit" },
@@ -407,6 +417,46 @@ test("municipal permit linkage audit separates missing keys from unmatched publi
   assert.equal(inconsistent.counts, null);
   assert.equal(inconsistent.coverage.index_status, "unavailable");
   delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("address audit checks official address points against existing vendor parcel links without joining records", async () => {
+  const audited = await auditMunicipalAddressCandidates(["Hood - C"], {
+    query: async (sql) => {
+      if (sql.includes("a.source_id = 'addresses'"))
+        return [{ id: 10, status: "complete", returned_count: 3, finished_at: new Date() }];
+      if (sql.includes("a.source_id = 'municity'"))
+        return [{ id: 20, status: "complete", returned_count: 4, finished_at: new Date() }];
+      if (sql.includes("WITH page AS")) return [
+        { record_id: "101", normalized_address: "45 CLAY ST",
+          links: [{ city_parcel_id: 7, city_objectid: 8, join_status: "exact" }] },
+        { record_id: "102", normalized_address: "50 CLAY ST",
+          links: [{ city_parcel_id: 9, city_objectid: 10, join_status: "exact" }] },
+        { record_id: "103", normalized_address: "50 CLAY ST",
+          links: [{ city_parcel_id: 11, city_objectid: 12, join_status: "exact" }] },
+      ];
+      return [
+        { record_id: "1", legal_address: "45 CLAY STREET", print_key: "",
+          vendor_parcel_id: "", links: [] },
+        { record_id: "2", legal_address: "45 CLAY ST", print_key: "123",
+          vendor_parcel_id: "10", links: [{ city_parcel_id: 7,
+            city_objectid: 8, join_status: "exact" }] },
+        { record_id: "3", legal_address: "45 CLAY ST", print_key: "456",
+          vendor_parcel_id: "11", links: [{ city_parcel_id: 6,
+            city_objectid: 5, join_status: "exact" }] },
+        { record_id: "4", legal_address: "50 CLAY ST", print_key: "",
+          vendor_parcel_id: "12", links: [] },
+      ];
+    }, sampleLimit: 2,
+  });
+  const { counts, samples } = audited.results[0];
+  assert.equal(counts.unlinked_missing_print_key_with_candidate, 1);
+  assert.equal(counts.exact_vendor_link_and_address_agree, 1);
+  assert.equal(counts.exact_vendor_link_and_address_conflict, 1);
+  assert.equal(counts.ambiguous_city_address_candidate, 1);
+  assert.equal(counts.missing_print_key_with_vendor_parcel_id, 1);
+  assert.equal(samples.unlinked_missing_key_candidates[0].city_address_candidate, "7:8");
+  assert.equal(samples.vendor_link_address_conflicts[0].record_id, "3");
+  assert.match(audited.note, /do not establish a vendor parcel relationship/);
 });
 
 test("protected linkage audit route and MCP agree when the index is unconfigured", async () => {

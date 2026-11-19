@@ -8,7 +8,8 @@ const VENDOR = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Da
 // fills this request is still not an established full enumeration.
 const LIMIT = 10000;
 const INDEX_FIELDS = ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
-  "PermStatus", "PermitDate", "PrintKey", "LegalAddress"];
+  "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
+  "LegalAddress"];
 
 export class MunicipalPermitCapError extends SourceError {
   constructor(permitType, publishedTotal) {

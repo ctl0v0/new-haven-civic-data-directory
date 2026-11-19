@@ -50,6 +50,11 @@ export async function auditMunicipalPermitLinks(input = {}, { query = indexQuery
       count(*) FILTER (WHERE l.record_id IS NULL AND
         NULLIF(btrim(r.fields->>'PrintKey'), '') IS NOT NULL)::integer AS unmatched_print_key,
       count(*) FILTER (WHERE l.record_id IS NULL AND
+        NULLIF(btrim(r.fields->>'Parcel_ID'), '') IS NOT NULL)::integer AS unlinked_with_vendor_parcel_id,
+      count(*) FILTER (WHERE l.record_id IS NULL AND
+        NULLIF(btrim(r.fields->>'PrintKey'), '') IS NULL AND
+        NULLIF(btrim(r.fields->>'Parcel_ID'), '') IS NOT NULL)::integer AS missing_print_key_with_vendor_parcel_id,
+      count(*) FILTER (WHERE l.record_id IS NULL AND
         NULLIF(btrim(r.fields->>'LegalAddress'), '') IS NOT NULL)::integer AS unlinked_with_legal_address
       FROM search_records r LEFT JOIN links l ON l.record_id = r.record_id
       WHERE r.run_id = $1 AND r.source_id = 'municity'`, [run.run_id]);
@@ -61,6 +66,8 @@ export async function auditMunicipalPermitLinks(input = {}, { query = indexQuery
     const samples = await query(`WITH unlinked AS (
       SELECT r.record_id, r.source_url, r.fields->>'PermitNo' AS permit_number,
         r.fields->>'PrintKey' AS print_key,
+        r.fields->>'PrintKey_Parcel' AS print_key_parcel,
+        r.fields->>'Parcel_ID' AS vendor_parcel_id,
         r.fields->>'LegalAddress' AS legal_address,
         CASE WHEN NULLIF(btrim(r.fields->>'PrintKey'), '') IS NULL
           THEN 'missing_print_key' ELSE 'unmatched_print_key' END AS reason
@@ -71,7 +78,8 @@ export async function auditMunicipalPermitLinks(input = {}, { query = indexQuery
     ), ranked AS (
       SELECT *, row_number() OVER (PARTITION BY reason ORDER BY record_id) AS rank
       FROM unlinked
-    ) SELECT record_id, source_url, permit_number, print_key, legal_address, reason
+    ) SELECT record_id, source_url, permit_number, print_key, print_key_parcel,
+        vendor_parcel_id, legal_address, reason
       FROM ranked WHERE rank <= $2 ORDER BY reason, record_id`,
     [run.run_id, sampleLimit]);
     return { ...base, counts, samples,
