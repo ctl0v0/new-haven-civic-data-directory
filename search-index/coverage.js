@@ -49,6 +49,7 @@ export async function getSearchCoverage() {
         return { ...source, indexed: Boolean(run), fresh,
           complete: Boolean(run && fresh && run.status === "complete" &&
             run.latest_attempt_status !== "failed" &&
+            Number(run.expected_count) === Number(run.returned_count) &&
             Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0),
           ...(run ? { active_run_id: Number(run.run_id), source_count: run.expected_count,
             returned_count: run.returned_count, linked_count: run.linked_count,

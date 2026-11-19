@@ -33,7 +33,10 @@ export async function municipalPermitTypeRows(permitType, { get = fetchJson,
     maxBytes: 35_000_000 });
   const rows = data.rows === "" && Number(data.total) === 0 ? [] : data.rows;
   if (!Array.isArray(rows)) throw new SourceError("Municipal permit type search returned no row list");
-  const boundReached = rows.length >= LIMIT || Number(data.total) > rows.length;
+  const publishedTotal = Number(data.total);
+  if (!Number.isSafeInteger(publishedTotal) || publishedTotal < rows.length)
+    throw new SourceError("Municipal permit type search did not establish a total count");
+  const boundReached = rows.length >= LIMIT || publishedTotal > rows.length;
   if (boundReached) throw new SourceError("Municipal permit type reached the unpageable 2,000-row bound");
   if (rows.some((row) => !String(row?.PermitType ?? "").trim()))
     throw new SourceError("Municipal permit search returned a row without a published type");

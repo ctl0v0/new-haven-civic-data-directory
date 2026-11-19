@@ -1,5 +1,5 @@
 import { LAYERS } from "./config.js";
-import { arcgis, SourceError, sqlString } from "./http.js";
+import { arcgis, fetchJson, SourceError, sqlString } from "./http.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "./search-cursor.js";
 
 const checkedDate = (value, field) => {
@@ -26,7 +26,8 @@ async function idsFor(layer, options) {
     arcgis(layer, { ...options, returnCountOnly: "true", returnGeometry: "false" }),
   ]);
   if (!Array.isArray(ids.objectIds) || !Number.isSafeInteger(count.count) ||
-      new Set(ids.objectIds).size !== count.count || ids.objectIds.length !== count.count)
+      ids.objectIds.some((id) => !Number.isSafeInteger(Number(id))) ||
+      new Set(ids.objectIds.map(Number)).size !== count.count || ids.objectIds.length !== count.count)
     throw new SourceError("City GIS ID list and count did not agree");
   return ids.objectIds.map(Number).sort((a, b) => a - b);
 }
@@ -101,7 +102,13 @@ export async function searchParcels(input = {}) {
       returned_count: 0, candidate_city_features: null },
       retrieved_at: new Date().toISOString() };
   }
-  const sourceHash = fingerprint(source.ids);
+  const metadata = await fetchJson(`${LAYERS.parcels}?f=pjson`, { timeout: 8000 })
+    .catch(() => null);
+  const revision = metadata?.editingInfo?.dataLastEditDate ??
+    metadata?.editingInfo?.lastEditDate ?? metadata?.lastEditDate;
+  const revisionKnown = Number.isFinite(revision) && revision > 0 &&
+    Number.isFinite(new Date(revision).getTime());
+  const sourceHash = fingerprint({ ids: source.ids, revision: revisionKnown ? revision : null });
   const cursor = readSearchCursor(input.cursor, queryHash, sourceHash);
   if (cursor.offset > source.ids.length) throw new SourceError("Search cursor is beyond the City result", 400);
   const selected = source.ids.slice(cursor.offset, cursor.offset + scanLimit);
@@ -117,6 +124,15 @@ export async function searchParcels(input = {}) {
       if (data.exceededTransferLimit || features.length !== selected.length ||
           returned.size !== selected.length ||
           selected.some((id) => !returned.has(id))) pageGap++;
+      const malformed = features.filter(({ attributes: a = {} }) =>
+        !Number.isSafeInteger(Number(a.parcel_id)) ||
+        !Number.isSafeInteger(Number(a.objectid))).length;
+      if (malformed) {
+        pageGap += malformed;
+        features = features.filter(({ attributes: a = {} }) =>
+          Number.isSafeInteger(Number(a.parcel_id)) &&
+          Number.isSafeInteger(Number(a.objectid)));
+      }
     } catch { pageGap++; }
   }
   let missingFilterFields = 0;
@@ -148,13 +164,17 @@ export async function searchParcels(input = {}) {
       source_url: `${LAYERS.parcels}/query?f=json&objectIds=${Number(a.objectid)}&outFields=*`,
     }));
   const nextOffset = cursor.offset + selected.length;
-  const cumulativeGaps = Number(cursor.gaps ?? 0) + pageGap + missingFilterFields;
+  const cumulativeGaps = Number(cursor.gaps ?? 0) + pageGap + missingFilterFields +
+    (cursor.offset === 0 && !revisionKnown ? 1 : 0);
   const nextCursor = nextOffset < source.ids.length
     ? makeSearchCursor({ v: 1, query: queryHash, source: sourceHash,
       offset: nextOffset, gaps: cumulativeGaps, expires: Date.now() + 30 * 60_000 }) : null;
   return { criteria, items, next_cursor: nextCursor,
     complete_for_query: !nextCursor && cumulativeGaps === 0,
-    coverage: { source_checks: source.source_checks,
+    coverage: { source_checks: source.source_checks.map((check) => check.source_id === "parcels"
+      ? { ...check, ...(revisionKnown ? { source_updated_at: new Date(revision).toISOString() }
+        : { status: "partial", warning: "City parcel publisher revision is unavailable" }) }
+      : check),
       candidate_city_features: source.ids.length, scanned_this_page: selected.length,
       scanned_total: nextOffset, remaining_candidates: source.ids.length - nextOffset,
       returned_count: items.length, page_source_gaps: pageGap,

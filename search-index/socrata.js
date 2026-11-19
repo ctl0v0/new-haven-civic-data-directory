@@ -45,6 +45,8 @@ export async function stateRosterInventory(sourceId, { get = fetchJson } = {}) {
   ]);
   const count = Number(countRows?.[0]?.count);
   const publishedFields = new Set((info?.columns ?? []).map((column) => column.fieldName));
+  if (!Number.isFinite(info?.rowsUpdatedAt) || info.rowsUpdatedAt <= 0)
+    throw new SourceError("State roster publisher update time is unavailable");
   if (!Number.isSafeInteger(count) || count < 0 ||
       source.fields.some((field) => !publishedFields.has(field)))
     throw new SourceError("State roster count or published field schema is unavailable");

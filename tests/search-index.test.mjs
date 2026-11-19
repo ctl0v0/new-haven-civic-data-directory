@@ -163,6 +163,8 @@ test("City parcel search pages candidates and keeps REST and MCP responses align
   globalThis.fetch = async (input) => {
     const u = new URL(input);
     if (!u.pathname.includes("Parcel_Viewer")) throw Error("Unexpected source");
+    if (!u.pathname.endsWith("/query"))
+      return json({ editingInfo: { lastEditDate: 1760000000000 } });
     if (u.searchParams.get("returnIdsOnly") === "true")
       return json({ objectIds: [10, 11] });
     if (u.searchParams.get("returnCountOnly") === "true") return json({ count: 2 });

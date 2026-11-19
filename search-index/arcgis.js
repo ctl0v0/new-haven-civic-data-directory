@@ -60,6 +60,7 @@ export async function arcgisInventory(sourceId, { query = arcgis, metadata = fet
   if (GIS_INDEX_FIELDS[sourceId]?.some((field) => !publishedFields.has(field)))
     throw new SourceError("Official GIS layer no longer publishes an indexed field");
   const edited = info.editingInfo?.dataLastEditDate ?? info.editingInfo?.lastEditDate ?? info.lastEditDate;
+  if (!sourceDate(edited)) throw new SourceError("Official GIS publisher revision is unavailable");
   return { source_id: sourceId, url: definition.url, where, object_ids: unique,
     source_count: count.count, source_updated_at: sourceDate(edited),
     geometry_type: info.geometryType ?? null };
