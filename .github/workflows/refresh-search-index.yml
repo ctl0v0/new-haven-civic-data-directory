@@ -1,4 +1,5 @@
 name: Refresh private parcel search index
+# Updating this workflow on main verifies the connection and starts a daily import when enabled.
 on:
   push:
     branches: [main]
