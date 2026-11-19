@@ -1,5 +1,7 @@
 # Cross-parcel search plan for the private MCP
 
+This is the original live-search planning record. The private index described in [search-index.md](search-index.md) now requests up to 10,000 municipal permit rows per type; the live bounded search described below still requests up to 2,000. Neither request size proves a complete result when the source fills it.
+
 ## Goal and current boundary
 
 The MCP should answer two different questions: “what do the official sources say about this selected parcel?” and “which parcels or addresses satisfy these published criteria?” Every cross-parcel result should carry the matching source row, the City parcel identifier, the exact join or spatial relationship, a source URL, the source field used for each date and status, retrieval time, and query coverage. A missing or failed source check must never be converted into a negative finding. Keep historical rows accessible when current or recently dated rows are shown first.

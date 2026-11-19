@@ -75,7 +75,7 @@ export function searchCapabilities() {
           permit_date_to: "Published PermitDate upper calendar date",
         },
         paging: "1–50 matching permit rows per page; continue next_cursor",
-        completeness: "The all-type search also requires a fresh official type catalog. Every queried type needs a fresh validated run below the municipal service's unpageable 2,000-row bound, exact MBLU joins and the last result page. Missing types and unlinked rows keep results partial; approval fields require the live detail tools",
+        completeness: "The all-type search also requires a fresh official type catalog. Every queried type needs a fresh validated run below the current 10,000-row request bound, exact MBLU joins and the last result page. Missing types and unlinked rows keep results partial; approval fields require the live detail tools",
         follow_up_tools: ["get_indexed_record", "get_permit_details", "get_application_details"],
       },
       {

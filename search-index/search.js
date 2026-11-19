@@ -94,8 +94,13 @@ function conditions(requirement, alias, add) {
   for (const [operator, sign] of [["number_gte", ">="], ["number_lte", "<="]])
     for (const [field, value] of Object.entries(requirement[operator] ?? {})) {
       const fieldRef = add(field), valueRef = add(value);
-      parts.push(`(CASE WHEN jsonb_typeof(${alias}.fields->${fieldRef}) = 'number'
-        THEN (${alias}.fields->>${fieldRef})::numeric END) ${sign} ${valueRef}::numeric`);
+      parts.push(`(CASE
+        WHEN jsonb_typeof(${alias}.fields->${fieldRef}) = 'number'
+          THEN (${alias}.fields->>${fieldRef})::numeric
+        WHEN jsonb_typeof(${alias}.fields->${fieldRef}) = 'string'
+          AND trim(${alias}.fields->>${fieldRef}) ~ '^[-+]?[0-9]+([.][0-9]+)?$'
+          THEN trim(${alias}.fields->>${fieldRef})::numeric
+        END) ${sign} ${valueRef}::numeric`);
     }
   if (requirement.event_date_from) parts.push(`${alias}.event_date >= ${add(requirement.event_date_from)}::date`);
   if (requirement.event_date_to) parts.push(`${alias}.event_date <= ${add(requirement.event_date_to)}::date`);

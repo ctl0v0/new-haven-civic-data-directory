@@ -42,10 +42,12 @@ if (allPermits.coverage.index_status === "unavailable" || !allPermits.items.leng
   throw new Error("All-type indexed permit search is unavailable");
 const crossSource = await searchIndexedParcels({ requirements: [
   { source_id: "municity", equals: { PermitType: "Hood - C" } },
-  { source_id: "parcels", number_gte: { units_commercial: 0 } },
+  { source_id: "parcels", equals: { parcel_id: 12846 },
+    number_gte: { units_commercial: 1 } },
 ], limit: 5 });
-if (crossSource.coverage.index_status === "unavailable")
-  throw new Error("Municipal and City parcel cross-source query failed");
+if (crossSource.coverage.index_status === "unavailable" ||
+    !crossSource.items.some((item) => Number(item.city_parcel_id) === 12846))
+  throw new Error("Municipal and numeric-string City parcel cross-source query failed");
 
 const addressRuns = await indexQuery(`SELECT run_id FROM search_active_runs
   WHERE source_id = 'addresses' AND scope_key = 'all'`);

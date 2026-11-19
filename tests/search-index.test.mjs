@@ -200,13 +200,15 @@ test("cross-source parcel search combines one exact municipal type with another 
   delete process.env.SEARCH_DATABASE_URL;
 });
 
-test("indexed parcel ranges compare only source-published JSON numbers", async () => {
+test("indexed parcel ranges safely parse published JSON numbers and numeric strings", async () => {
   const requirement = { source_id: "parcels", equals: {},
     number_gte: { units_commercial: 2 },
     number_lte: { total_assessed_parcel_value_y: 750000 },
     event_date_from: null, event_date_to: null };
   const sql = buildIndexedSearchQuery([requirement], { parcels: 10 }, 0, 25);
   assert.match(sql.query, /jsonb_typeof\(r\.fields->\$\d+\) = 'number'/);
+  assert.match(sql.query, /jsonb_typeof\(r\.fields->\$\d+\) = 'string'/);
+  assert.match(sql.query, /\[0-9\]\+\(\[\.\]\[0-9\]\+\)\?/);
   assert.ok(sql.values.includes(2));
   assert.ok(sql.values.includes(750000));
   assert.ok(!sql.query.includes("750000"));
@@ -217,17 +219,25 @@ test("indexed parcel ranges compare only source-published JSON numbers", async (
   /Reversed/);
 });
 
-test("municipal type import keeps only official Permit IDs and stops at the unpageable bound", async () => {
+test("municipal type import keeps only official Permit IDs and uses the checked larger bound", async () => {
   const catalog = async () => ({ groups: [{ types: [{ name: "Hood - C" }] }] });
   const row = { Permit_ID: 569338, PermitType: "Hood - C", PermStatus: "Issued",
     PermitDate: "01/05/2026", PrintKey: "12/34/56", LegalAddress: "486 ORANGE ST" };
   const good = await municipalPermitTypeRows("Hood - C", { catalog,
-    get: async () => ({ rows: [row], total: 1 }) });
+    get: async (url, options) => {
+      assert.equal(url.searchParams.get("numrecs"), "10000");
+      assert.ok(options.maxBytes >= 50_000_000);
+      return { rows: [row], total: 1 };
+    } });
   assert.equal(good.rows[0].event_date, "2026-01-05");
   assert.equal(good.rows[0].record_id, "569338");
   assert.equal(good.rows[0].fields.PrintKey, "12/34/56");
+  const larger = await municipalPermitTypeRows("Hood - C", { catalog,
+    get: async () => ({ rows: Array.from({ length: 2001 }, (_, i) =>
+      ({ ...row, Permit_ID: i + 1 })), total: 2001 }) });
+  assert.equal(larger.rows.length, 2001);
   await assert.rejects(municipalPermitTypeRows("Hood - C", { catalog,
-    get: async () => ({ rows: [row], total: 2000 }) }), /2,000-row bound/);
+    get: async () => ({ rows: [row], total: 10000 }) }), /10,000-row request bound/);
   const repeated = await municipalPermitTypeRows("Hood - C", { catalog,
     get: async () => ({ rows: [{ ...row, PrintKey: "" }, row, row], total: 3 }) });
   assert.equal(repeated.vendor_count, 3);
@@ -246,6 +256,11 @@ test("municipal refresh compares published permit IDs independent of vendor row 
   assert.equal(sameMunicipalPermitRows([a, b], [b, { ...a, record_id: b.record_id,
     published_status: "Voided" }]), false);
   assert.equal(sameMunicipalPermitRows([a, b], [a]), false);
+  assert.equal(sameMunicipalPermitRows([
+    { record_id: "1", fields: { PrintKey: "123", PermitType: "Hood - C" } },
+  ], [
+    { record_id: "1", fields: { PermitType: "Hood - C", PrintKey: "123" } },
+  ]), true);
 });
 
 test("municipal type catalog rejects unnamed, missing, and repeated published types", () => {

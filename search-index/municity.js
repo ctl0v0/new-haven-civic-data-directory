@@ -3,13 +3,16 @@ import { fetchJson, SourceError } from "../parcel/http.js";
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 
 const VENDOR = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
-const LIMIT = 2000;
+// The municipal service returns more than 2,000 rows when requested. Ten
+// thousand has been checked against its public permit search. A response that
+// fills this request is still not an established full enumeration.
+const LIMIT = 10000;
 const INDEX_FIELDS = ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
   "PermStatus", "PermitDate", "PrintKey", "LegalAddress"];
 
 export class MunicipalPermitCapError extends SourceError {
   constructor(permitType, publishedTotal) {
-    super(`Municipal permit type ${permitType} has ${publishedTotal} rows and exceeds the unpageable 2,000-row bound`);
+    super(`Municipal permit type ${permitType} reached the validated ${LIMIT.toLocaleString("en-US")}-row request bound (${publishedTotal} rows returned)`);
     this.code = "MUNICIPAL_TYPE_CAP";
   }
 }
@@ -40,8 +43,10 @@ export function sameMunicipalPermitRows(first, second) {
   if (first.length !== second.length) return false;
   // The municipal search returns the same published IDs in varying row order.
   const byPublishedId = (a, b) => a.record_id.localeCompare(b.record_id);
-  return JSON.stringify(first.toSorted(byPublishedId)) ===
-    JSON.stringify(second.toSorted(byPublishedId));
+  const canonical = (rows) => rows.map((row) => ({ ...row,
+    fields: Object.fromEntries(Object.entries(row.fields ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))) })).toSorted(byPublishedId);
+  return JSON.stringify(canonical(first)) === JSON.stringify(canonical(second));
 }
 
 export function municipalDate(value) {
@@ -69,8 +74,8 @@ export async function municipalPermitTypeRows(permitType, { get = fetchJson,
     module: "", numrecs: String(LIMIT), operator: "=", pid: "",
     searchfield: "PermitType", section: "", value: type }))
     url.searchParams.set(key, value);
-  const data = await get(url, { headers: { SourceId: "2" }, timeout: 25000,
-    maxBytes: 35_000_000 });
+  const data = await get(url, { headers: { SourceId: "2" }, timeout: 60000,
+    maxBytes: 75_000_000 });
   const rows = data.rows === "" && Number(data.total) === 0 ? [] : data.rows;
   if (!Array.isArray(rows)) throw new SourceError("Municipal permit type search returned no row list");
   const publishedTotal = Number(data.total);
@@ -104,6 +109,8 @@ export async function municipalPermitTypeRows(permitType, { get = fetchJson,
       source_url: `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/${id}`,
       published_type: fields.PermitType ?? null,
       published_status: fields.PermStatus ?? null,
-      event_date: municipalDate(fields.PermitDate), fields,
+      event_date: municipalDate(fields.PermitDate),
+      fields: Object.fromEntries(INDEX_FIELDS.filter((field) => field in fields)
+        .map((field) => [field, fields[field]])),
     })) };
 }
