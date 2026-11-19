@@ -1,0 +1,64 @@
+name: Refresh private parcel search index
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Which official source refresh to run
+        required: true
+        type: choice
+        options: [daily, hourly]
+  schedule:
+    - cron: '17 * * * *'
+    - cron: '47 7 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: private-parcel-search-index
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: vars.PARCEL_INDEX_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Select refresh mode
+        id: mode
+        env:
+          REQUESTED_MODE: ${{ inputs.mode }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [ "$SCHEDULE" = '17 * * * *' ]; then
+            mode=hourly
+          elif [ "$SCHEDULE" = '47 7 * * *' ]; then
+            mode=daily
+          else
+            mode="$REQUESTED_MODE"
+          fi
+          case "$mode" in daily|hourly) ;; *) exit 1 ;; esac
+          echo "value=$mode" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/parcel-pilot
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Migrate and verify read-only access
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+          SEARCH_DATABASE_READER_PASSWORD: ${{ secrets.SEARCH_DATABASE_READER_PASSWORD }}
+          SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
+        run: |
+          test -n "$SEARCH_DATABASE_WRITE_URL" || { echo 'SEARCH_DATABASE_WRITE_URL is missing'; exit 1; }
+          npm run index:migrate
+          npm run index:grant-reader
+      - name: Refresh official sources
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+          INDEX_PERMIT_TYPES: ${{ vars.INDEX_PERMIT_TYPES || '["Hood - C"]' }}
+          REFRESH_MODE: ${{ steps.mode.outputs.value }}
+        run: |
+          npm run index:refresh:all -- "$REFRESH_MODE"
+          if [ "$REFRESH_MODE" = daily ]; then npm run index:prune; fi
