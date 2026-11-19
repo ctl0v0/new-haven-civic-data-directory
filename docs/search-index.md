@@ -25,19 +25,26 @@ Local and State historic district layers are excluded from cross-parcel search f
 
 ## Setup
 
-Use a private PostgreSQL 17 database with PostGIS, such as Neon. Create separate reader and writer credentials. Put only the **reader** URL in the private pilot preview as `SEARCH_DATABASE_URL`; put the writer URL in the isolated refresh runner as `SEARCH_DATABASE_WRITE_URL`. Neither belongs in a browser bundle or the public directory. The reader role needs `SELECT` on the four `search_*` tables; the writer role needs schema migration and refresh permissions. Keep all existing `PILOT_*` settings on the same protected Preview branch.
+Use a private PostgreSQL 17 database with PostGIS, such as Neon. The `neon-aero-clock` resource is connected to the Vercel project's Preview environment, but the index does not activate from that connection alone. Use separate reader and writer credentials. Put only the **reader** URL in the private pilot preview as `SEARCH_DATABASE_URL`; put the writer URL in the isolated refresh runner as `SEARCH_DATABASE_WRITE_URL`. Neither belongs in a browser bundle or the public directory. Keep all existing `PILOT_*` settings on the same protected Preview branch.
+
+For Neon, a role created with the default Console **Add role** action receives `neon_superuser` privileges ([Neon role documentation](https://neon.com/docs/manage/roles)). The refresh runner creates `search_index_reader` through SQL with only grants on the four search tables. Set a random password of at least 32 characters as the GitHub Actions secret `SEARCH_DATABASE_READER_PASSWORD`; do not use the Console Add role action for this reader. The runner verifies that this role cannot insert, update or delete search rows or create objects in `public`. The writer is the Neon database owner and stays out of the Vercel app environment.
+
+The scheduled GitHub Actions workflow lives on the repository's default branch because GitHub schedules run there. It checks out `codex/parcel-pilot`, so the refresh code and indexed search API remain in the private Preview branch. The workflow is disabled until the repository variable `PARCEL_INDEX_ENABLED` is exactly `true`. After the writer URL is added as the repository secret `SEARCH_DATABASE_WRITE_URL` and the reader password as `SEARCH_DATABASE_READER_PASSWORD`, enable the variable. The first daily run migrates the schema, creates and grants the reader role, and imports the official sources. The hourly run indexes the exact municipal types in the repository variable `INDEX_PERMIT_TYPES` (JSON array, default `["Hood - C"]`). The runner records source failures and never replaces a validated active run with an incomplete one.
+
+Build the reader URL privately from the same Neon host and database as the writer URL, with the username `search_index_reader` and the chosen reader password. Save it in Vercel as a Secret named `SEARCH_DATABASE_URL`, scoped to Preview branch `codex/parcel-pilot`, then redeploy that branch. Do not copy the integration's owner URL into this setting. The reader URL and password should never be pasted into a chat, issue, or build log. A connected database with no completed import still yields incomplete search coverage.
 
 With Node 24 and the writer URL in the runner environment:
 
 ```sh
 npm ci
 npm run index:migrate
+npm run index:grant-reader
 npm run index:refresh:all -- daily
 npm run index:refresh -- municity 'Hood - C'
 npm run index:prune
 ```
 
-`INDEX_PERMIT_TYPES` is a JSON array of exact names from `list_municipal_permit_types`. The hourly runner uses it with `npm run index:refresh:all -- hourly`. The daily runner refreshes City GIS sources in dependency order, then State rosters and NHPS. Each source records a failed attempt without replacing its last validated active run. A failed latest attempt, stale run, ambiguous join or unlinked row makes a completeness claim false. The pruning command deletes nonactive runs older than 30 days; active runs and published historical source rows stay available. Run refreshes from a private external scheduler with enough time for full City GIS enumeration. Vercel Preview Cron does not run on the preview branch, so a separate scheduler and database must be connected before claiming automated freshness.
+`INDEX_PERMIT_TYPES` is a JSON array of exact names from `list_municipal_permit_types`. The hourly runner uses it with `npm run index:refresh:all -- hourly`. The daily runner refreshes City GIS sources in dependency order, then State rosters and NHPS. Each source records a failed attempt without replacing its last validated active run. A failed latest attempt, stale run, ambiguous join or unlinked row makes a completeness claim false. The pruning command deletes nonactive runs older than 30 days; active runs and published historical source rows stay available. GitHub Actions schedules the hourly and daily jobs because Vercel Preview Cron does not run on the preview branch. The workflow needs enough time for full City GIS enumeration before claiming automated freshness.
 
 ## Private tools
 
