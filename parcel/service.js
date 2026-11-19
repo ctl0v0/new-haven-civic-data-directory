@@ -65,7 +65,7 @@ export async function parcelOverview(id, objectid = null) {
       source_url: item.source_url,
     }));
   const preferred = {
-    property: ["parcels", "assessor-subareas", "assessor-valuations"],
+    property: ["parcels", "school-attendance", "assessor-subareas", "assessor-valuations"],
     ownership: ["parcel-owner", "assessor-owner", "business-master"],
     business: ["municipal-business-licenses", "municipal-occupants",
       "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"],
@@ -78,6 +78,7 @@ export async function parcelOverview(id, objectid = null) {
     const a = item.attributes ?? {};
     const label = item.source_id === "parcels" ? a.property_address :
       item.source_id === "assessor-subareas" ? `${a.description_as_published ?? "Building subarea"}${a.code ? ` (${a.code})` : ""}` :
+      item.source_id === "school-attendance" ? `${a.address}: ${a.k8_attendance_zone_school} (K–8), ${a.high_school_attendance_zone_school} (high school)` :
       item.source_id === "assessor-valuations" ? `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation` :
       item.source_id === "parcel-owner" ? a.owner_name_1 ?? a.owner_name_2 :
       item.source_id === "assessor-owner" ? a.owner_name ?? a.co_owner_name :
@@ -162,6 +163,23 @@ export async function parcelTrashPickup(
   const queryAddress = checkedQueryAddress(query_address);
   const feature = await loadParcel(id, objectid);
   const { items, ...source } = await getSourceRecords("trash-pickup", feature);
+  return {
+    parcel_id: Number(feature.attributes.parcel_id),
+    source: { ...source, count: items.length },
+    total: items.length,
+    partial: ["partial", "unavailable"].includes(source.status),
+    ...(queryAddress ? { query_address: queryAddress } : {}),
+    items: markAddressEvidence(items, queryAddress),
+  };
+}
+
+export async function parcelSchoolAttendance(
+  id,
+  { objectid = null, query_address = null } = {},
+) {
+  const queryAddress = checkedQueryAddress(query_address);
+  const feature = await loadParcel(id, objectid);
+  const { items, ...source } = await getSourceRecords("school-attendance", feature);
   return {
     parcel_id: Number(feature.attributes.parcel_id),
     source: { ...source, count: items.length },

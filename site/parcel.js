@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const SHOW_SNAPSHOT = true;
 const groups = [
-  ["property", "Building and addresses", "City parcel fields, assessment details, valuation rows, and address points on the parcel."],
+  ["property", "Building and addresses", "City parcel fields, assessor detail, address points, and address-level NHPS School Choice attendance zones."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
   ["business", "Businesses and occupants in records", "Municipal parcel records and State licensed locations joined through City address points. A license does not prove current occupancy or operation."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
@@ -16,7 +16,7 @@ const sourceNames = {
   "parcel-sale": "City parcel sale fields",
   addresses: "City address points",
   "trash-pickup": "City trash pickup zones",
-  "school-attendance": "NHPS attendance-zone schools",
+  "school-attendance": "NHPS School Choice attendance zones",
   "tax-bills": "City real estate tax bills",
   "land-records": "City Clerk land records",
   assessor: "Assessor card",
@@ -377,6 +377,42 @@ function shortDate(value) {
     ? value
     : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
 }
+function sameSourceDate(value, eventDate) {
+  if (value == null || value === "" || !eventDate) return false;
+  const dotNet = typeof value === "string" ? value.match(/^\/Date\((\d+)/) : null;
+  const parsed = typeof value === "number" || dotNet
+    ? Number(dotNet?.[1] ?? value) : Date.parse(String(value));
+  const time = new Date(parsed);
+  return Number.isFinite(parsed) && !Number.isNaN(time.valueOf()) && time.toISOString().slice(0, 10) === eventDate;
+}
+function eventDateLabel(item) {
+  const a = item.attributes ?? {};
+  if (["parcel-sale", "assessor-sales"].includes(item.source_id)) return "Sale date";
+  if (item.source_id === "lci-cases") return "Filed date";
+  if (["ct-liquor-permits", "ct-child-care-licenses"].includes(item.source_id)) return "Effective date";
+  if (item.source_id === "municity") {
+    const fields = {
+      Permit: [["PermitDate", "Permit date"], ["CreatedDate", "Created date"]],
+      Application: [["ApplicationDate", "Application date"], ["CreatedDate", "Created date"]],
+      License: [["IssueDate", "Issue date"], ["CreatedDate", "Created date"]],
+      Certificate: [["CertificateDate", "Certificate date"], ["CreatedDate", "Created date"]],
+      Document: [["modified_date", "Modified date"]],
+      Complaint: [["filed_date", "Complaint date"]],
+      Occupant: [["created_date", "Created date"]],
+    }[item.category] ?? [];
+    for (const [field, label] of fields)
+      if (sameSourceDate(a[field], item.event_date)) return label;
+  }
+  return "Source date";
+}
+function eventDateBlock(item, extraClass = "") {
+  const block = el("div", null, `event-date${extraClass ? ` ${extraClass}` : ""}`);
+  block.append(el("span", eventDateLabel(item), "event-date-label"));
+  const time = el("time", shortDate(item.event_date), "event-date-value");
+  time.dateTime = item.event_date;
+  block.append(time);
+  return block;
+}
 function brief(value, max = 170) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
@@ -388,13 +424,9 @@ function incompleteSources(sources) {
   return (sources ?? []).filter((source) => ["partial", "unavailable"].includes(source.status));
 }
 function sourceIssueReason(source) {
-  const missing = source.missing_categories ?? [];
   const truncated = source.truncated_categories ?? [];
-  if (source.source_id === "municity" && (missing.length || truncated.length))
-    return [
-      missing.length ? `${missing.join(", ")} ${missing.length === 1 ? "category was" : "categories were"} not returned by the municipal service` : null,
-      truncated.length ? `${truncated.join(", ")} ${truncated.length === 1 ? "category exceeded" : "categories exceeded"} the 500-row display limit` : null,
-    ].filter(Boolean).join("; ");
+  if (source.source_id === "municity" && truncated.length)
+    return `${truncated.join(", ")} ${truncated.length === 1 ? "category exceeded" : "categories exceeded"} the 500-row display limit`;
   return source.warning ?? source.coverage ?? source.status;
 }
 function sourceIssueLabels(sources) {
@@ -424,6 +456,8 @@ function recordTitle(item) {
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
   if (item.source_id === "trash-pickup")
     return `${a.address}${a.unit ? ` · unit ${a.unit}` : ""}: ${a.trash_day} trash pickup zone`;
+  if (item.source_id === "school-attendance")
+    return `${a.address}: ${a.k8_attendance_zone_school} (K–8) · ${a.high_school_attendance_zone_school} (high school)`;
   if (item.source_id === "assessor-valuations")
     return `${a.valuation_year ?? "Unspecified year"} ${a.valuation_type ?? ""} valuation`;
   if (item.source_id === "assessor-subareas")
@@ -473,6 +507,8 @@ function recordDescription(item) {
     const ids = a.address_point_objectids ?? [a.address_point_objectid];
     return `City address point${ids.length === 1 ? "" : "s"} ${ids.join(", ")} · pickup zone ${a.zone_objectid}${a.source_last_edited ? ` · source last edited ${shortDate(a.source_last_edited)}` : ""}`;
   }
+  if (item.source_id === "school-attendance")
+    return `NHPS School Choice attendance-zone preference · ${a.source_lookup_mode === "official_snapshot" ? `official export retrieved ${shortDate(a.source_snapshot_retrieved_at)}` : "live NHPS lookup"} · NHPS rows ${(a.nhps_source_row_ids ?? []).join(", ")}`;
   if (item.source_id === "parcels") {
     const facts = [
       a.mblu ? `MBLU ${a.mblu}` : null,
@@ -637,7 +673,7 @@ function renderWorkDetails(parent, data) {
     for (const item of rows) {
       const row = el("div", null, "permit-detail-row");
       row.append(el("strong", permitDetailTitle(item)));
-      if (item.event_date) row.append(el("span", shortDate(item.event_date), "record-date"));
+      if (item.event_date) row.append(eventDateBlock(item, "child-date"));
       row.append(el("p", `Listed under ${item.linked_from.map((parent) => `${parent.entity} ${parent.entity_id}`).join(" and ")}.`, "record-meta"));
       const populated = sourceFields(item.attributes).filter(([, value]) => value !== "Not provided" && value !== "");
       row.append(fieldList(populated.slice(0, 5)));
@@ -678,7 +714,7 @@ async function openRecordDetail(item, trigger) {
   detail.append(back, el("p", `${item.category ?? sourceName(item.source_id)} · ${sourceName(item.source_id)}`, "record-kind"), el("h2", recordTitle(item)));
   const state = recordStatus(item);
   if (state) detail.append(el("p", `Published status: ${state}`, "record-meta"));
-  if (item.event_date) detail.append(el("p", `Source event date: ${shortDate(item.event_date)}`, "record-meta"));
+  if (item.event_date) detail.append(eventDateBlock(item, "detail-date"));
   if (item.address_evidence?.matches_query)
     detail.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "address-badge"));
   if (item.source_url) detail.append(link(item.source_url, "Open official record"));
@@ -707,9 +743,9 @@ async function openRecordDetail(item, trigger) {
 function appendRecord(parent, item) {
   const card = el("article", null, "record-card");
   const aside = el("div", null, "record-aside");
+  if (item.event_date) aside.append(eventDateBlock(item, "record-event-date"));
   aside.append(el("span", item.category ?? sourceName(item.source_id), "record-kind"));
   aside.append(el("span", sourceName(item.source_id), "record-source-name"));
-  if (item.event_date) aside.append(el("time", shortDate(item.event_date), "record-date"));
   card.append(aside);
   const body = el("div", null, "record-body");
   const head = el("div", null, "record-head");
@@ -884,11 +920,13 @@ function sourceLine(parent, source) {
     : source.status === "not_linked" ? "No verified link"
       : source.status === "unavailable" ? "Check unavailable"
         : source.status === "partial" ? `${source.count} shown`
-          : `${source.count} ${source.count === 1 ? "record" : "records"}`;
+          : source.status === "no_records" ? "0 returned"
+            : `${source.count} ${source.count === 1 ? "record" : "records"}`;
   top.append(el("span", count, "source-count"));
   top.append(el("span", source.status.replaceAll("_", " "), `badge ${source.status}`));
   row.append(top);
-  if (source.status === "unavailable" || source.status === "partial")
+  if (source.status === "unavailable" || source.status === "partial" ||
+    (source.source_id === "school-attendance" && source.warning))
     row.append(el("p", sourceIssueReason(source), "source-warning"));
   if (source.status === "not_linked")
     row.append(el("p", source.warning, "source-note"));
@@ -907,7 +945,8 @@ function sourceLine(parent, source) {
   const info = el("details", null, "source-coverage");
   info.append(el("summary", "Coverage and source"));
   info.append(el("p", source.coverage, "meta"));
-  if (source.warning && !["unavailable", "partial", "not_linked"].includes(source.status))
+  if (source.warning && source.source_id !== "school-attendance" &&
+    !["unavailable", "partial", "not_linked"].includes(source.status))
     info.append(el("p", source.warning, "meta"));
   if (source.source_url) info.append(link(source.source_url, "Open source"));
   if (source.verification_url) info.append(link(source.verification_url, "Confirm with city"));
@@ -1951,16 +1990,14 @@ async function loadGroup(id, section, qs, version, cursor = null) {
 }
 function appendTimelineEvent(parent, item) {
   const entry = el("li", null, "timeline-entry");
-  const date = el("time", shortDate(item.event_date), "timeline-date");
-  date.dateTime = item.event_date;
-  entry.append(date);
+  entry.append(eventDateBlock(item, "timeline-event-date"));
   const content = el("div", null, "timeline-content");
   const kind = item.category === "Document"
-    ? "Document updated"
+    ? eventDateLabel(item) === "Modified date" ? "Document modified" : "Document record"
     : item.category === "Contact"
-      ? "Contact record updated"
+      ? "Contact record"
       : item.category === "Occupant"
-        ? "Occupant record created"
+        ? eventDateLabel(item) === "Created date" ? "Occupant record created" : "Occupant record"
       : item.source_id === "parcel-sale"
         ? "Sale date on City parcel record"
         : item.category ?? sourceName(item.source_id);

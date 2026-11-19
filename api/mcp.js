@@ -12,6 +12,7 @@ import {
   parcelOverview,
   parcelRecords,
   parcelTrashPickup,
+  parcelSchoolAttendance,
   parcelPermitDetails,
   parcelApplicationDetails,
   searchMunicipalPermits,
@@ -164,6 +165,18 @@ export function createServer() {
     }),
     ({ parcel_id, objectid, query_address }) =>
       parcelTrashPickup(parcel_id, { objectid, query_address }),
+  );
+  tool(
+    server,
+    "get_parcel_school_attendance",
+    "Get NHPS attendance-zone schools by address",
+    "Return published NHPS K–8 and high-school School Choice attendance zones for exact City-listed parcel addresses. A zone gives placement preference, not guaranteed enrollment. Live lookup and official snapshot dates are reported.",
+    z.object({
+      ...common,
+      query_address: z.string().min(1).max(160).optional(),
+    }),
+    ({ parcel_id, objectid, query_address }) =>
+      parcelSchoolAttendance(parcel_id, { objectid, query_address }),
   );
   tool(
     server,

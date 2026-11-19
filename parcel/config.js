@@ -172,11 +172,11 @@ export const SOURCES = Object.freeze([
   {
     id: "school-attendance",
     group: "property",
-    title: "NHPS address attendance-zone schools",
+    title: "NHPS address attendance-zone schools for School Choice",
     url: "https://www.newhavenmagnetschools.com/index.php/enrollment/find-schools-in-your-attendance-zone",
-    mode: "gap",
+    mode: "live",
     coverage:
-      "NHPS publishes K–8 and high school attendance-zone schools by street and house-number range, but its live site blocks server requests. The City's Board of Education District 1 and 2 GIS polygons are election districts and do not identify assigned schools. No school is inferred from them or from a cached street table.",
+      "City parcel and intersecting address-point street numbers are matched to NHPS's published K–8 and high-school street ranges, including odd/even limits. The live NHPS search is checked first. If it fails, the official NHPS spreadsheet snapshot is used only while it is under 30 days old, with its retrieval date on every row. NHPS describes these zones as School Choice placement preferences, not guaranteed enrollment. Unmatched or conflicting ranges are not assigned a school.",
   },
   {
     id: "zoning",
@@ -260,7 +260,7 @@ export const SOURCES = Object.freeze([
     url: "https://www.municityconnect.com/#/app/NewHavenCityCT/landing",
     mode: "live",
     coverage:
-      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses, occupants and permits. Certificates are also returned. On-demand permit and application detail lookups follow verified source IDs to public fee, review task, inspection, document, contact-role, communication and source-flag metadata; a permit's explicitly linked application is included. Contractor contact details are returned only for a source role explicitly marked public. Occupant personal contact fields, complaint narratives, other contact phone/email/address, internal task notes and communication bodies are omitted. No complete historical or inspection coverage is claimed.",
+      "Live public Municity parcel children, including applications, complaints, contacts, documents, licenses, occupants and permits. Certificates are returned when published. The service commonly includes only categories with rows; an omitted category has an unconfirmed count, not a verified zero. On-demand permit and application detail lookups follow verified source IDs to public fee, review task, inspection, document, contact-role, communication and source-flag metadata; a permit's explicitly linked application is included. Contractor contact details are returned only for a source role explicitly marked public. Occupant personal contact fields, complaint narratives, other contact phone/email/address, internal task notes and communication bodies are omitted. No complete historical or inspection coverage is claimed.",
   },
   {
     id: "lci-cases",
@@ -269,7 +269,7 @@ export const SOURCES = Object.freeze([
     url: "https://lci.city/",
     mode: "live",
     coverage:
-      "Public case number, status, filed date and listed fine only. Complaint narratives, attachments and licensing status are not collected; property PID and address must both match.",
+      "Public case number, status, filed date and listed fine only. Complaint narratives, attachments and licensing status are not collected; property PID and address must both match. If the official portal has no page for the PID, no case count is inferred.",
   },
   {
     id: "ct-brownfields",

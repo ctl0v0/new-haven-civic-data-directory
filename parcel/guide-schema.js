@@ -13,6 +13,7 @@ const methods = [
   ["photo", "Parcel photo", "GET /api/v1/parcel-photo", "get_parcel_photo", "Return an official municipal street view or assessor building photo only after an exact parcel match; photo dates are not established.", "parcel_id, objectid"],
   ["map", "Map layers", "GET /api/v1/map-context", "get_parcel_map_context", "Return City and State mapped features on the parcel and separately labeled nearby context.", "parcel_id, objectid"],
   ["trash", "Trash pickup zones", "GET /api/v1/trash-pickup", "get_parcel_trash_pickup", "Return mapped City pickup zones at City address points on the parcel; service eligibility is not established.", "parcel_id, objectid, query_address"],
+  ["school-attendance", "NHPS attendance-zone schools", "GET /api/v1/school-attendance", "get_parcel_school_attendance", "Return address-level K–8 and high-school School Choice attendance zones from exact NHPS street ranges, with live or dated official-snapshot provenance. Placement is not guaranteed.", "parcel_id, objectid, query_address"],
   ["permit-search", "Cross parcel permit search", "GET /api/v1/search-permits", "search_municipal_permits", "Search municipal permits by exact type and City neighborhood with separately labeled linked application, review task and contact fields. Coverage limits remain explicit.", "neighborhood, permit_type, optional status/date/contact filters"],
   ["permit-types", "Municipal permit type catalog", "GET /api/v1/permit-types", "list_municipal_permit_types", "Return the City's live configured permit type names and groups. A catalog entry does not establish an issued permit.", "none"],
   ["catalog", "Source catalog", "GET /api/v1/sources", "list_sources", "Explain each source's access mode, coverage and known gaps.", "none"],
@@ -60,6 +61,7 @@ export function schemaGuide() {
       "A known source without an integrated parcel join is not_integrated; an owner LLC without a verified State match is not_linked. Neither means a live check failed.",
       "Partial and unavailable live source checks are reported alongside results with their reason.",
       "A published status or date does not prove current occupancy, work underway or a complete history.",
+      "NHPS attendance-zone schools describe School Choice placement preference for a published address range, not current enrollment or a guaranteed school assignment.",
     ],
   };
 }

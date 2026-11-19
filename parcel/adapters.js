@@ -13,6 +13,7 @@ import {
 import { parseLciProperty } from "./lci.js";
 import { normalizeAddress } from "./resolve.js";
 import { stateLocationMatches } from "./state-locations.js";
+import { lookupNhpsStreet, NHPS_ATTENDANCE_URL, schoolAddress, schoolRowsForAddress } from "./school-attendance.js";
 import { AGENTS, MASTER, PRINCIPALS, entityChildren, findOfficialOwnerEntity, legalName } from "./business-registry.js";
 
 const ISO = () => new Date().toISOString();
@@ -248,6 +249,116 @@ async function addressRecords(parcel) {
         "Address points inside the parcel are spatial candidates; they do not prove a unit or legal address.",
     },
   );
+}
+
+async function schoolAttendanceRecords(parcel) {
+  const candidates = new Map();
+  const addAddress = (value, { addressPointId = null, parcelAddress = false, unit = null } = {}) => {
+    const parsed = schoolAddress(value);
+    if (!parsed) return;
+    const key = `${parsed.number}:${parsed.street}`;
+    if (!candidates.has(key)) candidates.set(key, {
+      ...parsed, addressPointIds: new Set(), units: new Set(), parcelAddress: false,
+    });
+    const candidate = candidates.get(key);
+    if (addressPointId != null) candidate.addressPointIds.add(addressPointId);
+    if (unit) candidate.units.add(unit);
+    if (parcelAddress) candidate.parcelAddress = true;
+  };
+  addAddress(parcel.attributes.property_address, { parcelAddress: true });
+  let addressQueryFailed = false;
+  let addressQueryTruncated = false;
+  try {
+    const data = await arcgis(LAYERS.addresses, {
+      ...polygonParams(parcel),
+      outFields: "objectid,house_number,full_street_name,street_name,suffix_type,unit",
+      resultRecordCount: "101",
+    });
+    addressQueryTruncated = Boolean(data.exceededTransferLimit) || (data.features?.length ?? 0) > 100;
+    for (const row of (data.features ?? []).slice(0, 100)) {
+      const a = row.attributes ?? {};
+      const street = text(a.full_street_name) || `${a.street_name ?? ""} ${a.suffix_type ?? ""}`;
+      addAddress(`${a.house_number ?? ""} ${street}`, {
+        addressPointId: a.objectid, unit: text(a.unit),
+      });
+    }
+  } catch {
+    addressQueryFailed = true;
+  }
+  if (!candidates.size)
+    return notLinked("school-attendance", "The City parcel and intersecting City address points supplied no single-number street address for an NHPS range check.");
+
+  const streets = [...new Set([...candidates.values()].map(({ street }) => street))];
+  const settled = await Promise.allSettled(streets.map((street) => lookupNhpsStreet(street)));
+  const lookups = new Map(streets.map((street, index) => [street, settled[index]]));
+  const items = [];
+  const unmatched = [];
+  const ambiguous = [];
+  const failed = [];
+  const snapshotWarnings = new Set();
+  for (const candidate of candidates.values()) {
+    const lookup = lookups.get(candidate.street);
+    if (lookup.status === "rejected") {
+      failed.push(candidate.address);
+      continue;
+    }
+    const found = schoolRowsForAddress(lookup.value.rows, candidate);
+    if (found.status === "not_linked") {
+      unmatched.push(candidate.address);
+      continue;
+    }
+    if (found.status === "ambiguous") {
+      ambiguous.push(candidate.address);
+      continue;
+    }
+    const first = found.rows[0];
+    if (lookup.value.warning) snapshotWarnings.add(lookup.value.warning);
+    const addressPointIds = [...candidate.addressPointIds].sort((a, b) => Number(a) - Number(b));
+    const nhpsRowIds = found.rows.map((row) => row.id);
+    items.push(record(`${candidate.address}:${nhpsRowIds.join(",")}`, "school-attendance", {
+      address: candidate.address,
+      house_number: candidate.number,
+      street_name_as_published: first.street_name,
+      k8_attendance_zone_school: first.k8_school,
+      high_school_attendance_zone_school: first.high_school,
+      nhps_source_row_ids: nhpsRowIds,
+      published_ranges: found.rows.map(({ start, end }) => ({ start, end })),
+      city_address_point_objectids: addressPointIds,
+      city_parcel_property_address_match: candidate.parcelAddress,
+      units_at_city_address_points: [...candidate.units].sort(),
+      source_lookup_mode: lookup.value.mode,
+      source_checked_at: lookup.value.checked_at,
+      ...(lookup.value.snapshot_retrieved_at ? {
+        source_snapshot_retrieved_at: lookup.value.snapshot_retrieved_at,
+        source_snapshot_sha256: lookup.value.snapshot_sha256,
+      } : {}),
+    }, {
+      match: {
+        method: addressPointIds.length ? "city-address-point-nhps-street-range" : "city-parcel-address-nhps-street-range",
+        city_parcel_id: parcel.attributes.parcel_id,
+        city_parcel_objectid: parcel.attributes.objectid,
+        city_address_point_objectids: addressPointIds,
+        nhps_source_row_ids: nhpsRowIds,
+      },
+      sourceUrl: first.source_url ?? NHPS_ATTENDANCE_URL,
+      note: "NHPS publishes attendance-zone schools for School Choice placement preference, not guaranteed school enrollment. City address points intersecting a parcel are spatial candidates, not proof of a legal unit address.",
+    }));
+  }
+  const warnings = [...snapshotWarnings];
+  if (addressQueryFailed) warnings.push("City address points were unavailable; only the parcel's published property address was checked.");
+  if (addressQueryTruncated) warnings.push("City returned more than 100 intersecting address points; only the first 100 were checked.");
+  if (failed.length) warnings.push(`NHPS lookup failed for ${failed.join(", ")}.`);
+  if (ambiguous.length) warnings.push(`Conflicting NHPS school rows overlap ${ambiguous.join(", ")}; no school was assigned to those addresses.`);
+  if (unmatched.length) warnings.push(`No published NHPS street-and-number range matched ${unmatched.join(", ")}.`);
+  if (!items.length) {
+    if (failed.length === candidates.size)
+      return unavailable("school-attendance", warnings.join(" "));
+    return notLinked("school-attendance", warnings.join(" ") || "No verified NHPS attendance-zone row matched the City's listed parcel addresses.");
+  }
+  return result("school-attendance", items, {
+    partial: addressQueryTruncated || failed.length > 0 || ambiguous.length > 0 || unmatched.length > 0,
+    warning: warnings.join(" ") || null,
+  });
 }
 
 async function stateLocationRecords(parcel, sourceId) {
@@ -891,11 +1002,18 @@ async function lciCaseRecords(parcel) {
       "Parcel has no valid assessor PID for LCI lookup.",
     );
   const url = `https://lci.city/public/property/${id}`;
-  const html = await fetchBounded(url, {
-    accept: "text/html,application/xhtml+xml",
-    timeout: 9000,
-    maxBytes: 3_000_000,
-  });
+  let html;
+  try {
+    html = await fetchBounded(url, {
+      accept: "text/html,application/xhtml+xml",
+      timeout: 9000,
+      maxBytes: 3_000_000,
+    });
+  } catch (error) {
+    if (error instanceof SourceError && error.upstreamStatus === 404)
+      return notLinked("lci-cases", `The official LCI portal has no public property page for assessor PID ${id}; no LCI case count is inferred.`);
+    throw error;
+  }
   const parsed = parseLciProperty(html, parcel, url);
   return {
     ...result(
@@ -1364,7 +1482,7 @@ async function municityRecords(parcel) {
   const categoryCounts = Object.fromEntries(
     MUNICIPAL_CATEGORIES.map((kind) => [kind, null]),
   );
-  const missingCategories = MUNICIPAL_CATEGORIES.filter(
+  const omittedCategories = MUNICIPAL_CATEGORIES.filter(
     (kind) => children[kind] == null,
   );
   const truncatedCategories = [];
@@ -1445,10 +1563,10 @@ async function municityRecords(parcel) {
   }
   return {
     ...result("municity", items, {
-      partial: Boolean(missingCategories.length || truncatedCategories.length),
+      partial: Boolean(truncatedCategories.length),
       warning: [
-        missingCategories.length
-          ? `Missing vendor categories: ${missingCategories.join(", ")}.`
+        omittedCategories.length
+          ? `The vendor omitted ${omittedCategories.join(", ")} from this populated-category response; counts for those categories are not established.`
           : null,
         truncatedCategories.length
           ? `Vendor categories exceeded the 500-record limit: ${truncatedCategories.join(", ")}.`
@@ -1459,7 +1577,8 @@ async function municityRecords(parcel) {
         .join(" "),
     }),
     category_counts: categoryCounts,
-    missing_categories: missingCategories,
+    omitted_categories: omittedCategories,
+    missing_categories: omittedCategories,
     truncated_categories: truncatedCategories,
   };
 }
@@ -1504,12 +1623,10 @@ async function municipalBusinessRecords(parcel) {
   ).length;
   return result("municipal-business-licenses", items, {
     unnamed_license_count: unnamedLicenseCount,
-    partial:
-      vendor.missing_categories?.includes("License") ||
-      vendor.truncated_categories?.includes("License"),
+    partial: vendor.truncated_categories?.includes("License"),
     warning:
-      vendor.missing_categories?.includes("License")
-        ? "The vendor omitted its License category for this parcel, so absence of municipal licenses cannot be confirmed."
+      vendor.omitted_categories?.includes("License")
+        ? "The vendor did not return a License category for this parcel; this response does not establish a zero license count."
         : vendor.truncated_categories?.includes("License")
           ? "The vendor License category exceeded the 500-record limit; results are incomplete."
           : "Named municipal licenses may be historical, expired or void. Confirm status with the city.",
@@ -1533,12 +1650,12 @@ async function municipalOccupantRecords(parcel) {
         note: "Municipal occupant row attached to the verified parcel. The source name and inactive flag do not establish a current tenant or business operation.",
       }),
     );
-  const missing = vendor.missing_categories?.includes("Occupant");
+  const missing = vendor.omitted_categories?.includes("Occupant");
   const truncated = vendor.truncated_categories?.includes("Occupant");
   return result("municipal-occupants", items, {
-    partial: missing || truncated,
+    partial: truncated,
     warning: missing
-      ? "The vendor omitted its Occupant category for this parcel; absence of occupant rows cannot be confirmed."
+      ? "The vendor did not return an Occupant category for this parcel; this response does not establish a zero occupant count."
       : truncated
         ? "The vendor Occupant category exceeded the 500-record limit; results are incomplete."
         : "Municipal occupant rows can be historical. Only source-reported inactive flags are shown.",
@@ -1681,6 +1798,7 @@ const ADAPTERS = Object.freeze({
   "parcel-sale": parcelSaleRecords,
   addresses: addressRecords,
   "trash-pickup": trashPickupRecords,
+  "school-attendance": schoolAttendanceRecords,
   assessor: assessorRecord,
   "assessor-owner": assessorOwnerRecords,
   "assessor-subareas": assessorSubareaRecords,

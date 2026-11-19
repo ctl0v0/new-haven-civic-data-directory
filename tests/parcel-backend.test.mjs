@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { issueCookie, authorized, authorizedBearer, sameOrigin } from "../parcel/auth.js";
 import { resolveParcel } from "../parcel/resolve.js";
-import { parcelRecords, parcelTrashPickup, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
+import { parcelRecords, parcelTrashPickup, parcelSchoolAttendance, parcelFeed, parcelOverview, parcelGeometry, parcelMapContext } from "../parcel/service.js";
 import { parcelFeatureToGeoJSON } from "../parcel/geometry.js";
 import { addressEvidence } from "../parcel/address-evidence.js";
 import { checkedFilters, filterRecords, recordFacets } from "../parcel/filters.js";
@@ -14,10 +14,13 @@ import { permitDetails, applicationDetails } from "../parcel/permit-details.js";
 import { searchMunicipalPermits } from "../parcel/permit-search.js";
 import { arcgis } from "../parcel/http.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
+import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
+import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, parseNhpsSearch, schoolAddress, schoolRowsForAddress, snapshotIsCurrent } from "../parcel/school-attendance.js";
 import sourcesRoute from "../api/v1/sources.js";
 import recordsRoute from "../api/v1/records.js";
 import schemaRoute from "../api/v1/schema.js";
 import trashPickupRoute from "../api/v1/trash-pickup.js";
+import schoolAttendanceRoute from "../api/v1/school-attendance.js";
 import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
@@ -157,7 +160,7 @@ test("private access fails closed and signed cookies cannot be forged", async ()
   const coverage = await allowed.json();
   assert.ok(coverage.sources.some((x) => x.id === "municity"));
   const attendance = coverage.sources.find((x) => x.id === "school-attendance");
-  assert.equal(attendance.mode, "gap");
+  assert.equal(attendance.mode, "live");
   assert.match(attendance.url, /newhavenmagnetschools\.com/);
   assert.equal(coverage.groups.length, 7);
   assert(coverage.groups.some((group) => group.id === "ownership"));
@@ -166,6 +169,106 @@ test("private access fails closed and signed cookies cannot be forged", async ()
     "census-block-2020", "ct-tract-2020-acs", "ct-transit-stops",
     "nearby-municipal-business", "complete-streets", "service-requests",
   ].includes(source.id)));
+});
+
+test("official NHPS snapshot is complete and range joins honor street suffix, gaps, and odd/even limits", () => {
+  assert.equal(nhpsSnapshot.row_count, 874);
+  assert.equal(nhpsSnapshot.rows.length, nhpsSnapshot.row_count);
+  const canonical = JSON.stringify(nhpsSnapshot.rows.map((row) =>
+    Object.fromEntries(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)))));
+  assert.equal(createHash("sha256").update(canonical).digest("hex"), nhpsSnapshot.sha256);
+  assert.equal(snapshotIsCurrent(Date.parse(nhpsSnapshot.retrieved_at) + 29 * 86400_000), true);
+  assert.equal(snapshotIsCurrent(Date.parse(nhpsSnapshot.retrieved_at) + 31 * 86400_000), false);
+  assert.equal(normalizeSchoolStreet("WHALLEY AVENUE"), "WHALLEY AV");
+  const whalley = nhpsSnapshot.rows.filter((row) => row.street_name === "WHALLEY AV");
+  const odd = schoolRowsForAddress(whalley, schoolAddress("205 WHALLEY AVE"));
+  const even = schoolRowsForAddress(whalley, schoolAddress("206 WHALLEY AVE"));
+  assert.equal(odd.rows[0].k8_school, "Beecher Magnet");
+  assert.equal(even.rows[0].k8_school, "Edgewood Magnet");
+  const crown = nhpsSnapshot.rows.filter((row) => row.street_name === "CROWN ST");
+  assert.equal(schoolRowsForAddress(crown, schoolAddress("290 CROWN ST")).status, "not_linked");
+  assert.equal(schoolRowsForAddress(crown, schoolAddress("179 CROWN ST")).rows[0].k8_school, "East Rock Magnet");
+  assert.equal(schoolRowsForAddress([
+    { street_name: "ELD ST", start: "", end: "", k8_school: "A", high_school: "H" },
+    { street_name: "ELD ST", start: "", end: "", k8_school: "B", high_school: "H" },
+  ], schoolAddress("20 ELD ST")).status, "ambiguous");
+});
+
+test("NHPS live table and official snapshot fallback return address-specific schools", async () => {
+  const page = `<div class="joodb database-list"><form id="joodbForm">
+    <div class="tr"><div class="td">STREET NAME</div><div class="td">START #</div>
+    <div class="td">END #</div><div class="td">K-8 SCHOOL</div><div class="td">HIGH SCHOOL</div></div>
+    <div class="tr odd">
+    <div class="td"><a class="joodb_titlelink" href="/index.php/enrollment/find-schools-in-your-attendance-zone/245-eld-st">ELD ST</a></div>
+    <div class="td"></div><div class="td"></div>
+    <div class="td">East Rock Magnet</div><div class="td">Wilbur Cross</div></div>
+    <p>Results 1 - 1 of 1</p></form></div>`;
+  assert.deepEqual(parseNhpsSearch(page)[0], {
+    id: 245, street_name: "ELD ST", start: "", end: "",
+    k8_school: "East Rock Magnet", high_school: "Wilbur Cross",
+    source_url: `${NHPS_ATTENDANCE_URL}/245-eld-st`,
+  });
+  const eld = parcel(999071);
+  eld.attributes.property_address = "20 ELD ST";
+  globalThis.fetch = async (url) => String(url).includes("New_Haven_Addresses_Authoritative_view")
+    ? response({ features: [{ attributes: { objectid: 77, house_number: 20,
+      full_street_name: "ELD ST", street_name: "ELD", suffix_type: "ST" } }] })
+    : new Response(page, { headers: { "content-type": "text/html" } });
+  const live = await getSourceRecords("school-attendance", eld);
+  assert.equal(live.status, "ok");
+  assert.equal(live.items.length, 1);
+  assert.equal(live.items[0].attributes.k8_attendance_zone_school, "East Rock Magnet");
+  assert.equal(live.items[0].attributes.source_lookup_mode, "live");
+  assert.deepEqual(live.items[0].match.city_address_point_objectids, [77]);
+  assert.equal(addressEvidence(live.items[0], "20 ELD ST").matches_query, true);
+
+  const whalley = parcel(999072);
+  whalley.attributes.property_address = "869 WHALLEY AVE";
+  globalThis.fetch = async (url) => String(url).includes("New_Haven_Addresses_Authoritative_view")
+    ? response({ features: [] })
+    : new Response("Forbidden", { status: 403 });
+  const fallback = await getSourceRecords("school-attendance", whalley);
+  assert.equal(fallback.status, "ok");
+  assert.equal(fallback.items[0].attributes.k8_attendance_zone_school, "Beecher Magnet");
+  assert.equal(fallback.items[0].attributes.source_lookup_mode, "official_snapshot");
+  assert.equal(fallback.items[0].attributes.source_snapshot_retrieved_at, nhpsSnapshot.retrieved_at);
+  assert.match(fallback.warning, /HTTP 403.*official NHPS export retrieved/i);
+});
+
+test("NHPS attendance records have the same private REST and MCP response with address focus", async () => {
+  const id = 999073;
+  const feature = parcel(id);
+  feature.attributes.property_address = "179 CROWN ST";
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer")) return response({ features: [feature] });
+    if (url.pathname.includes("Addresses_")) return response({ features: [] });
+    if (url.href === NHPS_ATTENDANCE_URL) return new Response("Forbidden", { status: 403 });
+    throw Error("Unexpected source");
+  };
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await schoolAttendanceRoute.fetch(new Request(
+    `https://example.com/api/v1/school-attendance?parcel_id=${id}&query_address=179%20Crown%20St`,
+    { headers: auth },
+  ));
+  assert.equal(rest.status, 200);
+  const records = await rest.json();
+  assert.deepEqual(records, await parcelSchoolAttendance(id, { query_address: "179 Crown St" }));
+  assert.equal(records.source.source_id, "school-attendance");
+  assert.equal(records.items[0].attributes.k8_attendance_zone_school, "East Rock Magnet");
+  assert.equal(records.items[0].address_evidence.matches_query, true);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 44, method: "tools/call",
+      params: { name: "get_parcel_school_attendance", arguments: {
+        parcel_id: String(id), query_address: "179 Crown St",
+      } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, records);
 });
 
 test("invited keys can be revoked without a parcel database", () => {
@@ -263,6 +366,17 @@ test("LCI source status and record match preserve the verified PID and address",
   const partial = await getSourceRecords("lci-cases", parcel(999045));
   assert.equal(partial.status, "partial");
   assert.deepEqual(partial.items, []);
+});
+
+test("an absent LCI property page leaves its case count unverified", async () => {
+  globalThis.fetch = async () => new Response("", { status: 404 });
+  const absent = await getSourceRecords("lci-cases", parcel(999046));
+  assert.equal(absent.status, "not_linked");
+  assert.deepEqual(absent.items, []);
+  assert.match(absent.warning, /no public property page for assessor PID 999046/);
+  globalThis.fetch = async () => new Response("", { status: 503 });
+  const failed = await getSourceRecords("lci-cases", parcel(999047));
+  assert.equal(failed.status, "unavailable");
 });
 
 test("pilot login creates a private page session", async () => {
@@ -681,7 +795,7 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
   assert.doesNotMatch(JSON.stringify(out), /Private notes|Private complaint narrative|private@example.org|555-0100/);
 });
 
-test("missing municipal License category is reported as partial", async () => {
+test("omitted municipal License category has an unconfirmed count without a failed source check", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);
     if (u.pathname.endsWith("/GetM5Data"))
@@ -691,13 +805,49 @@ test("missing municipal License category is reported as partial", async () => {
     throw Error("Unexpected source");
   };
   const out = await getSourceRecords("municipal-business-licenses", parcel(999018));
-  assert.equal(out.status, "partial");
+  assert.equal(out.status, "no_records");
   assert.equal(out.items.length, 0);
-  assert.match(out.warning, /omitted its License category/);
+  assert.match(out.warning, /does not establish a zero license count/);
   const municipal = await getSourceRecords("municity", parcel(999018));
+  assert.equal(municipal.status, "no_records");
   assert.equal(municipal.category_counts.License, null);
   assert.equal(municipal.category_counts.Permit, 0);
   assert.ok(municipal.missing_categories.includes("Certificate"));
+  assert.ok(municipal.omitted_categories.includes("License"));
+});
+
+test("486 Orange St keeps its municipal rows without treating sparse categories or LCI 404 as incomplete checks", async () => {
+  const feature = parcel(12846);
+  feature.attributes.objectid = 4157;
+  feature.attributes.property_address = "486 ORANGE ST";
+  feature.attributes.mblu = "222 0376 01300";
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith("/GetM5Data"))
+      return response({ rows: [{ Parcel_ID: 12496, PrintKey: "222 0376 01300" }], total: 1 });
+    if (url.pathname.endsWith("/Parcel/12496/Children"))
+      return response({
+        Application: Array.from({ length: 11 }, (_, n) => ({ Application_ID: n + 1 })),
+        Contact: [{ Contact_ID: 1 }],
+        Document: [{ Document_ID: 1, Public: true }, { Document_ID: 2, Public: true },
+          { Document_ID: 3, Public: false }],
+        License: Array.from({ length: 3 }, (_, n) => ({ License_ID: n + 1 })),
+        Occupant: Array.from({ length: 2 }, (_, n) => ({ Occupant_ID: n + 1 })),
+        Permit: Array.from({ length: 10 }, (_, n) => ({ Permit_ID: n + 1 })),
+      });
+    if (url.hostname === "lci.city") return new Response("", { status: 404 });
+    if (url.pathname.includes("LCI_Managed_Lots")) return response({ features: [] });
+    throw Error(`Unexpected source: ${url}`);
+  };
+  const group = await getGroup("activity", feature);
+  assert.equal(group.partial, false);
+  assert.equal(group.items.length, 29);
+  const municipal = group.sources.find((source) => source.source_id === "municity");
+  assert.equal(municipal.status, "ok");
+  assert.deepEqual(municipal.omitted_categories, ["Complaint", "Certificate"]);
+  assert.equal(municipal.category_counts.Complaint, null);
+  assert.equal(municipal.category_counts.Certificate, null);
+  assert.equal(group.sources.find((source) => source.source_id === "lci-cases").status, "not_linked");
 });
 
 test("municipal counts label returned rows separately from a truncated category", async () => {
