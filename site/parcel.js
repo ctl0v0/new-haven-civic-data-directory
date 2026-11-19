@@ -2356,11 +2356,18 @@ async function runAsk(question, filters = null) {
     appendAskItems(result.items);
     renderAskCoverage(result);
     $("ask-more").hidden = !askCursor;
-    setAskStatus(result.items.length
-      ? `${result.items.length} parcel${result.items.length === 1 ? "" : "s"} on this page. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`
-      : result.complete_for_query ? "No matching parcels in the checked sources." :
-        "No matching parcels on this page; source coverage is incomplete, so zero is not established.",
-    result.complete_for_query ? "ready" : "coverage_limited");
+    const indexStatus = result.coverage?.index_status;
+    let message;
+    if (indexStatus === "unconfigured")
+      message = "The private parcel index is not connected in this Preview. No parcel search ran.";
+    else if (indexStatus === "unavailable")
+      message = "The private parcel index could not be queried. Zero matches have not been established.";
+    else if (result.items.length)
+      message = `${result.items.length} parcel${result.items.length === 1 ? "" : "s"} on this page. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`;
+    else message = result.complete_for_query ? "No matching parcels in the checked sources." :
+      "No matching parcels on this page; source coverage is incomplete, so zero is not established.";
+    setAskStatus(message, ["unconfigured", "unavailable"].includes(indexStatus)
+      ? "unavailable" : result.complete_for_query ? "ready" : "coverage_limited");
   } catch (error) { setAskStatus(error.message, "unavailable"); }
 }
 for (const button of document.querySelectorAll("[data-ask-example]")) {
