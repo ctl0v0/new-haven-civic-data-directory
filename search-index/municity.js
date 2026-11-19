@@ -4,6 +4,14 @@ import { municipalPermitTypes } from "../parcel/permit-types.js";
 const VENDOR = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
 const LIMIT = 2000;
 
+export function sameMunicipalPermitRows(first, second) {
+  if (first.length !== second.length) return false;
+  // The municipal search returns the same published IDs in varying row order.
+  const byPublishedId = (a, b) => a.record_id.localeCompare(b.record_id);
+  return JSON.stringify(first.toSorted(byPublishedId)) ===
+    JSON.stringify(second.toSorted(byPublishedId));
+}
+
 export function municipalDate(value) {
   const raw = String(value ?? "");
   const iso = raw.match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/);

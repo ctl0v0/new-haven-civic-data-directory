@@ -6,7 +6,7 @@ import { getSearchCoverage } from "../search-index/coverage.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { stateRosterInventory, stateRosterRows } from "../search-index/socrata.js";
 import { arcgis } from "../parcel/http.js";
-import { municipalPermitTypeRows } from "../search-index/municity.js";
+import { municipalPermitTypeRows, sameMunicipalPermitRows } from "../search-index/municity.js";
 import { searchIndexedPermits } from "../search-index/permits.js";
 import { searchParcels } from "../parcel/parcel-search.js";
 import searchParcelsRoute from "../api/v1/search-parcels.js";
@@ -158,6 +158,15 @@ test("municipal type import keeps only official Permit IDs and stops at the unpa
     get: async () => ({ rows: [row], total: 2000 }) }), /2,000-row bound/);
   await assert.rejects(municipalPermitTypeRows("Hood - C", { catalog,
     get: async () => ({ rows: [row, row], total: 2 }) }), /unique published Permit_ID/);
+});
+
+test("municipal refresh compares published permit IDs independent of vendor row order", () => {
+  const a = { record_id: "569338", published_status: "Issued" };
+  const b = { record_id: "569339", published_status: "Issued" };
+  assert.equal(sameMunicipalPermitRows([a, b], [b, a]), true);
+  assert.equal(sameMunicipalPermitRows([a, b], [b, { ...a, record_id: b.record_id,
+    published_status: "Voided" }]), false);
+  assert.equal(sameMunicipalPermitRows([a, b], [a]), false);
 });
 
 test("indexed permit search requires each exact type run before claiming an answer", async () => {

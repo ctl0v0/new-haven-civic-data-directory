@@ -2,7 +2,7 @@ import { indexQuery } from "./db.js";
 import { arcgisInventory, arcgisFeatures } from "./arcgis.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
-import { municipalPermitTypeRows } from "./municity.js";
+import { municipalPermitTypeRows, sameMunicipalPermitRows } from "./municity.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
 import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, schoolAddress,
   schoolRowsForAddress, snapshotIsCurrent } from "../parcel/school-attendance.js";
@@ -266,7 +266,7 @@ export async function importMunicipalPermitType(permitType) {
     for (let offset = 0; offset < first.rows.length; offset += 200)
       await insertRecords(runId, "municity", first.rows.slice(offset, offset + 200));
     const final = await municipalPermitTypeRows(permitType);
-    if (JSON.stringify(final.rows) !== JSON.stringify(first.rows))
+    if (!sameMunicipalPermitRows(first.rows, final.rows))
       throw new Error("Municipal permit type changed during refresh");
     return await finishRun(runId, "municity", first.rows.length);
   } catch (error) {
