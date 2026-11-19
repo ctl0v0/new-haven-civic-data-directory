@@ -331,10 +331,13 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
         .toISOString().slice(0, 10));
     const first = [];
     const dailyCounts = [];
+    const observedTypes = new Map();
     for (const day of days) {
       const result = await dateRows(day, type, format);
       first.push(...result.rows);
       dailyCounts.push(result.vendor_count);
+      for (const [name, count] of Object.entries(result.observed_types ?? {}))
+        observedTypes.set(name, (observedTypes.get(name) ?? 0) + count);
     }
     const ids = new Set(first.map((row) => row.record_id));
     if (ids.size !== first.length || first.some((row) => row.event_date == null))
@@ -374,7 +377,9 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
       throw new Error("Municipal recent permit rows changed during refresh");
     return { ...await finishRun(runId, "municity", first.length),
       coverage_date_from: range.from, coverage_date_to: range.to,
-      daily_counts: dailyCounts };
+      daily_counts: dailyCounts,
+      observed_type_counts: Object.fromEntries([...observedTypes]
+        .sort(([a], [b]) => a.localeCompare(b))) };
   } catch (error) {
     await failRun(runId, error);
     throw error;

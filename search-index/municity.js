@@ -185,7 +185,14 @@ export async function municipalPermitDateRows(date, type, format, { get = fetchJ
   if (rows.some((row) => municipalDate(row.PermitDate) !== date ||
       !String(row.PermitType ?? "").trim() || !/^\d+$/.test(String(row.Permit_ID ?? ""))))
     throw new SourceError("Municipal PermitDate query returned an unverified row or date");
-  return { date, vendor_count: total, ...normalizedPermitRows(rows, type) };
+  const observedTypes = new Map();
+  for (const row of rows) {
+    const name = String(row.PermitType).trim();
+    observedTypes.set(name, (observedTypes.get(name) ?? 0) + 1);
+  }
+  return { date, vendor_count: total,
+    observed_types: Object.fromEntries([...observedTypes].sort(([a], [b]) => a.localeCompare(b))),
+    ...normalizedPermitRows(rows, type) };
 }
 
 export async function municipalParentPrintKey(parcelId, { get = fetchJson } = {}) {

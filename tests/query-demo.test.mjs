@@ -85,12 +85,15 @@ test("interpreter cannot silently drop the commercial or recent-date constraint"
 test("City code audit reports missing official labels without inventing classifications", async () => {
   const report = await auditCityUseCodes({
     metadata: async () => ({ fields: [{ name: "use_code", domain: null }] }),
-    query: async () => [{ code: "ABC", parcel_count: 25 }],
+    query: async (statement) => statement.includes("GROUP BY")
+      ? [{ code: "ABC", parcel_count: 25 }]
+      : [{ objectid: "9", parcel_id: null, use_code: "ABC" }],
   });
   assert.equal(report.official_domain_published, false);
   assert.equal(report.codes[0].published_label, null);
   assert.equal(report.codes[0].reviewed, false);
   assert.equal(report.unreviewed_codes, 1);
+  assert.equal(report.unlinked_features[0].objectid, "9");
 });
 
 test("a model-supplied neighborhood must match an indexed City name", async () => {
@@ -146,6 +149,7 @@ test("date search must reproduce a known vendor permit and reconcile the exact d
   const day = await municipalPermitDateRows("2026-11-18", "Electrical Permit", format, { get });
   assert.equal(day.rows[0].record_id, "99");
   assert.equal(day.rows[0].event_date, "2026-11-18");
+  assert.deepEqual(day.observed_types, { "Electrical Permit": 1 });
   await assert.rejects(municipalPermitDateRows("2026-11-18", "Electrical Permit", format, {
     get: async () => ({ rows: [{ ...sample, PermitDate: "11/17/2026" }], total: 1 }),
   }), /unverified row or date/);

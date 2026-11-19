@@ -16,6 +16,17 @@ export async function auditCityUseCodes({ query = indexQuery,
       (SELECT run_id FROM search_active_runs WHERE source_id = 'parcels' AND scope_key = 'all')
       AND nullif(trim(fields->>'use_code'), '') IS NOT NULL
     GROUP BY upper(trim(fields->>'use_code')) ORDER BY code`);
+  const unlinkedFeatures = await query(`SELECT p.record_id AS objectid,
+    p.fields->>'parcel_id' AS parcel_id, p.fields->>'mblu' AS mblu,
+    p.fields->>'use_code' AS use_code,
+    p.fields->>'property_address' AS property_address, p.source_url
+    FROM search_records p
+    LEFT JOIN search_record_parcels j ON j.run_id = p.run_id AND
+      j.source_id = p.source_id AND j.record_id = p.record_id AND
+      j.join_status = 'exact'
+    WHERE p.source_id = 'parcels' AND p.run_id =
+      (SELECT run_id FROM search_active_runs WHERE source_id = 'parcels' AND scope_key = 'all')
+      AND j.record_id IS NULL ORDER BY p.record_id`);
   const reviewed = reviewedUseCodeValues();
   return { source_url: LAYERS.parcels, field: "use_code",
     official_domain_published: published.size > 0,
@@ -25,5 +36,6 @@ export async function auditCityUseCodes({ query = indexQuery,
       published_label: published.get(row.code) ?? null,
       reviewed: reviewed?.has(row.code) ?? false })),
     unreviewed_codes: rows.filter((row) => !reviewed?.has(row.code)).length,
+    unlinked_features: unlinkedFeatures,
     checked_at: new Date().toISOString() };
 }

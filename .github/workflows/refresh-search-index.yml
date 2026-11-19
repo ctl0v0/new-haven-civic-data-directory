@@ -1,6 +1,6 @@
 name: Refresh private parcel search index
 # A Preview branch update runs the City and State baselines and the bounded
-# recent Electrical check. Hourly runs refresh one stable permit-type shard.
+# recent Electrical check and official code/type audit. Hourly runs refresh one stable permit-type shard.
 on:
   push:
     branches: [main, codex/parcel-pilot]
