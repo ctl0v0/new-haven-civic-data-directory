@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS search_records (
   PRIMARY KEY (run_id, source_id, record_id)
 );
 
-CREATE INDEX IF NOT EXISTS search_records_fields ON search_records USING gin (fields);
+-- Search predicates use explicit published fields (fields->>'name'), never
+-- jsonb containment. The general GIN index consumes scarce storage without
+-- serving these queries, including on every superseded refresh run.
+DROP INDEX IF EXISTS search_records_fields;
 CREATE INDEX IF NOT EXISTS search_records_geometry ON search_records USING gist (geometry);
 CREATE INDEX IF NOT EXISTS search_records_type_date
   ON search_records (source_id, published_type, published_status, event_date);

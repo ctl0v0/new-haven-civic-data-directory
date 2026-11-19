@@ -109,11 +109,18 @@ function checkedRequirements(input) {
     const eventDateTo = checkedDate(item.event_date_to, "event_date_to");
     if (eventDateFrom && eventDateTo && eventDateFrom > eventDateTo)
       throw new SourceError("Event date range is reversed", 400);
+    const permitGroup = item.permit_group == null ? null : String(item.permit_group).trim();
+    if (item.permit_group != null &&
+        (typeof item.permit_group !== "string" || !permitGroup ||
+         sourceId !== "municity" || permitGroup.length > 100 ||
+         /[\x00-\x1f]/.test(permitGroup)))
+      throw new SourceError("Permit group is only valid for municipal records", 400);
     return { source_id: sourceId, equals: Object.fromEntries(Object.entries(equals).sort()),
       one_of: Object.fromEntries(Object.entries(oneOf).map(([key, values]) =>
         [key, [...new Set(values.map((value) => value.trim().toUpperCase()))].sort()])),
       ...ranges,
-      event_date_from: eventDateFrom, event_date_to: eventDateTo };
+      event_date_from: eventDateFrom, event_date_to: eventDateTo,
+      permit_group: permitGroup };
   });
 }
 
@@ -194,12 +201,16 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
   const requirements = checkedRequirements(input.requirements);
   const municipalRequirements = requirements.filter((item) => item.source_id === "municity");
   if (municipalRequirements.length > 1)
-    throw new SourceError("Use one exact municipal permit type requirement per cross-source query", 400);
+    throw new SourceError("Use one municipal permit type or group requirement per cross-source query", 400);
   const municipalType = municipalRequirements[0]?.equals?.PermitType;
-  if (municipalRequirements.length && (typeof municipalType !== "string" ||
-      !municipalType.trim() || municipalType.length > 100))
-    throw new SourceError("Municipal cross-source search requires exact PermitType", 400);
-  const municipalScope = municipalType ? `permit-type:${municipalType.trim().toUpperCase()}` : null;
+  const municipalGroup = municipalRequirements[0]?.permit_group;
+  if (municipalRequirements.length &&
+      ((municipalType && municipalGroup) || (!municipalType && !municipalGroup) ||
+       (municipalType && (typeof municipalType !== "string" ||
+         !municipalType.trim() || municipalType.length > 100))))
+    throw new SourceError("Municipal search requires one exact PermitType or published permit group", 400);
+  const municipalScope = municipalType ? `permit-type:${municipalType.trim().toUpperCase()}`
+    : municipalGroup ? `permit-group:${municipalGroup.toUpperCase()}` : null;
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new SourceError("limit must be 1–100", 400);
@@ -326,11 +337,15 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   const requirement = checkedRequirements([input])[0];
   const sourceId = requirement.source_id;
   const permitType = requirement.equals.PermitType;
+  const permitGroup = requirement.permit_group;
   if (sourceId === "municity" &&
-      (typeof permitType !== "string" || !permitType.trim() || permitType.length > 100))
-    throw new SourceError("Municipal record search requires exact PermitType", 400);
+      ((Boolean(permitType) === Boolean(permitGroup)) ||
+        (permitType && (typeof permitType !== "string" ||
+          !permitType.trim() || permitType.length > 100))))
+    throw new SourceError("Municipal record search requires exact PermitType or published permit group", 400);
   const municipalScope = sourceId === "municity"
-    ? `permit-type:${permitType.trim().toUpperCase()}` : null;
+    ? permitType ? `permit-type:${permitType.trim().toUpperCase()}`
+      : `permit-group:${permitGroup.toUpperCase()}` : null;
   const parcelId = input.city_parcel_id == null ? null : String(input.city_parcel_id);
   const objectId = input.city_objectid == null ? null : String(input.city_objectid);
   if ((parcelId == null) !== (objectId == null) ||

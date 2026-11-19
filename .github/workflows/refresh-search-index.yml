@@ -4,7 +4,7 @@ name: Refresh private parcel search index
 on:
   push:
     branches: [main, codex/parcel-pilot]
-    paths: [.github/workflows/refresh-search-index.yml]
+    paths: [.github/workflows/refresh-search-index.yml, scripts/refresh-search-index-all.mjs, search-index/import.js, search-index/municity.js]
   workflow_dispatch:
     inputs:
       mode:
@@ -99,6 +99,7 @@ jobs:
           npm run index:prune
           if [ "$REFRESH_MODE" = daily ]; then
             npm run index:audit-use-codes || echo 'Official City use-code audit unavailable; commercial query remains gated'
+            npm run index:smoke-question || echo 'Electrical group source smoke unavailable; question demo remains gated'
           fi
           if [ "$REFRESH_MODE" != daily ]; then npm run index:smoke; fi
           exit "$refresh_status"

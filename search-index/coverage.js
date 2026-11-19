@@ -32,7 +32,8 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
     const latestAllBySource = new Map(latestAll.map((row) => [row.source_id, row]));
     const now = Date.now();
     const typeCatalogRun = active.get("municity-permit-types");
-    const typeNames = typeCatalogRun ? await query(`SELECT record_id
+    const typeNames = typeCatalogRun ? await query(`SELECT record_id,
+      fields->>'group' AS group_name
       FROM search_records WHERE run_id = $1 AND source_id = 'municity-permit-types'
       ORDER BY record_id`, [typeCatalogRun.run_id]) : [];
     const latestTypes = await query(`SELECT DISTINCT ON (scope_key)
@@ -79,9 +80,29 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
           latest_attempt_started_at: latest.started_at } : {}),
       };
     });
+    const municipalGroups = [...new Set(typeNames.map((row) => row.group_name)
+      .filter(Boolean))].sort().map((name) => {
+      const run = byScope.get(`permit-group:${name.toUpperCase()}`);
+      const fresh = Boolean(run && now - Date.parse(run.finished_at) <= maxAgeMs("daily"));
+      return { permit_group: name, catalog_type_count: typeNames.filter((row) =>
+        row.group_name === name).length, indexed: Boolean(run), fresh,
+        complete_for_covered_window: Boolean(run && fresh && run.status === "complete" &&
+          run.latest_attempt_status !== "failed" &&
+          Number(run.expected_count) === Number(run.returned_count) &&
+          Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0),
+        ...(run ? { run_id: Number(run.run_id), source_count: Number(run.expected_count),
+          linked_count: Number(run.linked_count), ambiguous_count: Number(run.ambiguous_count),
+          unlinked_count: Number(run.unlinked_count),
+          coverage_date_from: run.coverage_date_from ?? null,
+          coverage_date_to: run.coverage_date_to ?? null,
+          last_successful_refresh: run.finished_at,
+          latest_attempt_status: run.latest_attempt_status,
+          latest_attempt_warning: run.latest_attempt_warning } : {}) };
+    });
     return {
       index_status: "connected",
       municipal_permit_types: municipalTypes,
+      municipal_permit_groups: municipalGroups,
       municipal_permit_catalog: { indexed: Boolean(typeCatalogRun),
         catalog_types: typeNames.length,
         types_with_index: municipalTypes.filter((type) => type.in_catalog && type.indexed).length,

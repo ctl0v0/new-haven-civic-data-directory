@@ -57,6 +57,7 @@ export function searchCapabilities() {
           number_gte: "Inclusive lower bound on reviewed numeric City parcel fields, including unit counts and assessed values",
           number_lte: "Inclusive upper bound on the same reviewed numeric City parcel fields",
           municipal_type: "A municity requirement must name one exact PermitType; it can be combined with City and State source requirements",
+          permit_group: "A municity requirement may instead name a published permit group with a validated bounded group run",
           event_date_from: "Source-published event date only, inclusive",
           event_date_to: "Source-published event date only, inclusive",
         },

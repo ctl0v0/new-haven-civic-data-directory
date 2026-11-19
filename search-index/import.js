@@ -1,4 +1,5 @@
 import { indexQuery } from "./db.js";
+import { createHash } from "node:crypto";
 import { arcgisInventory, arcgisFeatures } from "./arcgis.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
@@ -247,9 +248,47 @@ export async function importArcgisSource(sourceId) {
   const definition = INDEX_DATASETS[sourceId];
   if (definition?.kind !== "arcgis")
     throw new Error("Unknown GIS index source");
+  // An unchanged publisher revision and exact ID set can reuse the active
+  // layer. Spatial links also depend on the current City baseline; a newer
+  // parcel or address run requires the layer to be linked again.
+  const inventory = await arcgisInventory(sourceId);
+  const current = await write(`SELECT r.id, r.expected_count, r.source_updated_at,
+      r.started_at,
+      (SELECT max(p.started_at) FROM search_active_runs a
+        JOIN search_source_runs p ON p.id = a.run_id
+        WHERE a.source_id = 'parcels' AND a.scope_key = 'all') AS parcel_started_at,
+      (SELECT max(p.started_at) FROM search_active_runs a
+        JOIN search_source_runs p ON p.id = a.run_id
+        WHERE a.source_id = 'addresses' AND a.scope_key = 'all') AS address_started_at
+    FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
+    WHERE a.source_id = $1 AND a.scope_key = 'all' AND r.status = 'complete'`,
+  [sourceId]);
+  const prior = current[0];
+  const parcelDependency = !["parcels", "metered-parking-spaces", "transit-stops"].includes(sourceId);
+  const addressDependency = sourceId === "trash-pickup";
+  const dependencyCurrent = (!parcelDependency || (prior?.parcel_started_at &&
+    new Date(prior.started_at) >= new Date(prior.parcel_started_at))) &&
+    (!addressDependency || (prior?.address_started_at &&
+      new Date(prior.started_at) >= new Date(prior.address_started_at)));
+  if (prior && dependencyCurrent &&
+      Number(prior.expected_count) === inventory.source_count &&
+      new Date(prior.source_updated_at).toISOString() === inventory.source_updated_at) {
+    const [stored] = await write(`SELECT count(*)::integer AS count,
+      md5(string_agg(record_id, ',' ORDER BY record_id::bigint)) AS id_hash
+      FROM search_records WHERE run_id = $1 AND source_id = $2`,
+    [prior.id, sourceId]);
+    const listedHash = createHash("md5").update(inventory.object_ids.join(",")).digest("hex");
+    if (Number(stored?.count) === inventory.source_count && stored?.id_hash === listedHash) {
+      const confirmed = await arcgisInventory(sourceId);
+      if (confirmed.source_updated_at === inventory.source_updated_at &&
+          confirmed.source_count === inventory.source_count &&
+          confirmed.object_ids.every((id, index) => id === inventory.object_ids[index]))
+        return { run_id: Number(prior.id), returned: inventory.source_count,
+          linked: null, ambiguous: null, unlinked: null, reused: true };
+    }
+  }
   const runId = await beginRun(sourceId);
   try {
-    const inventory = await arcgisInventory(sourceId);
     await setRunInventory(runId, inventory.source_count, inventory.source_updated_at);
     for (let at = 0; at < inventory.object_ids.length; at += 200) {
       const rows = await arcgisFeatures(inventory, inventory.object_ids.slice(at, at + 200));
@@ -317,15 +356,13 @@ export async function importMunicipalPermitType(permitType) {
   }
 }
 
-export async function importMunicipalRecentElectrical({ now = new Date(),
+async function importMunicipalRecentWindow({ scopeKey, types, now = new Date(),
   dateFormat = municipalDateSearchFormat, dateRows = municipalPermitDateRows,
-  parentKey = municipalParentPrintKey } = {}) {
-  const type = "Electrical Permit";
+  parentKey = municipalParentPrintKey, verifyTypes = null }) {
   const range = recentCalendarDates(30, now);
-  const runId = await beginRun("municity", `permit-type:${type.toUpperCase()}`,
-    null, null, range);
+  const runId = await beginRun("municity", scopeKey, null, null, range);
   try {
-    const format = await dateFormat(type);
+    const format = await dateFormat("Electrical Permit");
     const days = Array.from({ length: 30 }, (_, index) =>
       new Date(Date.parse(`${range.from}T00:00:00Z`) + index * 86400_000)
         .toISOString().slice(0, 10));
@@ -333,7 +370,7 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
     const dailyCounts = [];
     const observedTypes = new Map();
     for (const day of days) {
-      const result = await dateRows(day, type, format);
+      const result = await dateRows(day, types, format);
       first.push(...result.rows);
       dailyCounts.push(result.vendor_count);
       for (const [name, count] of Object.entries(result.observed_types ?? {}))
@@ -341,7 +378,7 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
     }
     const ids = new Set(first.map((row) => row.record_id));
     if (ids.size !== first.length || first.some((row) => row.event_date == null))
-      throw new Error("Recent Electrical Permit window has duplicate IDs across dates or an undated row");
+      throw new Error("Recent municipal permit window has duplicate IDs across dates or an undated row");
     const parents = new Map();
     for (const row of first) {
       const key = (value) => String(value ?? "").replaceAll("/", " ")
@@ -365,7 +402,7 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
       await insertRecords(runId, "municity", first.slice(offset, offset + 200));
     const second = [];
     for (const [index, day] of days.entries()) {
-      const result = await dateRows(day, type, format);
+      const result = await dateRows(day, types, format);
       if (result.vendor_count !== dailyCounts[index])
         throw new Error("Municipal daily permit count changed during refresh");
       second.push(...result.rows);
@@ -375,6 +412,8 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
         row.fields.VerifiedParentPrintKey = parents.get(String(row.fields.Parcel_ID));
     if (!sameMunicipalPermitRows(first, second))
       throw new Error("Municipal recent permit rows changed during refresh");
+    if (verifyTypes && !(await verifyTypes()))
+      throw new Error("Official municipal permit group changed during refresh");
     return { ...await finishRun(runId, "municity", first.length),
       coverage_date_from: range.from, coverage_date_to: range.to,
       daily_counts: dailyCounts,
@@ -384,6 +423,28 @@ export async function importMunicipalRecentElectrical({ now = new Date(),
     await failRun(runId, error);
     throw error;
   }
+}
+
+export async function importMunicipalRecentElectrical(options = {}) {
+  return importMunicipalRecentWindow({ scopeKey: "permit-type:ELECTRICAL PERMIT",
+    types: ["Electrical Permit"], ...options });
+}
+
+export async function importMunicipalRecentElectricalGroup(options = {}) {
+  const getNames = async () => {
+    const listed = await municipalPermitTypes({ fresh: true });
+    const electrical = listed.groups?.find((group) => group.name === "Electrical");
+    if (listed.partial || !electrical?.types?.length)
+      throw new Error("Official Electrical permit group is unavailable");
+    const names = electrical.types.map((item) => item.name).sort();
+    if (names.some((name) => !name) || new Set(names).size !== names.length)
+      throw new Error("Official Electrical permit group repeats or omits a name");
+    return names;
+  };
+  const types = await getNames();
+  return importMunicipalRecentWindow({ scopeKey: "permit-group:ELECTRICAL",
+    types, ...options, verifyTypes: async () =>
+      JSON.stringify(types) === JSON.stringify(await getNames()) });
 }
 
 export async function importMunicipalPermitCatalog() {

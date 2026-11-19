@@ -30,8 +30,10 @@ async function municipalSearch(searchfield, value, numrecs, get, fieldtype = "te
   return { rows, total };
 }
 
-function normalizedPermitRows(rows, type) {
-  const filtered = rows.filter((row) => String(row.PermitType ?? "").trim().toUpperCase() === type.toUpperCase());
+function normalizedPermitRows(rows, types) {
+  const names = new Set((Array.isArray(types) ? types : [types])
+    .map((name) => String(name).trim().toUpperCase()));
+  const filtered = rows.filter((row) => names.has(String(row.PermitType ?? "").trim().toUpperCase()));
   const byId = new Map();
   const present = (value) => value != null && String(value).trim() !== "";
   for (const row of filtered) {
@@ -173,7 +175,7 @@ function municipalDateValue(date, encoding) {
   return `${month}/${day}/${date.slice(0, 4)}`;
 }
 
-export async function municipalPermitDateRows(date, type, format, { get = fetchJson } = {}) {
+export async function municipalPermitDateRows(date, types, format, { get = fetchJson } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
       !["us", "us_short", "iso"].includes(format?.encoding) ||
       !["text", "date", "datetime"].includes(format?.fieldtype))
@@ -192,7 +194,7 @@ export async function municipalPermitDateRows(date, type, format, { get = fetchJ
   }
   return { date, vendor_count: total,
     observed_types: Object.fromEntries([...observedTypes].sort(([a], [b]) => a.localeCompare(b))),
-    ...normalizedPermitRows(rows, type) };
+    ...normalizedPermitRows(rows, types) };
 }
 
 export async function municipalParentPrintKey(parcelId, { get = fetchJson } = {}) {

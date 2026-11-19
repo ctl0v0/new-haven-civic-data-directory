@@ -2281,6 +2281,7 @@ async function runAsk(question) {
       const target = $("ask-interpretation");
       target.replaceChildren(el("h2", "Interpreted filters"));
       const parts = [parsed.commercial ? "City parcels in reviewed commercial use codes" : null,
+        parsed.permit_group ? `Published permit group: ${parsed.permit_group}` : null,
         parsed.permit_type ? `Permit type: ${parsed.permit_type}` : null,
         parsed.permit_status ? `Published permit status: ${parsed.permit_status}` : null,
         parsed.date_window ? `PermitDate: ${parsed.date_window.from} through ${parsed.date_window.to}` : null,
@@ -2288,6 +2289,7 @@ async function runAsk(question) {
       for (const part of parts) target.append(el("p", part));
       target.hidden = !parts.length;
       $("ask-commercial").checked = Boolean(parsed.commercial);
+      $("ask-permit-group").value = parsed.permit_group ?? "";
       $("ask-permit-type").value = parsed.permit_type ?? "";
       $("ask-days").value = parsed.permit_days ?? "";
       $("ask-neighborhood").value = parsed.neighborhood ?? "";
@@ -2318,6 +2320,7 @@ $("ask-form").addEventListener("submit", (event) => {
 $("ask-filter-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const parts = [$("ask-commercial").checked ? "commercial parcels" : "parcels",
+    $("ask-permit-group").value.trim() ? `with permits in the ${$("ask-permit-group").value.trim()} group` : "",
     $("ask-permit-type").value.trim() ? `with permit type ${$("ask-permit-type").value.trim()}` : "",
     $("ask-days").value ? `with PermitDate in the last ${$("ask-days").value} days` : "",
     $("ask-neighborhood").value.trim() ? `in the ${$("ask-neighborhood").value.trim()} City neighborhood` : ""];

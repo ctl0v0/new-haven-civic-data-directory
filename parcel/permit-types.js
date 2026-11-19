@@ -2,8 +2,8 @@ import { cached, fetchJson, SourceError } from "./http.js";
 
 export const MUNICIPAL_PERMIT_TYPES_URL = "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/PermitTypes";
 
-export async function municipalPermitTypes() {
-  return cached("municipal-permit-types:v1", async () => {
+export async function municipalPermitTypes({ fresh = false } = {}) {
+  const load = async () => {
     const rows = await fetchJson(MUNICIPAL_PERMIT_TYPES_URL, {
       headers: { SourceId: "2" }, timeout: 15000, maxBytes: 2_000_000,
     });
@@ -44,5 +44,6 @@ export async function municipalPermitTypes() {
         types: types.sort((a, b) => a.name.localeCompare(b.name)),
       })).sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""))),
     };
-  });
+  };
+  return fresh ? load() : cached("municipal-permit-types:v1", load);
 }

@@ -8,6 +8,7 @@
     "index:migrate": "node scripts/migrate-search-index.mjs",
     "index:verify-writer": "node scripts/verify-search-index-writer.mjs",
     "index:smoke": "node scripts/smoke-search-index.mjs",
+    "index:smoke-question": "node scripts/smoke-question-demo.mjs",
     "index:smoke-managed-lots": "node scripts/smoke-managed-lots.mjs",
     "index:audit-links": "node scripts/audit-search-index-links.mjs",
     "index:audit-use-codes": "node scripts/audit-city-use-codes.mjs",

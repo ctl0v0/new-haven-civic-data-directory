@@ -6,7 +6,10 @@ interprets the question into a small allowlist of filters. The service checks
 official type names, resolves New Haven calendar dates, expands a reviewed
 City use-code dictionary, and runs parameterized indexed search. Results keep
 the original City and municipal record links and source-run coverage. The
-model does not supply records or definitions.
+model does not supply records or definitions. This question is the first
+capability test for a wider natural-language search contract; each new term
+needs a published field or group, a checked join, context, and an explicit
+coverage boundary.
 
 The tab is hidden until `QUERY_DEMO_ENABLED=true` is set for the private
 Preview deployment. Keep it disabled until the gates below pass. The API and
@@ -16,17 +19,20 @@ own source limitations when called directly.
 ## Release gates for the Electrical Permit example
 
 1. Run the index migration, then refresh City parcels and the recent Electrical
-   window. The importer probes the official municipal `PermitDate` search using
+   group window. The importer probes the official municipal `PermitDate` search using
    a known returned permit, fetches all 30 New Haven calendar dates, requires
    every daily published total to equal the returned rows below the 10,000-row
    limit, and refetches the window before activating it. A failed probe or
    changed row leaves the previous active run in place and the new attempt
    failed. If date enumeration is unsupported, obtain a date-bounded extract
    directly from the City; do not treat a capped type search as complete.
-2. Inspect `get_search_coverage` for `Electrical Permit`:
+2. Inspect `get_search_coverage` for the published `Electrical` group:
    `coverage_date_from` and `coverage_date_to` must contain the requested
    dates, the run must be fresh, and ambiguous and unlinked counts must be
-   zero. The run describes only its date window, not historical coverage.
+   zero. The run describes only its date window, not historical coverage. The
+   exact `Electrical Permit` type is one catalog entry and had no rows during
+   the November 19, 2026 source check for October 21 through November 19.
+   The broad question must use the municipal catalog's full Electrical group.
 3. Run `npm run index:audit-use-codes` in the source-connected refresh
    environment. Review every distinct City `use_code` against an official City
    code definition, then fill `data/city-use-codes.json` with `code`,
@@ -60,7 +66,8 @@ and exact parcel joins as of its refresh, not for unpublished future changes.
   `term`, `source_id`, and `field` filters. Each entry separates an official
   source fact from the service's reading rule and includes the official URL.
 - `search_indexed_parcels` accepts `one_of.use_code` only on the City parcel
-  requirement. Values are checked and parameterized. A date-bounded municipal
+  requirement and `permit_group` for a municipal requirement with a verified
+  group run. Values are checked and parameterized. A date-bounded municipal
   run cannot establish a complete answer outside its coverage dates.
 
 The City Community Management Team context points to the [City's CMT page](https://www.newhavenct.gov/government/community-management-team).

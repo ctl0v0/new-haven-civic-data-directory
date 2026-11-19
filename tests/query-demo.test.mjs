@@ -26,11 +26,13 @@ test.after(() => {
   else process.env.SEARCH_DATABASE_URL = oldDatabase;
 });
 
-const catalog = async () => ({ partial: false, groups: [{ types: [
-  { name: "Electrical Permit" }, { name: "Hood - C" },
-] }] });
+const catalog = async () => ({ partial: false, groups: [
+  { name: "Electrical", types: [
+    { name: "Electrical Permit" }, { name: "Electrical Wiring (NEW)" }] },
+  { name: "Mechanical", types: [{ name: "Hood - C" }] },
+] });
 const interpreted = { intent: "search", commercial: false,
-  permit_type: "Electrical Permit", permit_status: null,
+  permit_type: "Electrical Permit", permit_group: null, permit_status: null,
   permit_days: 30, neighborhood: null, clarification: null };
 
 test("relative PermitDate uses New Haven calendar dates, including today", () => {
@@ -42,9 +44,9 @@ test("relative PermitDate uses New Haven calendar dates, including today", () =>
     "2026-11-18");
 });
 
-test("question path uses the published permit type and date without assuming Issued", async () => {
+test("question path uses an exact published permit type and date without assuming Issued", async () => {
   let criteria;
-  const answer = await askIndexedParcels({ question: "electrical permits in the past 30 days" }, {
+  const answer = await askIndexedParcels({ question: "permit type Electrical Permit in the past 30 days" }, {
     catalog, interpret: async () => interpreted,
     now: new Date("2026-11-19T15:00:00Z"),
     search: async (input) => {
@@ -60,11 +62,30 @@ test("question path uses the published permit type and date without assuming Iss
   assert.equal(answer.interpretation.date_window.from, "2026-10-21");
 });
 
+test("broad electrical question uses the official group rather than the old exact type", async () => {
+  let criteria;
+  const answer = await askIndexedParcels({ question: "electrical permits in the past 30 days" }, {
+    catalog, interpret: async () => ({ ...interpreted,
+      permit_type: null, permit_group: "Electrical" }),
+    now: new Date("2026-11-19T15:00:00Z"),
+    search: async (input) => {
+      criteria = input;
+      return { items: [], next_cursor: null, complete_for_query: false,
+        coverage: { source_checks: [{ status: "partial" }] } };
+    },
+  });
+  assert.equal(answer.status, "coverage_limited");
+  assert.deepEqual(criteria.requirements, [{ source_id: "municity",
+    permit_group: "Electrical", event_date_from: "2026-10-21",
+    event_date_to: "2026-11-19" }]);
+});
+
 test("commercial question stays blocked until all official City use codes are reviewed", async () => {
   assert.equal(commercialUseCodes(), null);
   let searched = false;
   const answer = await askIndexedParcels({ question: "all commercial parcels with electrical permits" }, {
-    catalog, interpret: async () => ({ ...interpreted, commercial: true }),
+    catalog, interpret: async () => ({ ...interpreted, commercial: true,
+      permit_type: null, permit_group: "Electrical" }),
     search: async () => { searched = true; return {}; },
   });
   assert.equal(answer.status, "blocked");
@@ -75,11 +96,16 @@ test("commercial question stays blocked until all official City use codes are re
 test("interpreter cannot silently drop the commercial or recent-date constraint", async () => {
   const answer = await askIndexedParcels({
     question: "commercial parcels with electrical permits in the past 30 days",
-  }, { catalog, interpret: async () => ({ ...interpreted, commercial: false }) });
+  }, { catalog, interpret: async () => ({ ...interpreted, commercial: false,
+    permit_type: null, permit_group: "Electrical" }) });
   assert.equal(answer.status, "clarify");
   const dateDropped = await askIndexedParcels({ question: "electrical permits in the past 30 days" },
-    { catalog, interpret: async () => ({ ...interpreted, permit_days: null }) });
+    { catalog, interpret: async () => ({ ...interpreted, permit_type: null,
+      permit_group: "Electrical", permit_days: null }) });
   assert.equal(dateDropped.status, "clarify");
+  const typeNarrowed = await askIndexedParcels({ question: "electrical permits in the past 30 days" },
+    { catalog, interpret: async () => interpreted });
+  assert.equal(typeNarrowed.status, "clarify");
 });
 
 test("City code audit reports missing official labels without inventing classifications", async () => {
@@ -99,7 +125,8 @@ test("City code audit reports missing official labels without inventing classifi
 test("a model-supplied neighborhood must match an indexed City name", async () => {
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
   const answer = await askIndexedParcels({ question: "electrical permits in an unknown neighborhood" }, {
-    catalog, interpret: async () => ({ ...interpreted,
+    catalog, interpret: async () => ({ ...interpreted, permit_type: null,
+      permit_group: "Electrical",
       neighborhood: "Invented Neighborhood" }),
     query: async () => [{ name: "Westville", label: "Westville" }],
     search: async () => { throw Error("must not search"); },
@@ -156,6 +183,27 @@ test("City features without a matching reviewed use code do not limit a scoped u
   delete process.env.SEARCH_DATABASE_URL;
 });
 
+test("group search selects its date-bounded source run and keeps published member types", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const rows = [
+    { source_id: "parcels", scope_key: "all", run_id: 30, status: "complete",
+      finished_at: new Date(), expected_count: 1, returned_count: 1,
+      ambiguous_count: 0, unlinked_count: 0, latest_attempt_status: "complete" },
+    { source_id: "municity", scope_key: "permit-group:ELECTRICAL", run_id: 31,
+      status: "complete", finished_at: new Date(), expected_count: 1,
+      returned_count: 1, ambiguous_count: 0, unlinked_count: 0,
+      coverage_date_from: "2026-10-21", coverage_date_to: "2026-11-19",
+      latest_attempt_status: "complete" },
+  ];
+  const result = await searchIndexedParcels({ requirements: [{ source_id: "municity",
+    permit_group: "Electrical", event_date_from: "2026-10-21",
+    event_date_to: "2026-11-19" }] }, { query: async (sql) =>
+    sql.includes("search_active_runs a") ? rows : [] });
+  assert.equal(result.complete_for_query, true);
+  assert.equal(result.coverage.source_checks[1].scope_key, "permit-group:ELECTRICAL");
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
 test("date search must reproduce a known vendor permit and reconcile the exact day", async () => {
   const sample = { Permit_ID: 99, PermitType: "Electrical Permit",
     PermitDate: "11/18/2026", PrintKey: "1 2 3" };
@@ -171,6 +219,17 @@ test("date search must reproduce a known vendor permit and reconcile the exact d
   assert.equal(day.rows[0].record_id, "99");
   assert.equal(day.rows[0].event_date, "2026-11-18");
   assert.deepEqual(day.observed_types, { "Electrical Permit": 1 });
+  const grouped = await municipalPermitDateRows("2026-11-18",
+    ["Electrical Permit", "Electrical Wiring (NEW)"], format, { get: async (url) => {
+      const p = new URL(url).searchParams;
+      if (p.get("searchfield") !== "PermitDate") throw Error("Unexpected source query");
+      return { rows: [sample, { ...sample, Permit_ID: 100,
+        PermitType: "Electrical Wiring (NEW)" },
+      { ...sample, Permit_ID: 101, PermitType: "Hood - C" }], total: 3 };
+    } });
+  assert.equal(grouped.rows.length, 2);
+  assert.deepEqual(grouped.rows.map((row) => row.published_type),
+    ["Electrical Permit", "Electrical Wiring (NEW)"]);
   await assert.rejects(municipalPermitDateRows("2026-11-18", "Electrical Permit", format, {
     get: async () => ({ rows: [{ ...sample, PermitDate: "11/17/2026" }], total: 1 }),
   }), /unverified row or date/);

@@ -7,6 +7,7 @@ export default guarded((request) => {
   return getIndexedRecord({
     source_id: params.get("source_id"), record_id: params.get("record_id"),
     permit_type: params.get("permit_type"),
+    permit_group: params.get("permit_group"),
     include_geometry: geometry == null ? undefined
       : geometry === "true" ? true : geometry === "false" ? false : geometry,
   });

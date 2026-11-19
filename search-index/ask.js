@@ -10,6 +10,7 @@ const interpretationSchema = z.object({
   intent: z.enum(["search", "clarify", "unsupported"]),
   commercial: z.boolean(),
   permit_type: z.string().nullable(),
+  permit_group: z.string().nullable(),
   permit_status: z.string().nullable(),
   permit_days: z.number().int().min(1).max(366).nullable(),
   neighborhood: z.string().nullable(),
@@ -30,16 +31,16 @@ export function recentCalendarDates(days, now = new Date()) {
   return { from, to, meaning: `${days} New Haven calendar dates including today` };
 }
 
-export async function interpretQuestion(question, typeNames) {
+export async function interpretQuestion(question, typeNames, groupNames) {
   const context = getDataContext().entries.filter((entry) => ["city-use-code",
-    "municipal-permit-type", "municipal-permit-date", "municipal-permit-status",
+    "municipal-permit-type", "municipal-permit-group", "municipal-permit-date", "municipal-permit-status",
     "city-neighborhood", "search-coverage"].includes(entry.id));
   const { output } = await generateText({
     model: "openai/gpt-4.1-mini",
     maxOutputTokens: 256,
     abortSignal: AbortSignal.timeout(12_000),
     output: Output.object({ schema: interpretationSchema }),
-    system: `Translate a New Haven parcel question to a bounded search intent. Use only the listed official field meanings and exact published permit type names. Do not answer the question or invent records. If the type or meaning is ambiguous, return clarify. 'Pulled' means PermitDate, not issued. A relative number of days is a calendar-date window; return the number, not calculated dates. Commercial is a service grouping of reviewed City use codes, never zoning or units_commercial. Only commercial, permit type/status/date, and City neighborhood are supported. Return unsupported for other requested criteria. Context: ${JSON.stringify(context)}. Official permit type names: ${JSON.stringify(typeNames)}.`,
+    system: `Translate a New Haven parcel question to a bounded search intent. Use only the listed official field meanings and published permit catalog. Do not answer the question or invent records. Use permit_group Electrical for broad "electrical permits"; the exact PermitType "Electrical Permit" is only one of many types in that group. Use permit_type only when the question names one exact published type. Never set both. If the type or meaning is ambiguous, return clarify. 'Pulled' means PermitDate, not issued. A relative number of days is a calendar-date window; return the number, not calculated dates. Commercial is a service grouping of reviewed City use codes, never zoning or units_commercial. Only commercial, permit group/type/status/date, and City neighborhood are supported. Return unsupported for other requested criteria. Context: ${JSON.stringify(context)}. Official permit groups: ${JSON.stringify(groupNames)}. Official permit type names: ${JSON.stringify(typeNames)}.`,
     prompt: question,
   });
   return output;
@@ -55,17 +56,18 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
   const question = String(input.question ?? "").trim();
   if (!question || question.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(question))
     throw new SourceError("Question must be 1–500 characters", 400);
-  let typeNames;
+  let typeNames, groupNames;
   try {
     const listed = await catalog();
     if (listed.partial || !Array.isArray(listed.groups)) throw Error("Incomplete catalog");
     typeNames = listed.groups.flatMap((group) => group.types.map((type) => type.name));
+    groupNames = listed.groups.map((group) => group.name).filter(Boolean);
   } catch {
     return { status: "unavailable", question,
       reason: "The official municipal permit type catalog could not be checked." };
   }
   let parsed;
-  try { parsed = interpretationSchema.parse(await interpret(question, typeNames)); }
+  try { parsed = interpretationSchema.parse(await interpret(question, typeNames, groupNames)); }
   catch { return { status: "unavailable", question,
     reason: "The question interpreter could not return validated search criteria." }; }
   if (parsed.intent !== "search") return { status: parsed.intent, question,
@@ -73,17 +75,22 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
     context: getDataContext({ term: "permit" }).entries };
   const explicitDays = question.match(/\b(?:last|past|previous)\s+(\d{1,3})\s+days?\b/i);
   if ((/\bcommercial\b/i.test(question) && !parsed.commercial) ||
-      (/\belectrical\s+permits?\b/i.test(question) &&
-        !/^electrical permit$/i.test(parsed.permit_type ?? "")) ||
+      (/\belectrical\s+permits\b/i.test(question) &&
+        !/^electrical$/i.test(parsed.permit_group ?? "")) ||
       (explicitDays && Number(explicitDays[1]) !== parsed.permit_days))
     return { status: "clarify", question,
       clarification: "The interpreted filters did not preserve every explicit part of the question. Please revise the question or choose the filters directly." };
   const permitType = parsed.permit_type ? canonicalType(parsed.permit_type, typeNames) : null;
+  const permitGroup = parsed.permit_group ? canonicalType(parsed.permit_group, groupNames) : null;
   if (parsed.permit_type && !permitType) return { status: "clarify", question,
     clarification: "Choose an exact permit type from the official municipal catalog." };
-  if ((parsed.permit_days || parsed.permit_status) && !permitType)
+  if (parsed.permit_group && !permitGroup) return { status: "clarify", question,
+    clarification: "Choose a published permit group from the official municipal catalog." };
+  if (permitType && permitGroup) return { status: "clarify", question,
+    clarification: "Choose either one exact permit type or one published permit group." };
+  if ((parsed.permit_days || parsed.permit_status) && !permitType && !permitGroup)
     return { status: "clarify", question,
-      clarification: "Which published municipal permit type should be searched?" };
+      clarification: "Which published municipal permit type or group should be searched?" };
   const requirements = [];
   let codeReview = null;
   if (parsed.commercial) {
@@ -127,8 +134,11 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
       equals: { [neighborhoodField]: neighborhood } });
   }
   let dateWindow = null;
-  if (permitType) {
-    const requirement = { source_id: "municity", equals: { PermitType: permitType } };
+  if (permitType || permitGroup) {
+    const requirement = { source_id: "municity",
+      ...(permitType ? { equals: { PermitType: permitType } }
+        : { permit_group: permitGroup }) };
+    if (parsed.permit_status) requirement.equals ??= {};
     if (parsed.permit_status) requirement.equals.PermStatus = parsed.permit_status.trim();
     if (parsed.permit_days) {
       dateWindow = recentCalendarDates(parsed.permit_days, now);
@@ -138,7 +148,7 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
     requirements.push(requirement);
   }
   if (!requirements.length) return { status: "clarify", question,
-    clarification: "Specify a commercial parcel, City neighborhood, or exact municipal permit type." };
+    clarification: "Specify a commercial parcel, City neighborhood, or published municipal permit type or group." };
   const criteria = { requirements, limit: 25 };
   const searchResult = await search(criteria);
   const checksComplete = searchResult.coverage?.source_checks?.every((check) =>
@@ -146,8 +156,9 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
   return { status: searchResult.complete_for_query ? "ready" :
     checksComplete && searchResult.next_cursor ? "paging" : "coverage_limited",
     question, interpretation: { ...parsed, permit_type: permitType,
+      permit_group: permitGroup,
       date_window: dateWindow }, criteria, search_result: searchResult,
     context: getDataContext().entries.filter((entry) => ["commercial-parcel-query",
-      "municipal-permit-date", "municipal-permit-status", "exact-parcel-join",
+      "municipal-permit-group", "municipal-permit-date", "municipal-permit-status", "exact-parcel-join",
       "search-coverage"].includes(entry.id)) };
 }

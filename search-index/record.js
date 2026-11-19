@@ -6,15 +6,21 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
   const sourceId = String(input.source_id ?? "").trim();
   const recordId = String(input.record_id ?? "").trim();
   const permitType = input.permit_type == null ? null : String(input.permit_type).trim();
+  const permitGroup = input.permit_group == null ? null : String(input.permit_group).trim();
   if (!INDEX_DATASETS[sourceId] || !recordId || recordId.length > 160 ||
       /[\x00-\x1f]/.test(recordId))
     throw new SourceError("Provide a valid indexed source and official record ID", 400);
-  if (sourceId === "municity" ? (!permitType || permitType.length > 100 ||
-      /[\x00-\x1f]/.test(permitType)) : permitType != null)
-    throw new SourceError("Permit type is required only for municipal permit records", 400);
+  if (sourceId === "municity"
+    ? (Boolean(permitType) === Boolean(permitGroup) ||
+      [permitType, permitGroup].some((value) => value &&
+        (value.length > 100 || /[\x00-\x1f]/.test(value))))
+    : permitType != null || permitGroup != null)
+    throw new SourceError("Provide one municipal permit type or group", 400);
   if (input.include_geometry != null && typeof input.include_geometry !== "boolean")
     throw new SourceError("include_geometry must be a boolean", 400);
-  const scopeKey = sourceId === "municity" ? `permit-type:${permitType.toUpperCase()}` : "all";
+  const scopeKey = sourceId === "municity" ? permitType
+    ? `permit-type:${permitType.toUpperCase()}`
+    : `permit-group:${permitGroup.toUpperCase()}` : "all";
   const key = { source_id: sourceId, scope_key: scopeKey, record_id: recordId };
   if (!indexConfigured()) return { ...key, found: false, complete_for_query: false,
     coverage: { index_status: "unconfigured" } };

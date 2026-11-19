@@ -510,7 +510,7 @@ test("indexed record inspection keeps official fields and parcel join evidence s
   assert.equal(absent.found, false);
   assert.equal(absent.complete_for_query, true);
   await assert.rejects(getIndexedRecord({ source_id: "municity", record_id: "572030" }),
-    /Permit type/);
+    /permit type or group/i);
   const blocked = await getIndexedRecord({ source_id: "municity", record_id: "1",
     permit_type: "Roofing" }, { query: async (sql) => sql.includes("search_active_runs")
       ? [] : [{ status: "failed", warning: "MUNICIPAL_TYPE_CAP: 10,000 rows",
