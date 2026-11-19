@@ -1,10 +1,10 @@
 import { cached, fetchJson, SourceError } from "./http.js";
 
-const SOURCE_URL = "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/PermitTypes";
+export const MUNICIPAL_PERMIT_TYPES_URL = "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/PermitTypes";
 
 export async function municipalPermitTypes() {
   return cached("municipal-permit-types:v1", async () => {
-    const rows = await fetchJson(SOURCE_URL, {
+    const rows = await fetchJson(MUNICIPAL_PERMIT_TYPES_URL, {
       headers: { SourceId: "2" }, timeout: 15000, maxBytes: 2_000_000,
     });
     if (!Array.isArray(rows) || !rows.length)
@@ -30,7 +30,7 @@ export async function municipalPermitTypes() {
     }
     if (!names.size) throw new SourceError("Municipal permit type catalog has no named types");
     return {
-      source_url: SOURCE_URL,
+      source_url: MUNICIPAL_PERMIT_TYPES_URL,
       retrieved_at: new Date().toISOString(),
       scope: "Municipal permit type catalog entries returned by the official source; this is not a count of issued or observed permits.",
       catalog_rows_returned: rows.length,

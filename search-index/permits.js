@@ -26,9 +26,11 @@ const check = (sourceId, scopeKey, row, maxAge) => {
 };
 
 export async function searchIndexedPermits(input = {}, { query = indexQuery } = {}) {
-  if (!Array.isArray(input.permit_types) || !input.permit_types.length || input.permit_types.length > 6)
-    throw new SourceError("Provide 1–6 exact municipal permit types", 400);
-  const types = [...new Set(input.permit_types.map((type) => {
+  const allTypes = input.permit_types == null ||
+    (Array.isArray(input.permit_types) && input.permit_types.length === 0);
+  if (!allTypes && (!Array.isArray(input.permit_types) || input.permit_types.length > 6))
+    throw new SourceError("Provide 1–6 exact municipal permit types, or omit them to search the indexed catalog", 400);
+  let types = [...new Set((allTypes ? [] : input.permit_types).map((type) => {
     const name = String(type ?? "").trim();
     if (!name || name.length > 100 || /[\x00-\x1f]/.test(name))
       throw new SourceError("Invalid municipal permit type", 400);
@@ -53,9 +55,11 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
     throw new SourceError("limit must be 1–50", 400);
-  const criteria = { permit_types: types, scope, scope_value: scopeName?.toUpperCase() ?? null,
+  const criteria = { permit_types: allTypes ? "all-catalog-types" : types,
+    scope, scope_value: scopeName?.toUpperCase() ?? null,
     permit_status: status?.toUpperCase() ?? null, permit_date_from: from, permit_date_to: to };
-  const wanted = ["parcels", "municity", ...(scope === "city" ? [] : [scope === "ward" ? "wards" : "neighborhoods"])];
+  const wanted = ["parcels", "municity", ...(allTypes ? ["municity-permit-types"] : []),
+    ...(scope === "city" ? [] : [scope === "ward" ? "wards" : "neighborhoods"])];
   if (!indexConfigured()) return { criteria, items: [], next_cursor: null,
     complete_for_query: false, coverage: { index_status: "unconfigured",
       source_checks: wanted.map((source_id) => ({ source_id, status: "unconfigured" })) } };
@@ -76,20 +80,47 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
         ({ source_id, status: "unavailable" })) } };
   }
   const byKey = new Map(active.map((row) => [`${row.source_id}:${row.scope_key}`, row]));
+  if (allTypes) {
+    const catalog = byKey.get("municity-permit-types:all");
+    if (!catalog) return { criteria, items: [], next_cursor: null,
+      complete_for_query: false, coverage: { index_status: "partial",
+        source_checks: [check("municity-permit-types", "all", null, 48 * 3600_000)],
+        note: "The full official permit type catalog has not been indexed. No all-type result was asserted." } };
+    try {
+      const catalogRows = await query(`SELECT record_id FROM search_records
+        WHERE run_id = $1 AND source_id = 'municity-permit-types'
+        ORDER BY record_id`, [catalog.run_id]);
+      types = catalogRows.map((row) => String(row.record_id).toUpperCase());
+      if (!types.length) throw new Error("Empty indexed permit type catalog");
+    } catch {
+      return { criteria, items: [], next_cursor: null,
+        complete_for_query: false, coverage: { index_status: "unavailable",
+          source_checks: [check("municity-permit-types", "all", catalog, 48 * 3600_000)],
+          note: "The official permit type catalog could not be read; no all-type result was asserted." } };
+    }
+  }
   const checks = [check("parcels", "all", byKey.get("parcels:all"), 48 * 3600_000),
+    ...(allTypes ? [check("municity-permit-types", "all",
+      byKey.get("municity-permit-types:all"), 48 * 3600_000)] : []),
     ...(scope === "city" ? [] : [check(scope === "ward" ? "wards" : "neighborhoods",
       "all", byKey.get(`${scope === "ward" ? "wards" : "neighborhoods"}:all`), 48 * 3600_000)]),
     ...types.map((type) => check("municity", `permit-type:${type}`,
-      byKey.get(`municity:permit-type:${type}`), 2 * 3600_000))];
-  if (checks.some((item) => item.status === "not_indexed"))
+      byKey.get(`municity:permit-type:${type}`), 48 * 3600_000))];
+  if (checks.some((item) => item.status === "not_indexed" && item.source_id !== "municity"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: checks,
-        note: "At least one municipal type or City boundary lacks a validated run. No complete permit result was asserted." } };
+        note: "The City parcel or boundary baseline is absent. No permit result was asserted." } };
   const allComplete = checks.every((item) => item.status === "complete");
-  const runIds = Object.fromEntries(checks.map((item) => [`${item.source_id}:${item.scope_key}`, item.run_id]));
+  const runIds = Object.fromEntries(checks.filter((item) => item.run_id != null)
+    .map((item) => [`${item.source_id}:${item.scope_key}`, item.run_id]));
   const sourceHash = fingerprint(runIds);
   const cursor = readSearchCursor(input.cursor, fingerprint(criteria), sourceHash);
-  const values = [types.map((type) => runIds[`municity:permit-type:${type}`]),
+  const availableTypeRuns = types.map((type) => runIds[`municity:permit-type:${type}`])
+    .filter((runId) => runId != null);
+  if (!availableTypeRuns.length) return { criteria, items: [], next_cursor: null,
+    complete_for_query: false, coverage: { index_status: "partial", source_checks: checks,
+      note: "None of the requested permit types has an indexed run. No zero result was asserted." } };
+  const values = [availableTypeRuns,
     runIds["parcels:all"]];
   const add = (value) => { values.push(value); return `$${values.length}`; };
   const filters = [];
@@ -143,6 +174,6 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     complete_for_query: !hasMore && allComplete,
     coverage: { index_status: allComplete ? "connected" : "partial", source_checks: checks,
       returned_this_page: Math.min(rows.length, limit),
-      note: "PermitDate and PermStatus are published permit fields. They do not establish approval of a linked application or task. Use get_permit_details or the live permit search for those fields." },
+      note: "Results include exact parcel joins from indexed types. Missing, stale, capped, or unlinked source rows keep the answer incomplete. PermitDate and PermStatus do not establish approval of a linked application or task; use get_permit_details for those fields." },
     retrieved_at: new Date().toISOString() };
 }

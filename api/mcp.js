@@ -305,7 +305,7 @@ export function createServer() {
         source_id: z.enum(["parcels", "addresses", "trash-pickup", "zoning",
           "wards", "neighborhoods", "cmt", "ct-brownfields",
           "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail",
-          "school-attendance"]),
+          "school-attendance", "municity"]),
         equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
         event_date_from: z.iso.date().optional(),
         event_date_to: z.iso.date().optional(),
@@ -318,10 +318,10 @@ export function createServer() {
   tool(
     server,
     "search_indexed_permits",
-    "Search validated municipal permit type runs",
-    "Search exact published municipal permit types across City parcels and optional neighborhood or ward. Each type needs a fresh run below the vendor's 2,000-row limit. Permit date and status are source fields; linked application approvals require the live detail tools.",
+    "Search indexed municipal permits",
+    "Search all indexed official permit types, or name up to six exact types, across City parcels and optional neighborhood or ward. Missing, capped, stale and unlinked types remain explicit coverage gaps. Permit date and status are source fields; linked application approvals require the live detail tools.",
     z.object({
-      permit_types: z.array(z.string().min(1).max(100)).min(1).max(6),
+      permit_types: z.array(z.string().min(1).max(100)).min(1).max(6).optional(),
       scope: z.enum(["city", "neighborhood", "ward"]).optional(),
       neighborhood: z.string().min(1).max(80).optional(),
       ward: z.number().int().min(1).max(99).optional(),

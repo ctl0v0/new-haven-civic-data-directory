@@ -1,8 +1,38 @@
+import { createHash } from "node:crypto";
 import { fetchJson, SourceError } from "../parcel/http.js";
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 
 const VENDOR = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
 const LIMIT = 2000;
+
+export class MunicipalPermitCapError extends SourceError {
+  constructor(permitType, publishedTotal) {
+    super(`Municipal permit type ${permitType} has ${publishedTotal} rows and exceeds the unpageable 2,000-row bound`);
+    this.code = "MUNICIPAL_TYPE_CAP";
+  }
+}
+
+export function municipalTypeShard(type) {
+  return createHash("sha256").update(type.toUpperCase()).digest()[0] % 24;
+}
+
+export function municipalPermitCatalogRows(listed) {
+  const entries = listed?.groups?.flatMap((group) => group.types?.map((type) => ({
+    name: type.name, group: group.name, permit_type_id: type.permit_type_id,
+    deleted_as_published: type.deleted_as_published,
+  })) ?? []) ?? [];
+  const names = entries.map((entry) => String(entry.name ?? "").trim());
+  if (listed?.partial || !Number.isSafeInteger(listed?.catalog_rows_returned) ||
+      entries.length !== listed.catalog_rows_returned ||
+      names.length !== listed.distinct_type_names ||
+      names.some((name) => !name) ||
+      new Set(names.map((name) => name.toUpperCase())).size !== names.length)
+    throw new SourceError("Municipal permit type catalog is incomplete or repeats a type");
+  return entries.map((entry) => ({
+    record_id: entry.name, source_url: listed.source_url,
+    published_type: entry.name, fields: entry,
+  }));
+}
 
 export function sameMunicipalPermitRows(first, second) {
   if (first.length !== second.length) return false;
@@ -45,7 +75,7 @@ export async function municipalPermitTypeRows(permitType, { get = fetchJson,
   if (!Number.isSafeInteger(publishedTotal) || publishedTotal < rows.length)
     throw new SourceError("Municipal permit type search did not establish a total count");
   const boundReached = rows.length >= LIMIT || publishedTotal > rows.length;
-  if (boundReached) throw new SourceError("Municipal permit type reached the unpageable 2,000-row bound");
+  if (boundReached) throw new MunicipalPermitCapError(type, publishedTotal);
   if (rows.some((row) => !String(row?.PermitType ?? "").trim()))
     throw new SourceError("Municipal permit search returned a row without a published type");
   const filtered = rows.filter((row) => String(row.PermitType ?? "").trim().toUpperCase() === type.toUpperCase());

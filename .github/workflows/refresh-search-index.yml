@@ -1,6 +1,6 @@
 name: Refresh private parcel search index
-# Updating this workflow on main verifies the connection and refreshes exact permit types.
-# The scheduled daily run refreshes City and State baselines.
+# Updating this workflow on main refreshes every cataloged municipal permit type.
+# Hourly runs refresh one stable type shard; the daily run refreshes City and State baselines.
 on:
   push:
     branches: [main]
@@ -11,7 +11,7 @@ on:
         description: Which official source refresh to run
         required: true
         type: choice
-        options: [daily, hourly]
+        options: [daily, hourly, municipal]
   schedule:
     - cron: '17 * * * *'
     - cron: '47 7 * * *'
@@ -56,11 +56,11 @@ jobs:
           elif [ "$SCHEDULE" = '47 7 * * *' ]; then
             mode=daily
           elif [ "$EVENT_NAME" = push ]; then
-            mode=hourly
+            mode=municipal
           else
             mode="$REQUESTED_MODE"
           fi
-          case "$mode" in daily|hourly) ;; *) exit 1 ;; esac
+          case "$mode" in daily|hourly|municipal) ;; *) exit 1 ;; esac
           echo "value=$mode" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
@@ -83,11 +83,10 @@ jobs:
       - name: Refresh official sources
         env:
           SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
-          INDEX_PERMIT_TYPES: ${{ vars.INDEX_PERMIT_TYPES || '["Hood - C"]' }}
           SEARCH_DATABASE_READER_PASSWORD: ${{ secrets.SEARCH_DATABASE_READER_PASSWORD }}
           SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
           REFRESH_MODE: ${{ steps.mode.outputs.value }}
         run: |
           npm run index:refresh:all -- "$REFRESH_MODE"
           if [ "$REFRESH_MODE" = daily ]; then npm run index:prune; fi
-          if [ "$REFRESH_MODE" = hourly ]; then npm run index:smoke; fi
+          if [ "$REFRESH_MODE" != daily ]; then npm run index:smoke; fi

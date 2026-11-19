@@ -1,5 +1,6 @@
 import { LAYERS, SOURCES } from "../parcel/config.js";
 import { MAP_LAYERS, MAP_SOURCE_GAPS } from "../parcel/map-context.js";
+import { MUNICIPAL_PERMIT_TYPES_URL } from "../parcel/permit-types.js";
 
 // One physical import may serve several source records shown on a parcel.
 const alias = {
@@ -36,8 +37,10 @@ export const INDEX_DATASETS = Object.freeze({
     publisher_evidence: "https://www.arcgis.com/home/item.html?id=94777472521147bcb9d8d847aa4715ae",
   },
   "school-attendance": { id: "school-attendance", kind: "official-snapshot", cadence: "daily" },
-  municity: { id: "municity", kind: "municipal-type", cadence: "hourly",
-    gate: "Complete type enumeration or official bulk export is required." },
+  municity: { id: "municity", kind: "municipal-type", cadence: "daily",
+    gate: "Types at the municipal 2,000-row search limit cannot be indexed completely." },
+  "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",
+    cadence: "daily" },
   ...Object.fromEntries([...stateLocations].map((id) => [id,
     { id, kind: "socrata-location", cadence: "daily" }])),
   "business-master": { id: "business-master", kind: "registry-owner-join", cadence: "daily",
@@ -68,5 +71,9 @@ export function indexSourceCatalog() {
     entries.push({ source_id: gap.id, index_source_id: null,
       search_mode: "gap", cadence: null, source_url: gap.source_url,
       coverage: gap.note });
+  entries.push({ source_id: "municity-permit-types",
+    index_source_id: "municity-permit-types", search_mode: "index_candidate",
+    cadence: "daily", source_url: MUNICIPAL_PERMIT_TYPES_URL,
+    coverage: "Official municipal permit type catalog; entries are types, not issued permits." });
   return entries;
 }

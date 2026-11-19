@@ -19,11 +19,13 @@ export const SEARCH_FIELDS = Object.freeze({
   "ct-child-care-licenses": ["name", "address2", "licensenumber", "licensetype", "status"],
   "ct-cannabis-retail": ["business", "dba", "street", "license", "type"],
   "school-attendance": ["street_name", "k8_school", "high_school"],
+  municity: ["PermitType", "PermStatus", "PermitNo", "PrintKey",
+    "LegalAddress", "Application_ID"],
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", "ct-liquor-permits",
   "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance"]);
 
-const sourceAge = (source) => source === "municity" ? 2 * 3600_000 : 48 * 3600_000;
+const sourceAge = () => 48 * 3600_000;
 const checkedDate = (value, key) => {
   if (value == null) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) ||
@@ -113,6 +115,14 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit) {
 
 export async function searchIndexedParcels(input = {}, { query = indexQuery } = {}) {
   const requirements = checkedRequirements(input.requirements);
+  const municipalRequirements = requirements.filter((item) => item.source_id === "municity");
+  if (municipalRequirements.length > 1)
+    throw new SourceError("Use one exact municipal permit type requirement per cross-source query", 400);
+  const municipalType = municipalRequirements[0]?.equals?.PermitType;
+  if (municipalRequirements.length && (typeof municipalType !== "string" ||
+      !municipalType.trim() || municipalType.length > 100))
+    throw new SourceError("Municipal cross-source search requires exact PermitType", 400);
+  const municipalScope = municipalType ? `permit-type:${municipalType.trim().toUpperCase()}` : null;
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new SourceError("limit must be 1–100", 400);
@@ -124,20 +134,27 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
       source_checks: requiredSources.map((source_id) => ({ source_id, status: "unconfigured" })) } };
   let active;
   try {
-    active = await query(`SELECT a.source_id, r.id AS run_id, r.status, r.finished_at,
+    active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status, r.finished_at,
       r.expected_count, r.returned_count, r.ambiguous_count, r.unlinked_count,
       last.status AS latest_attempt_status
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status FROM search_source_runs
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
-      WHERE a.scope_key = 'all' AND a.source_id = ANY($1::text[])`, [requiredSources]);
+      WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
+        OR (a.source_id = 'municity' AND a.scope_key = $2)`, [requiredSources, municipalScope]);
   } catch {
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "unavailable", source_checks: requiredSources.map((source_id) =>
         ({ source_id, status: "unavailable" })) } };
   }
-  const byId = new Map(active.map((row) => [row.source_id, row]));
+  const byId = new Map(active.filter((row) => row.scope_key === "all")
+    .map((row) => [row.source_id, row]));
+  if (municipalScope) {
+    const municipal = active.find((row) => row.source_id === "municity" &&
+      row.scope_key === municipalScope);
+    if (municipal) byId.set("municity", municipal);
+  }
   const sourceChecks = requiredSources.map((source_id) => {
     const run = byId.get(source_id);
     if (!run) return { source_id, status: "not_indexed" };
@@ -146,7 +163,8 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
     const complete = run.status === "complete" && fresh && run.latest_attempt_status !== "failed" &&
       Number(run.expected_count) === Number(run.returned_count) &&
       Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0;
-    return { source_id, status: complete ? "complete" : "partial",
+    return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
+      status: complete ? "complete" : "partial",
       run_id: Number(run.run_id), fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count), ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at };

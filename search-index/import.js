@@ -2,8 +2,10 @@ import { indexQuery } from "./db.js";
 import { arcgisInventory, arcgisFeatures } from "./arcgis.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
-import { municipalPermitTypeRows, sameMunicipalPermitRows } from "./municity.js";
+import { municipalPermitCatalogRows, municipalPermitTypeRows,
+  sameMunicipalPermitRows } from "./municity.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
+import { municipalPermitTypes } from "../parcel/permit-types.js";
 import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, schoolAddress,
   schoolRowsForAddress, snapshotIsCurrent } from "../parcel/school-attendance.js";
 
@@ -169,7 +171,9 @@ export async function finishRun(runId, sourceId, expectedCount) {
   else if (sourceId === "ct-brownfields") await linkExactParcelKey(runId, sourceId, "Site_Parce");
   else if (sourceId === "managed-lots") await linkExactParcelKey(runId, sourceId, "mbp");
   else if (sourceId === "municity") await linkExactParcelKey(runId, sourceId, "PrintKey", { mbluOnly: true });
-  else if (sourceId === "school-attendance") { /* linked to verified City address points during import */ }
+  else if (["school-attendance", "municity-permit-types"].includes(sourceId)) {
+    /* School rows are linked during import; catalog rows do not describe parcels. */
+  }
   else if (STATE_ROSTERS[sourceId]) await linkStateAddresses(runId, sourceId);
   else if (sourceId === "trash-pickup") await linkSpatial(runId, sourceId, { addressZone: true });
   else if (!["metered-parking-spaces", "transit-stops"].includes(sourceId))
@@ -181,7 +185,7 @@ export async function finishRun(runId, sourceId, expectedCount) {
   const ambiguous = Number(statistics[0].ambiguous);
   const distinctLinked = Number((await write(`SELECT COUNT(DISTINCT record_id)::integer AS n
     FROM search_record_parcels WHERE run_id = $1`, [runId]))[0].n);
-  const unlinked = ["metered-parking-spaces", "transit-stops"].includes(sourceId)
+  const unlinked = ["metered-parking-spaces", "transit-stops", "municity-permit-types"].includes(sourceId)
     ? 0 : Math.max(0, returned - distinctLinked);
   const warning = sourceId === "parcels" && unlinked > 0
     ? `${unlinked} official City parcel features lack a published parcel ID`
@@ -269,6 +273,21 @@ export async function importMunicipalPermitType(permitType) {
     if (!sameMunicipalPermitRows(first.rows, final.rows))
       throw new Error("Municipal permit type changed during refresh");
     return await finishRun(runId, "municity", first.rows.length);
+  } catch (error) {
+    await failRun(runId, error);
+    throw error;
+  }
+}
+
+export async function importMunicipalPermitCatalog() {
+  const runId = await beginRun("municity-permit-types");
+  try {
+    const listed = await municipalPermitTypes();
+    const rows = municipalPermitCatalogRows(listed);
+    await setRunInventory(runId, rows.length);
+    for (let offset = 0; offset < rows.length; offset += 200)
+      await insertRecords(runId, "municity-permit-types", rows.slice(offset, offset + 200));
+    return await finishRun(runId, "municity-permit-types", rows.length);
   } catch (error) {
     await failRun(runId, error);
     throw error;

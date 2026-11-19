@@ -33,6 +33,11 @@ const permit = await searchIndexedPermits({ permit_types: ["Hood - C"], limit: 5
 if (permit.coverage.index_status === "unavailable" ||
     permit.coverage.source_checks.some((source) => source.status === "not_indexed"))
   throw new Error("Indexed Hood - C permit query is unavailable");
+if (!coverage.municipal_permit_catalog?.indexed)
+  throw new Error("Official municipal permit type catalog is absent");
+const allPermits = await searchIndexedPermits({ limit: 5 });
+if (allPermits.coverage.index_status === "unavailable" || !allPermits.items.length)
+  throw new Error("All-type indexed permit search is unavailable");
 
 const addressRuns = await indexQuery(`SELECT run_id FROM search_active_runs
   WHERE source_id = 'addresses' AND scope_key = 'all'`);
@@ -71,5 +76,11 @@ console.log(JSON.stringify({ reader_role_verified: true,
   hood_permit_query: { returned_this_page: permit.items.length,
     complete_for_query: permit.complete_for_query,
     source_checks: permit.coverage.source_checks },
+  all_permit_types_query: { returned_this_page: allPermits.items.length,
+    complete_for_query: allPermits.complete_for_query,
+    indexed_type_count: allPermits.coverage.source_checks.filter((check) =>
+      check.source_id === "municity" && check.run_id != null).length,
+    missing_type_count: allPermits.coverage.source_checks.filter((check) =>
+      check.source_id === "municity" && check.run_id == null).length },
   known_permit: knownPermit, address_samples: addressSamples,
   most_overlapping_addresses: mostOverlappingAddresses }));

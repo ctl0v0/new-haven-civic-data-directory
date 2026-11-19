@@ -6,7 +6,8 @@ import { getSearchCoverage } from "../search-index/coverage.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { stateRosterInventory, stateRosterRows } from "../search-index/socrata.js";
 import { arcgis } from "../parcel/http.js";
-import { municipalPermitTypeRows, sameMunicipalPermitRows } from "../search-index/municity.js";
+import { municipalPermitCatalogRows, municipalPermitTypeRows,
+  sameMunicipalPermitRows } from "../search-index/municity.js";
 import { searchIndexedPermits } from "../search-index/permits.js";
 import { searchParcels } from "../parcel/parcel-search.js";
 import searchParcelsRoute from "../api/v1/search-parcels.js";
@@ -62,7 +63,9 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
   const catalog = indexSourceCatalog();
   assert.equal(catalog.filter((entry) => entry.source_id !== "transit-stops" &&
     entry.source_id !== "metered-parking-spaces" && entry.source_id !== "loading-zones" &&
-    entry.source_id !== "parking-availability").length, 41);
+    entry.source_id !== "parking-availability").length, 42);
+  assert.equal(catalog.find((entry) => entry.source_id === "municity-permit-types")
+    .index_source_id, "municity-permit-types");
   assert.equal(catalog.find((entry) => entry.source_id === "tax-bills").search_mode, "gap");
   assert.equal(catalog.find((entry) => entry.source_id === "assessor-subareas").search_mode,
     "parcel_only_pending_complete_enumeration");
@@ -128,20 +131,48 @@ test("indexed cross-source search uses exact parcel joins and refuses an unindex
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
   const input = { requirements: [{ source_id: "zoning", equals: { zone_code: "BD" } }] };
   const partial = await searchIndexedParcels(input, { query: async () => [
-    { source_id: "parcels", run_id: 10, status: "complete", finished_at: new Date(),
+    { source_id: "parcels", scope_key: "all", run_id: 10, status: "complete", finished_at: new Date(),
       expected_count: 1, returned_count: 1, ambiguous_count: 0, unlinked_count: 0 },
   ] });
   assert.equal(partial.complete_for_query, false);
   assert.equal(partial.coverage.source_checks[1].status, "not_indexed");
   const full = await searchIndexedParcels(input, { query: async (statement) =>
     statement.includes("search_active_runs") ? [
-      { source_id: "parcels", run_id: 10, status: "complete", finished_at: new Date(),
+      { source_id: "parcels", scope_key: "all", run_id: 10, status: "complete", finished_at: new Date(),
         expected_count: 1, returned_count: 1, ambiguous_count: 0, unlinked_count: 0 },
-      { source_id: "zoning", run_id: 11, status: "complete", finished_at: new Date(),
+      { source_id: "zoning", scope_key: "all", run_id: 11, status: "complete", finished_at: new Date(),
         expected_count: 1, returned_count: 1, ambiguous_count: 0, unlinked_count: 0 },
     ] : [{ city_parcel_id: 7, city_objectid: 8, matching_sources: [] }] });
   assert.equal(full.complete_for_query, true);
   assert.equal(full.items[0].city_parcel_id, 7);
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("cross-source parcel search combines one exact municipal type with another official source", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const input = { requirements: [
+    { source_id: "municity", equals: { PermitType: "Hood - C", PermStatus: "Issued" } },
+    { source_id: "neighborhoods", equals: { neighborhood: "East Rock" } },
+  ] };
+  let checkedSql = "";
+  const response = await searchIndexedParcels(input, { query: async (statement, values) => {
+    if (statement.includes("search_active_runs")) {
+      assert.equal(values[1], "permit-type:HOOD - C");
+      return ["parcels", "neighborhoods", "municity"].map((source_id, index) => ({
+        source_id, scope_key: source_id === "municity" ? "permit-type:HOOD - C" : "all",
+        run_id: index + 1, status: "complete", finished_at: new Date(),
+        expected_count: 1, returned_count: 1, ambiguous_count: 0, unlinked_count: 0,
+      }));
+    }
+    checkedSql = statement;
+    return [{ city_parcel_id: 12846, matching_sources: [] }];
+  } });
+  assert.equal(response.items[0].city_parcel_id, 12846);
+  assert.match(checkedSql, /j\.join_status = 'exact'/);
+  assert.equal(response.complete_for_query, true);
+  await assert.rejects(searchIndexedParcels({ requirements: [
+    { source_id: "municity", equals: { PermStatus: "Issued" } },
+  ] }), /PermitType/);
   delete process.env.SEARCH_DATABASE_URL;
 });
 
@@ -169,6 +200,21 @@ test("municipal refresh compares published permit IDs independent of vendor row 
   assert.equal(sameMunicipalPermitRows([a, b], [a]), false);
 });
 
+test("municipal type catalog rejects unnamed, missing, and repeated published types", () => {
+  const catalog = { source_url: "https://services5.municity5.com/types",
+    catalog_rows_returned: 2, distinct_type_names: 2, partial: false,
+    groups: [{ name: "Mechanical", types: [
+      { name: "Hood - C", permit_type_id: 1, deleted_as_published: null },
+      { name: "Water Heater", permit_type_id: 2, deleted_as_published: null },
+    ] }] };
+  assert.deepEqual(municipalPermitCatalogRows(catalog).map((row) => row.record_id),
+    ["Hood - C", "Water Heater"]);
+  assert.throws(() => municipalPermitCatalogRows({ ...catalog, catalog_rows_returned: 3 }),
+    /incomplete/);
+  assert.throws(() => municipalPermitCatalogRows({ ...catalog, groups: [{ name: null,
+    types: [{ name: "Hood - C" }, { name: "hood - c" }] }] }), /repeats/);
+});
+
 test("indexed permit search requires each exact type run before claiming an answer", async () => {
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
   const rows = [{ source_id: "parcels", scope_key: "all", run_id: 10,
@@ -189,6 +235,27 @@ test("indexed permit search requires each exact type run before claiming an answ
   assert.equal(complete.complete_for_query, true);
   assert.equal(complete.items[0].permit_id, "569338");
   assert.match(searchSql, /j\.join_status = 'exact'/);
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("all-type permit search returns indexed matches while listing missing catalog types", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const run = (source_id, scope_key, run_id) => ({ source_id, scope_key, run_id,
+    status: "complete", finished_at: new Date(), expected_count: 1,
+    returned_count: 1, ambiguous_count: 0, unlinked_count: 0 });
+  let queriedRuns;
+  const result = await searchIndexedPermits({ permit_status: "Issued" }, { query: async (sql, values) => {
+    if (sql.includes("search_active_runs")) return [run("parcels", "all", 10),
+      run("municity-permit-types", "all", 11), run("municity", "permit-type:HOOD - C", 12)];
+    if (sql.includes("FROM search_records\n")) return [
+      { record_id: "Hood - C" }, { record_id: "Water Heater" }];
+    queriedRuns = values[0];
+    return [{ city_parcel_id: 12846, permit_type: "Hood - C" }];
+  } });
+  assert.deepEqual(queriedRuns, [12]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.complete_for_query, false);
+  assert.equal(result.coverage.source_checks.at(-1).status, "not_indexed");
   delete process.env.SEARCH_DATABASE_URL;
 });
 
