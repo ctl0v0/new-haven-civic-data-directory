@@ -1,4 +1,4 @@
-name: Audit private parcel link coverage
+name: Audit private parcel keys and address candidates
 on:
   push:
     branches: [main]
