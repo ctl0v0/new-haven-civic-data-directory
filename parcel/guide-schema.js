@@ -5,6 +5,7 @@ const methods = [
   ["resolve", "Resolve a parcel", "POST /api/v1/resolve", "resolve_parcel", "Start with an address, parcel ID, MBLU or assessor account. Select a City parcel from any candidates.", "query"],
   ["parcel", "Parcel identity", "GET /api/v1/parcel", "get_parcel", "Return the selected City parcel ID, object ID, published address and available groups.", "parcel_id, objectid"],
   ["overview", "Overview", "GET /api/v1/overview", "get_parcel_overview", "Return source-linked highlights, group counts, source coverage and five dated references.", "parcel_id, objectid"],
+  ["manifest", "Parcel source manifest", "GET /api/v1/parcel-manifest", "get_parcel_manifest", "Return the status and count certainty of every configured source for one selected parcel.", "parcel_id, objectid"],
   ["records", "Grouped records", "GET /api/v1/records", "get_parcel_records", "Return a bounded, filterable page of official records, facets and source coverage.", "parcel_id, objectid, group, limit, cursor, filters"],
   ["feed", "Dated timeline", "GET /api/v1/feed", "get_parcel_feed", "Return dated source records. This is not a change log.", "parcel_id, objectid, limit, cursor, filters"],
   ["permit", "Permit details", "GET /api/v1/permit-details", "get_permit_details", "Follow an exact municipal permit ID on the selected parcel to its linked application and public child records.", "parcel_id, objectid, permit_id"],
@@ -12,9 +13,14 @@ const methods = [
   ["geometry", "Parcel boundary", "GET /api/v1/geometry", "get_parcel_geometry", "Return the selected City parcel polygon, which is not a building footprint.", "parcel_id, objectid"],
   ["photo", "Parcel photo", "GET /api/v1/parcel-photo", "get_parcel_photo", "Return an official municipal street view or assessor building photo only after an exact parcel match; photo dates are not established.", "parcel_id, objectid"],
   ["map", "Map layers", "GET /api/v1/map-context", "get_parcel_map_context", "Return City and State mapped features on the parcel and separately labeled nearby context.", "parcel_id, objectid"],
+  ["nearby-counts", "Nearby mapped point counts", "GET /api/v1/nearby-feature-counts", "get_nearby_feature_counts", "Return checked mapped meter and transit-stop counts within 25–1000 metres; meter inventory is not live availability.", "parcel_id, objectid, radius_meters, source_id"],
   ["trash", "Trash pickup zones", "GET /api/v1/trash-pickup", "get_parcel_trash_pickup", "Return mapped City pickup zones at City address points on the parcel; service eligibility is not established.", "parcel_id, objectid, query_address"],
   ["school-attendance", "NHPS attendance-zone schools", "GET /api/v1/school-attendance", "get_parcel_school_attendance", "Return address-level K–8 and high-school School Choice attendance zones from exact NHPS street ranges, with live or dated official-snapshot provenance. Placement is not guaranteed.", "parcel_id, objectid, query_address"],
   ["permit-search", "Cross parcel permit search", "GET /api/v1/search-permits", "search_municipal_permits", "Search municipal permits by exact type and City neighborhood with separately labeled linked application, review task and contact fields. Coverage limits remain explicit.", "neighborhood, permit_type, optional status/date/contact filters"],
+  ["parcel-search", "Live City parcel search", "GET /api/v1/search-parcels", "search_parcels", "Page through official City parcel use, commercial-unit and sale fields with optional neighborhood or ward scope.", "scope, use_code, commercial_units_min, sale_date_from, sale_date_to, cursor"],
+  ["indexed-parcel-search", "Cross-source parcel search", "POST /api/v1/search-indexed-parcels", "search_indexed_parcels", "Intersect indexed official source requirements by exact City parcel joins; requires validated active source runs.", "requirements, limit, cursor"],
+  ["indexed-permit-search", "Indexed municipal permit search", "GET /api/v1/search-indexed-permits", "search_indexed_permits", "Search exact permit types from fresh validated type runs by published status or permit date and optional ward or neighborhood.", "permit_type, scope, permit_status, permit_date_from, permit_date_to, cursor"],
+  ["search-coverage", "Cross-search source coverage", "GET /api/v1/search-coverage", "get_search_coverage", "Report index readiness, latest refresh attempts, join gaps and unsupported sources.", "none"],
   ["permit-types", "Municipal permit type catalog", "GET /api/v1/permit-types", "list_municipal_permit_types", "Return the City's live configured permit type names and groups. A catalog entry does not establish an issued permit.", "none"],
   ["catalog", "Source catalog", "GET /api/v1/sources", "list_sources", "Explain each source's access mode, coverage and known gaps.", "none"],
 ].map(([id, title, rest, mcp, description, inputs]) => ({ id, title, rest, mcp, description, inputs }));
@@ -36,6 +42,9 @@ const fields = [
   ["total", "Filtered count", "This service", "Number of returned rows matching the current filters before pagination."],
   ["returned_total", "Unfiltered count", "This service", "Number of rows returned by checked sources for this group or feed."],
   ["next_cursor", "Next page offset", "This service", "Pass with the same parcel, group and filters; reset it when filters change."],
+  ["complete_for_query", "Search completeness", "This service", "True only after the last page of a validated search with every required source and exact join complete."],
+  ["source_checks", "Cross-search source checks", "This service", "Identifies missing, stale, unavailable or partial sources for the current search."],
+  ["matching_sources", "Indexed match evidence", "This service", "Shows official source links and matching record counts behind a returned parcel."],
 ].map(([key, label, origin, meaning]) => ({ key, label, origin, meaning }));
 
 export function schemaGuide() {
@@ -62,6 +71,8 @@ export function schemaGuide() {
       "Partial and unavailable live source checks are reported alongside results with their reason.",
       "A published status or date does not prove current occupancy, work underway or a complete history.",
       "NHPS attendance-zone schools describe School Choice placement preference for a published address range, not current enrollment or a guaranteed school assignment.",
+      "Cross-parcel index results are conditional on fresh validated source runs. A missing index or failed refresh cannot establish a zero result.",
+      "Mapped meter counts describe inventory, not open parking spaces. Stop distance is straight-line from the parcel extent center, not walking distance.",
     ],
   };
 }

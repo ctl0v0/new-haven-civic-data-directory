@@ -11,7 +11,7 @@ const CITY_MAPS = "https://www.newhavenct.gov/government/departments-divisions/t
 
 export const MAP_LAYERS = Object.freeze([
   { id: "parcel-addresses", title: "City address points on this parcel", scope: "parcel", url: LAYERS.addresses, kind: "point", fields: ["house_number", "full_street_name", "unit"] },
-  { id: "zoning", title: "City zoning districts intersecting this parcel", scope: "parcel", url: LAYERS.zoning, kind: "polygon", fields: ["zone_code", "district_category", "district"] },
+  { id: "zoning", title: "City zoning districts intersecting this parcel", scope: "parcel", url: LAYERS.zoning, kind: "polygon", fields: ["zone_code", "district_category", "districts"] },
   { id: "transit-stops", title: "City hosted CT Transit stops nearby", scope: "nearby", url: "https://services6.arcgis.com/AWSPcxcHO7OnZlnu/ArcGIS/rest/services/CT_Transit_New_Haven_Bus_Stops/FeatureServer/0", kind: "point", fields: ["StopId", "StopName", "OnStreet", "AtStreet", "InService"] },
   { id: "metered-parking-spaces", title: "City mapped metered parking spaces nearby", scope: "nearby", url: LAYERS.parkingSpaces, kind: "point", maxFeatures: 500,
     fields: ["meternum", "facilityid", "post_num", "spacenum", "zone_", "meterspec"],

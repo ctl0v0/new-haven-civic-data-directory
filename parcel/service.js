@@ -10,12 +10,20 @@ import { DISPLAY_GROUPS, displayGroup, displayGroupCounts, orderDisplayRecords }
 import { checkedFilters, filterRecords, recordFacets } from "./filters.js";
 import { permitDetails, applicationDetails } from "./permit-details.js";
 import { searchMunicipalPermits, searchParcelPermits } from "./permit-search.js";
+import { searchParcels } from "./parcel-search.js";
+import { searchIndexedParcels } from "../search-index/search.js";
+import { searchIndexedPermits } from "../search-index/permits.js";
+import { nearbyFeatureCounts } from "./nearby-counts.js";
 import { municipalPermitTypes } from "./permit-types.js";
 
 export { resolveParcel };
 export { parcelMapContext };
 export { searchMunicipalPermits };
 export { searchParcelPermits };
+export { searchParcels };
+export { searchIndexedParcels };
+export { searchIndexedPermits };
+export { nearbyFeatureCounts };
 export { municipalPermitTypes };
 
 export async function parcelGeometry(id, objectid = null) {
@@ -122,6 +130,22 @@ export async function parcelOverview(id, objectid = null) {
     highlights,
     partial: groups.some((group) => group.partial),
     note: "Source counts and dates describe the current response, not a complete property history. Use get_parcel_records for fields and provenance.",
+  };
+}
+
+export async function parcelManifest(id, objectid = null) {
+  const overview = await parcelOverview(id, objectid);
+  const sources = overview.groups.flatMap((group) => group.sources.map((source) => ({
+    group: group.id, ...source,
+    count_established: source.count_established ?? (
+      !["unavailable", "not_integrated", "not_linked", "partial"].includes(source.status) &&
+      !Object.values(source.category_counts ?? {}).some((count) => count == null)),
+  })));
+  return {
+    parcel: overview.parcel, source_count: sources.length, sources,
+    complete_for_available_sources: sources.every((source) =>
+      source.count_established || source.status === "not_integrated"),
+    note: "This manifest checks each configured source for one selected City parcel. Fetch all pages of each record group and on-demand permit/application details for full public fields. A source marked not_integrated, unavailable, partial, or with unreturned categories cannot establish a zero count.",
   };
 }
 

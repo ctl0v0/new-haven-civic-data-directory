@@ -4,6 +4,7 @@ import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
+import { getSearchCoverage } from "../search-index/coverage.js";
 import {
   resolveParcel,
   parcelSummary,
@@ -11,6 +12,7 @@ import {
   parcelPhoto,
   parcelMapContext,
   parcelOverview,
+  parcelManifest,
   parcelRecords,
   parcelTrashPickup,
   parcelSchoolAttendance,
@@ -18,6 +20,10 @@ import {
   parcelApplicationDetails,
   searchMunicipalPermits,
   searchParcelPermits,
+  searchParcels,
+  searchIndexedParcels,
+  searchIndexedPermits,
+  nearbyFeatureCounts,
   municipalPermitTypes,
   parcelFeed,
   sourceCoverage,
@@ -36,15 +42,18 @@ function tool(server, name, title, description, inputSchema, handler) {
     async (args) => {
       try {
         return reply(await handler(args));
-      } catch {
+      } catch (error) {
+        const status = error instanceof SourceError ? error.status : 502;
+        const failure = { error: {
+          code: status === 400 ? "INVALID_QUERY" : status === 404 ? "NOT_FOUND"
+            : status === 409 ? "CURSOR_STALE" : "SOURCE_UNAVAILABLE",
+          status,
+          message: error instanceof SourceError ? error.message : "A source request failed",
+        } };
         return {
           isError: true,
-          content: [
-            {
-              type: "text",
-              text: "Source lookup failed. Check the identifier and source coverage.",
-            },
-          ],
+          content: [{ type: "text", text: JSON.stringify(failure) }],
+          structuredContent: failure,
         };
       }
     },
@@ -96,6 +105,14 @@ export function createServer() {
   );
   tool(
     server,
+    "get_parcel_manifest",
+    "Get source-by-source parcel manifest",
+    "Return every configured parcel source's status, returned count, and whether that count is established. Use paged groups and on-demand work details for full records.",
+    z.object(common),
+    ({ parcel_id, objectid }) => parcelManifest(parcel_id, objectid),
+  );
+  tool(
+    server,
     "get_parcel_geometry",
     "Get parcel geometry",
     "Return the selected City parcel boundary as GeoJSON, with source and parcel identifiers. The boundary is not a building footprint.",
@@ -117,6 +134,18 @@ export function createServer() {
     "Return official mapped features on the selected parcel and nearby access features within 400 metres. Nearby features are not parcel records.",
     z.object(common),
     ({ parcel_id, objectid }) => parcelMapContext(parcel_id, objectid),
+  );
+  tool(
+    server,
+    "get_nearby_feature_counts",
+    "Count mapped points near a parcel",
+    "Count official City mapped metered spaces and City hosted transit stops within 25–1000 metres of the center of a parcel's mapped extent. Reports source IDs, nearest point, and partial coverage. Meter counts are inventory, not live availability.",
+    z.object({ ...common,
+      radius_meters: z.number().int().min(25).max(1000).optional(),
+      source_ids: z.array(z.enum(["metered-parking-spaces", "transit-stops"])).min(1).max(2).optional(),
+    }),
+    ({ parcel_id, objectid, radius_meters, source_ids }) =>
+      nearbyFeatureCounts(parcel_id, { objectid, radius_meters, source_ids }),
   );
   tool(
     server,
@@ -247,6 +276,70 @@ export function createServer() {
       cursor: z.string().max(1500).optional(),
     }),
     (args) => searchParcelPermits(args),
+  );
+  tool(
+    server,
+    "search_parcels",
+    "Search official City parcel fields",
+    "Scan City parcel GIS features citywide or in one published neighborhood or ward. Filter exact City use codes, published commercial-unit count, or one published sale date. Continue the cursor until absent before treating the scan as complete; source and boundary gaps are explicit.",
+    z.object({
+      scope: z.enum(["city", "neighborhood", "ward"]).optional(),
+      neighborhood: z.string().min(1).max(80).optional(),
+      ward: z.number().int().min(1).max(100).optional(),
+      use_codes: z.array(z.string().min(1).max(40)).max(20).optional(),
+      commercial_units_min: z.number().int().min(0).optional(),
+      sale_date_from: z.iso.date().optional(),
+      sale_date_to: z.iso.date().optional(),
+      scan_limit: z.number().int().min(1).max(200).optional(),
+      cursor: z.string().max(3000).optional(),
+    }),
+    (args) => searchParcels(args),
+  );
+  tool(
+    server,
+    "search_indexed_parcels",
+    "Search parcels across indexed official sources",
+    "Intersect 1–5 source requirements by exact City parcel joins. Each requirement may filter published fields and event dates. A source without a validated index run, stale data, or ambiguous joins leaves completeness false; results retain official source links.",
+    z.object({
+      requirements: z.array(z.object({
+        source_id: z.enum(["parcels", "addresses", "trash-pickup", "zoning",
+          "wards", "neighborhoods", "cmt", "ct-brownfields",
+          "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail",
+          "school-attendance"]),
+        equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+        event_date_from: z.iso.date().optional(),
+        event_date_to: z.iso.date().optional(),
+      })).min(1).max(5),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().max(3000).optional(),
+    }),
+    (args) => searchIndexedParcels(args),
+  );
+  tool(
+    server,
+    "search_indexed_permits",
+    "Search validated municipal permit type runs",
+    "Search exact published municipal permit types across City parcels and optional neighborhood or ward. Each type needs a fresh run below the vendor's 2,000-row limit. Permit date and status are source fields; linked application approvals require the live detail tools.",
+    z.object({
+      permit_types: z.array(z.string().min(1).max(100)).min(1).max(6),
+      scope: z.enum(["city", "neighborhood", "ward"]).optional(),
+      neighborhood: z.string().min(1).max(80).optional(),
+      ward: z.number().int().min(1).max(99).optional(),
+      permit_status: z.string().min(1).max(100).optional(),
+      permit_date_from: z.iso.date().optional(),
+      permit_date_to: z.iso.date().optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+      cursor: z.string().max(3000).optional(),
+    }),
+    (args) => searchIndexedPermits(args),
+  );
+  tool(
+    server,
+    "get_search_coverage",
+    "Get cross-parcel search coverage",
+    "Return source-by-source index readiness, last complete refresh, join gaps, and live-only source limits. A live parcel lookup is not proof of citywide search coverage.",
+    z.object({}),
+    () => getSearchCoverage(),
   );
   tool(
     server,

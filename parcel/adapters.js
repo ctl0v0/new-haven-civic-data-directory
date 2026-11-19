@@ -1637,7 +1637,7 @@ async function municipalBusinessRecords(parcel) {
   const unnamedLicenseCount = vendor.items.filter(
     (item) => item.category === "License" && !text(item.attributes?.BusinessName),
   ).length;
-  return result("municipal-business-licenses", items, {
+  return { ...result("municipal-business-licenses", items, {
     unnamed_license_count: unnamedLicenseCount,
     partial: vendor.truncated_categories?.includes("License"),
     warning:
@@ -1646,7 +1646,8 @@ async function municipalBusinessRecords(parcel) {
         : vendor.truncated_categories?.includes("License")
           ? "The vendor License category exceeded the 500-record limit; results are incomplete."
           : "Named municipal licenses may be historical, expired or void. Confirm status with the city.",
-  });
+  }), count_established: !vendor.omitted_categories?.includes("License") &&
+    !vendor.truncated_categories?.includes("License") };
 }
 
 async function municipalOccupantRecords(parcel) {
@@ -1668,14 +1669,14 @@ async function municipalOccupantRecords(parcel) {
     );
   const missing = vendor.omitted_categories?.includes("Occupant");
   const truncated = vendor.truncated_categories?.includes("Occupant");
-  return result("municipal-occupants", items, {
+  return { ...result("municipal-occupants", items, {
     partial: truncated,
     warning: missing
       ? "The vendor did not return an Occupant category for this parcel; this response does not establish a zero occupant count."
       : truncated
         ? "The vendor Occupant category exceeded the 500-record limit; results are incomplete."
         : "Municipal occupant rows can be historical. Only source-reported inactive flags are shown.",
-  });
+  }), count_established: !missing && !truncated };
 }
 
 async function managedLotRecords(parcel) {
