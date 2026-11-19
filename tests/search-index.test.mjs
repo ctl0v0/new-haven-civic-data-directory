@@ -343,6 +343,11 @@ test("coverage names every catalog type including one blocked at the vendor limi
         returned_count: 1, linked_count: 1, ambiguous_count: 0, unlinked_count: 0,
         latest_attempt_status: "complete" },
     ];
+    if (sql.includes("WHERE scope_key = 'all'")) return [
+      { source_id: "school-attendance", status: "failed",
+        warning: "Official school snapshot could not be validated",
+        started_at: new Date() },
+    ];
     if (sql.includes("SELECT record_id")) return [
       { record_id: "Hood - C" }, { record_id: "Roofing" }];
     return [{ scope_key: "permit-type:HOOD - C", status: "complete" },
@@ -356,6 +361,10 @@ test("coverage names every catalog type including one blocked at the vendor limi
     .latest_attempt_warning, "MUNICIPAL_TYPE_CAP: reached the validated request bound");
   assert.equal(coverage.municipal_permit_types.find((type) => type.permit_type === "Roofing")
     .latest_attempt_status, "blocked");
+  assert.equal(coverage.sources.find((source) => source.source_id === "school-attendance")
+    .indexed, false);
+  assert.equal(coverage.sources.find((source) => source.source_id === "school-attendance")
+    .latest_attempt_warning, "Official school snapshot could not be validated");
   delete process.env.SEARCH_DATABASE_URL;
 });
 

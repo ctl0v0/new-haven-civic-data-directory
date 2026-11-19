@@ -19,7 +19,7 @@ A community guide to finding and using New Haven civic data. People and their ag
 
 ## Parcel data pilot
 
-The repository now includes a private, parcel-first backend and a review page at `/parcel`. It resolves an address or official identifier, calls public sources on demand, and groups parcel records by property, geography, representation, activity, environment, and business. A separate map context endpoint supplies official mapped features on the parcel and nearby street context without adding them to parcel records. The REST API and MCP server use the same resolver and source adapters. Results are cached for five minutes; there is no parcel database. See [pilot setup and API reference](docs/parcel-pilot.md).
+The repository now includes a private, parcel-first backend and a review page at `/parcel`. It resolves an address or official identifier, calls public sources on demand, and groups parcel records by property, geography, representation, activity, environment, and business. A separate map context endpoint supplies official mapped features on the parcel and nearby street context without adding them to parcel records. The REST API and MCP server use the same resolver and source adapters. Live results are cached for five minutes. An optional private [search index](docs/search-index.md) stores selected official source facts and exact parcel joins for cross-parcel queries; parcel detail remains live. See [pilot setup and API reference](docs/parcel-pilot.md).
 
 The pilot requires server-side access secrets before `/parcel`, `/api/v1/*`, or `/mcp` can return data. The existing directory stays public. Source failures and unverified lookups appear as coverage gaps; the dated feed is a timeline of source records, not a log of changes to source data.
 

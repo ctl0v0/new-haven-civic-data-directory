@@ -22,8 +22,13 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
       LEFT JOIN LATERAL (SELECT status, started_at, warning FROM search_source_runs
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true`);
+    const latestAll = await query(`SELECT DISTINCT ON (source_id)
+      source_id, status, warning, started_at
+      FROM search_source_runs WHERE scope_key = 'all'
+      ORDER BY source_id, started_at DESC, id DESC`);
     const active = new Map(rows.filter((row) => row.scope_key === "all")
       .map((row) => [row.source_id, row]));
+    const latestAllBySource = new Map(latestAll.map((row) => [row.source_id, row]));
     const now = Date.now();
     const typeCatalogRun = active.get("municity-permit-types");
     const typeNames = typeCatalogRun ? await query(`SELECT record_id
@@ -77,6 +82,8 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
         type_catalog_last_refresh: typeCatalogRun?.finished_at ?? null },
       sources: catalog.map((source) => {
         const run = active.get(source.index_source_id);
+        const attempt = source.index_source_id
+          ? latestAllBySource.get(source.index_source_id) : null;
         const fresh = Boolean(run && source.cadence &&
           now - Date.parse(run.finished_at) <= maxAgeMs(source.cadence));
         return { ...source, indexed: Boolean(run), fresh,
@@ -91,7 +98,10 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
             last_successful_refresh: run.finished_at, warning: run.warning,
             latest_attempt_status: run.latest_attempt_status,
             latest_attempt_started_at: run.latest_attempt_started_at,
-            latest_attempt_warning: run.latest_attempt_warning } : {}),
+            latest_attempt_warning: run.latest_attempt_warning } :
+            attempt ? { latest_attempt_status: attempt.status,
+              latest_attempt_started_at: attempt.started_at,
+              latest_attempt_warning: attempt.warning } : {}),
         };
       }),
       checked_at: new Date().toISOString(),

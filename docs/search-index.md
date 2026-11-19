@@ -1,6 +1,6 @@
 # Private cross-parcel search index
 
-The parcel detail API and MCP still read the official City and State records live. The optional PostgreSQL/PostGIS index stores source IDs, selected published search fields, official links, geometry needed for joins, and refresh coverage. A source run becomes active only after its official count and IDs are checked, every fetched batch is complete, and its parcel joins have been recorded. Historical, closed and voided published rows remain searchable when the source returns them. Search responses always expose `complete_for_query`, source checks and a signed cursor.
+The parcel detail API and MCP still read the official City and State records live. The optional PostgreSQL/PostGIS index stores source IDs, selected published search fields, official links, geometry needed for joins, and refresh coverage. A source run becomes active only after its official count and IDs are checked, every fetched batch is complete, and its parcel joins have been recorded. Failed attempts are shown even if a source has never completed an import. Historical, closed and voided published rows remain searchable when the source returns them. Search responses always expose `complete_for_query`, source checks and a signed cursor.
 
 The index is available to the private Preview API only when its read-only `SEARCH_DATABASE_URL` is configured. The live `search_parcels`, `search_parcel_permits`, parcel detail, and nearby count tools work without it. An unconfigured or failed index never produces a verified zero result.
 
