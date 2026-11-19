@@ -22,7 +22,16 @@ const vendorOptions = { headers: { SourceId: "2" }, timeout: 60000,
   maxBytes: 75_000_000 };
 
 async function municipalSearch(searchfield, value, numrecs, get, fieldtype = "text") {
-  const data = await get(municipalUrl(searchfield, value, numrecs, fieldtype), vendorOptions);
+  let data;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      data = await get(municipalUrl(searchfield, value, numrecs, fieldtype), vendorOptions);
+      break;
+    } catch (error) {
+      if (error?.upstreamStatus !== 429 || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 45_000));
+    }
+  }
   const rows = data.rows === "" && Number(data.total) === 0 ? [] : data.rows;
   const total = Number(data.total);
   if (!Array.isArray(rows) || !Number.isSafeInteger(total) || total < rows.length)

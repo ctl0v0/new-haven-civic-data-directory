@@ -2,11 +2,20 @@ import { cached, fetchJson, SourceError } from "./http.js";
 
 export const MUNICIPAL_PERMIT_TYPES_URL = "https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/PermitTypes";
 
-export async function municipalPermitTypes({ fresh = false } = {}) {
+export async function municipalPermitTypes({ fresh = false, retry429 = false } = {}) {
   const load = async () => {
-    const rows = await fetchJson(MUNICIPAL_PERMIT_TYPES_URL, {
-      headers: { SourceId: "2" }, timeout: 15000, maxBytes: 2_000_000,
-    });
+    let rows;
+    for (let attempt = 0; attempt < (retry429 ? 3 : 1); attempt++) {
+      try {
+        rows = await fetchJson(MUNICIPAL_PERMIT_TYPES_URL, {
+          headers: { SourceId: "2" }, timeout: 15000, maxBytes: 2_000_000,
+        });
+        break;
+      } catch (error) {
+        if (error?.upstreamStatus !== 429 || attempt === 2 || !retry429) throw error;
+        await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 45_000));
+      }
+    }
     if (!Array.isArray(rows) || !rows.length)
       throw new SourceError("Municipal permit type catalog did not return a row list");
 

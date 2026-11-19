@@ -61,10 +61,33 @@ const unlinked = await indexQuery(`SELECT r.record_id, r.source_url,
   ORDER BY r.record_id`, [group.run_id]);
 if (unlinked.length !== group.unlinked_count)
   throw new Error("Grouped Electrical unlinked evidence disagrees with source coverage");
+const [parcelRun] = await indexQuery(`SELECT run_id FROM search_active_runs
+  WHERE source_id = 'parcels' AND scope_key = 'all'`);
+const unlinkedCandidates = [];
+for (const permit of unlinked) {
+  const byAddress = await indexQuery(`SELECT record_id, source_url,
+      fields->>'parcel_id' AS city_parcel_id,
+      fields->>'objectid' AS city_objectid,
+      fields->>'mblu' AS city_mblu,
+      fields->>'property_address' AS city_address
+    FROM search_records WHERE run_id = $1 AND source_id = 'parcels'
+      AND upper(trim(fields->>'property_address')) = upper(trim($2))
+    ORDER BY record_id LIMIT 10`, [parcelRun.run_id, permit.legal_address]);
+  const byVendorId = await indexQuery(`SELECT record_id, source_url,
+      fields->>'parcel_id' AS city_parcel_id,
+      fields->>'objectid' AS city_objectid,
+      fields->>'mblu' AS city_mblu,
+      fields->>'property_address' AS city_address
+    FROM search_records WHERE run_id = $1 AND source_id = 'parcels'
+      AND fields->>'parcel_id' = $2 ORDER BY record_id LIMIT 10`,
+  [parcelRun.run_id, permit.vendor_parcel_id]);
+  unlinkedCandidates.push({ record_id: permit.record_id, address_candidates_only: byAddress,
+    vendor_id_candidates_only: byVendorId });
+}
 console.log(JSON.stringify({ event: "question_demo_source_smoke",
   reader_role_verified: true, date_window: window, group,
   source_checks: result.coverage.source_checks,
   complete_for_query: result.complete_for_query,
   first_page_count: result.items.length, has_more: Boolean(result.next_cursor),
-  examples, unlinked_evidence: unlinked,
+  examples, unlinked_evidence: unlinked, unlinked_candidates_not_joined: unlinkedCandidates,
   indexed_record_verified: Boolean(inspected?.found) }));

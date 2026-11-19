@@ -23,7 +23,7 @@ const jobs = mode === "daily" ? [
   ["school-attendance", () => importSchoolAttendance()],
   ["municity-permit-types", () => importMunicipalPermitCatalog()],
 ] : await (async () => {
-  const catalog = await municipalPermitTypes();
+  const catalog = await municipalPermitTypes({ retry429: true });
   const allTypes = municipalPermitCatalogRows(catalog).map((row) => row.record_id)
     .sort((a, b) => a.localeCompare(b));
   const shard = new Date().getUTCHours();

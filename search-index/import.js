@@ -338,11 +338,12 @@ export async function importMunicipalPermitType(permitType) {
   const scopeKey = `permit-type:${type.toUpperCase()}`;
   const runId = await beginRun("municity", scopeKey);
   try {
-    const first = await municipalPermitTypeRows(type);
+    const catalog = () => municipalPermitTypes({ retry429: true });
+    const first = await municipalPermitTypeRows(type, { catalog });
     await setRunInventory(runId, first.rows.length);
     for (let offset = 0; offset < first.rows.length; offset += 200)
       await insertRecords(runId, "municity", first.rows.slice(offset, offset + 200));
-    const final = await municipalPermitTypeRows(permitType);
+    const final = await municipalPermitTypeRows(permitType, { catalog });
     if (!sameMunicipalPermitRows(first.rows, final.rows))
       throw new Error("Municipal permit type changed during refresh");
     const sourceWarning = first.duplicate_rows
@@ -432,7 +433,7 @@ export async function importMunicipalRecentElectrical(options = {}) {
 
 export async function importMunicipalRecentElectricalGroup(options = {}) {
   const getNames = async () => {
-    const listed = await municipalPermitTypes({ fresh: true });
+    const listed = await municipalPermitTypes({ fresh: true, retry429: true });
     const electrical = listed.groups?.find((group) => group.name === "Electrical");
     if (listed.partial || !electrical?.types?.length)
       throw new Error("Official Electrical permit group is unavailable");
@@ -450,7 +451,7 @@ export async function importMunicipalRecentElectricalGroup(options = {}) {
 export async function importMunicipalPermitCatalog() {
   const runId = await beginRun("municity-permit-types");
   try {
-    const listed = await municipalPermitTypes();
+    const listed = await municipalPermitTypes({ fresh: true, retry429: true });
     const rows = municipalPermitCatalogRows(listed);
     await setRunInventory(runId, rows.length);
     for (let offset = 0; offset < rows.length; offset += 200)
