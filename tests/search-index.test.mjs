@@ -4,6 +4,7 @@ import { arcgisInventory, arcgisFeatures, GIS_INDEX_FIELDS } from "../search-ind
 import { indexSourceCatalog } from "../search-index/catalog.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
+import { auditMunicipalPermitLinks } from "../search-index/linkage-audit.js";
 import { buildIndexedSearchQuery, searchIndexedParcels, searchIndexedRecords,
   SEARCH_FIELDS } from "../search-index/search.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
@@ -15,6 +16,7 @@ import { searchIndexedPermits } from "../search-index/permits.js";
 import { searchParcels } from "../parcel/parcel-search.js";
 import searchParcelsRoute from "../api/v1/search-parcels.js";
 import searchIndexedRecordsRoute from "../api/v1/search-indexed-records.js";
+import permitLinkageAuditRoute from "../api/v1/permit-linkage-audit.js";
 import nearbyCountsRoute from "../api/v1/nearby-feature-counts.js";
 import mcpRoute from "../api/mcp.js";
 
@@ -366,6 +368,66 @@ test("coverage names every catalog type including one blocked at the vendor limi
   assert.equal(coverage.sources.find((source) => source.source_id === "school-attendance")
     .latest_attempt_warning, "Official school snapshot could not be validated");
   delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("municipal permit linkage audit separates missing keys from unmatched published keys", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  let countsSql = "";
+  const audited = await auditMunicipalPermitLinks({ permit_type: "Heating Permit",
+    sample_limit: 2 }, { query: async (sql, values) => {
+    if (sql.includes("FROM search_active_runs a")) return [{ run_id: 71,
+      status: "complete", returned_count: 4, unlinked_count: 3,
+      finished_at: new Date(), latest_attempt_status: "complete" }];
+    if (sql.includes("WITH links AS")) {
+      countsSql = sql;
+      assert.deepEqual(values, [71]);
+      return [{ indexed_records: 4, exact_records: 1, ambiguous_records: 0,
+        unlinked_records: 3, missing_print_key: 2, unmatched_print_key: 1,
+        unlinked_with_legal_address: 1 }];
+    }
+    assert.deepEqual(values, [71, 2]);
+    return [{ record_id: "518136", reason: "missing_print_key",
+      print_key: null, legal_address: null }];
+  } });
+  assert.equal(audited.counts.missing_print_key, 2);
+  assert.equal(audited.counts.unmatched_print_key, 1);
+  assert.equal(audited.samples[0].reason, "missing_print_key");
+  assert.match(countsSql, /NULLIF\(btrim\(r\.fields->>'PrintKey'\), ''\)/);
+  const capped = await auditMunicipalPermitLinks({ permit_type: "Building Permit" },
+    { query: async (sql) => sql.includes("search_active_runs") ? [] : [
+      { status: "failed", warning: "MUNICIPAL_TYPE_CAP: 10,000 rows",
+        started_at: new Date() }] });
+  assert.equal(capped.counts, null);
+  assert.equal(capped.coverage.latest_attempt_status, "blocked");
+  const inconsistent = await auditMunicipalPermitLinks({ permit_type: "Heating Permit" },
+    { query: async (sql) => sql.includes("search_active_runs")
+      ? [{ run_id: 71, returned_count: 4, unlinked_count: 3 }]
+      : [{ indexed_records: 4, unlinked_records: 2,
+        missing_print_key: 1, unmatched_print_key: 1 }] });
+  assert.equal(inconsistent.counts, null);
+  assert.equal(inconsistent.coverage.index_status, "unavailable");
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("protected linkage audit route and MCP agree when the index is unconfigured", async () => {
+  const url = "https://example.com/api/v1/permit-linkage-audit?permit_type=Hood%20-%20C";
+  const denied = await permitLinkageAuditRoute.fetch(new Request(url));
+  assert.equal(denied.status, 401);
+  const auth = { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` };
+  const rest = await permitLinkageAuditRoute.fetch(new Request(url, { headers: auth }));
+  assert.equal(rest.status, 200);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json",
+      accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 92, method: "tools/call",
+      params: { name: "audit_municipal_permit_links",
+        arguments: { permit_type: "Hood - C" } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const raw = await mcp.text();
+  const payload = JSON.parse(raw.startsWith("event:")
+    ? raw.match(/^data: (.+)$/m)?.[1] : raw);
+  assert.deepEqual(payload.result.structuredContent, await rest.json());
 });
 
 test("indexed record inspection keeps official fields and parcel join evidence separate", async () => {

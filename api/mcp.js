@@ -6,6 +6,7 @@ import { schemaGuide } from "../parcel/guide-schema.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
+import { auditMunicipalPermitLinks } from "../search-index/linkage-audit.js";
 import { SEARCH_FIELDS } from "../search-index/search.js";
 import {
   resolveParcel,
@@ -364,6 +365,17 @@ export function createServer() {
     "Return source-by-source index readiness, last complete refresh, join gaps, and live-only source limits. A live parcel lookup is not proof of citywide search coverage.",
     z.object({}),
     () => getSearchCoverage(),
+  );
+  tool(
+    server,
+    "audit_municipal_permit_links",
+    "Audit municipal permit parcel links",
+    "Count exact, ambiguous, and unlinked records for one indexed official permit type. Split unlinked records by missing versus unmatched published PrintKey and return bounded source-row examples. A legal address alone is not a parcel join.",
+    z.object({
+      permit_type: z.string().min(1).max(100),
+      sample_limit: z.number().int().min(1).max(10).optional(),
+    }),
+    (args) => auditMunicipalPermitLinks(args),
   );
   tool(
     server,

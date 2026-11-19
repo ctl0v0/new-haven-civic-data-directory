@@ -121,6 +121,14 @@ export function searchCapabilities() {
         number_lte: NUMBER_FIELDS[source_id] ?? [],
         event_date: "Only the source event_date value stored in the index; null dates do not match date bounds",
       }])),
+    diagnostics: {
+      tool: "audit_municipal_permit_links",
+      rest: "GET /api/v1/permit-linkage-audit",
+      scope: "One exact published municipal permit type with an active indexed run",
+      reports: ["exact parcel links", "ambiguous links", "missing PrintKey",
+        "unmatched nonblank PrintKey", "unlinked records with LegalAddress"],
+      note: "A published address in an unlinked record is evidence for review, not an inferred City parcel association.",
+    },
     note: "All available matches use official New Haven or State source records. A partial result or missing source check cannot establish that no matching parcel exists.",
   };
 }
