@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { indexQuery } from "../search-index/db.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
+import { getIndexedRecord } from "../search-index/record.js";
 import { searchIndexedPermits } from "../search-index/permits.js";
 import { searchIndexedParcels } from "../search-index/search.js";
 
@@ -76,6 +77,15 @@ const knownPermit = await indexQuery(`SELECT r.record_id, r.fields->>'PermitNo' 
     WHERE a.source_id = 'municity' AND a.scope_key = 'permit-type:HOOD - C'
       AND r.fields->>'PermitNo' = 'M-23-00357'
     ORDER BY j.city_parcel_id LIMIT 12`);
+if (!knownPermit.some((row) => Number(row.city_parcel_id) === 12846 &&
+    row.join_status === "exact"))
+  throw new Error("Known Hood - C permit lacks its exact official City parcel link");
+const indexedKnownPermit = await getIndexedRecord({ source_id: "municity",
+  permit_type: "Hood - C", record_id: String(knownPermit[0].record_id) });
+if (!indexedKnownPermit.found || indexedKnownPermit.record?.fields?.PermitNo !== "M-23-00357" ||
+    !indexedKnownPermit.parcel_links?.some((link) =>
+      Number(link.city_parcel_id) === 12846 && link.join_status === "exact"))
+  throw new Error("Indexed record lookup did not return the official permit and parcel link");
 
 console.log(JSON.stringify({ reader_role_verified: true,
   parcel_baseline: { returned: parcel.returned_count, linked: parcel.linked_count,
@@ -91,5 +101,5 @@ console.log(JSON.stringify({ reader_role_verified: true,
       check.source_id === "municity" && check.run_id == null).length },
   cross_source_query: { returned_this_page: crossSource.items.length,
     complete_for_query: crossSource.complete_for_query },
-  known_permit: knownPermit, address_samples: addressSamples,
+  known_permit: knownPermit, indexed_record_verified: true, address_samples: addressSamples,
   most_overlapping_addresses: mostOverlappingAddresses }));

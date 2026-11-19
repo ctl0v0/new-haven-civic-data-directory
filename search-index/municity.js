@@ -4,6 +4,8 @@ import { municipalPermitTypes } from "../parcel/permit-types.js";
 
 const VENDOR = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
 const LIMIT = 2000;
+const INDEX_FIELDS = ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
+  "PermStatus", "PermitDate", "PrintKey", "LegalAddress"];
 
 export class MunicipalPermitCapError extends SourceError {
   constructor(permitType, publishedTotal) {
@@ -79,17 +81,29 @@ export async function municipalPermitTypeRows(permitType, { get = fetchJson,
   if (rows.some((row) => !String(row?.PermitType ?? "").trim()))
     throw new SourceError("Municipal permit search returned a row without a published type");
   const filtered = rows.filter((row) => String(row.PermitType ?? "").trim().toUpperCase() === type.toUpperCase());
-  const ids = filtered.map((row) => String(row.Permit_ID ?? ""));
-  if (ids.some((id) => !/^\d+$/.test(id)) || new Set(ids).size !== ids.length)
-    throw new SourceError("Municipal permit type rows lack unique published Permit_ID values");
-  return { type, vendor_count: rows.length, rows: filtered.map((row) => ({
-    record_id: String(row.Permit_ID),
-    source_url: `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/${row.Permit_ID}`,
-    published_type: row.PermitType ?? null,
-    published_status: row.PermStatus ?? null,
-    event_date: municipalDate(row.PermitDate),
-    fields: Object.fromEntries(["Permit_ID", "Application_ID", "PermitNo", "PermitType",
-      "PermStatus", "PermitDate", "PrintKey", "LegalAddress"].filter((field) =>
-      row[field] != null).map((field) => [field, row[field]])),
-  })) };
+  const byId = new Map();
+  const present = (value) => value != null && String(value).trim() !== "";
+  for (const row of filtered) {
+    const id = String(row.Permit_ID ?? "");
+    if (!/^\d+$/.test(id))
+      throw new SourceError("Municipal permit type row lacks a published numeric Permit_ID");
+    const existing = byId.get(id) ?? {};
+    for (const field of INDEX_FIELDS) {
+      const value = row[field];
+      if (!present(value)) continue;
+      if (present(existing[field]) && JSON.stringify(existing[field]) !== JSON.stringify(value))
+        throw new SourceError(`Municipal permit ${id} has conflicting published ${field} values`);
+      existing[field] = value;
+    }
+    byId.set(id, existing);
+  }
+  return { type, vendor_count: rows.length,
+    duplicate_rows: filtered.length - byId.size,
+    rows: [...byId].map(([id, fields]) => ({
+      record_id: id,
+      source_url: `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/${id}`,
+      published_type: fields.PermitType ?? null,
+      published_status: fields.PermStatus ?? null,
+      event_date: municipalDate(fields.PermitDate), fields,
+    })) };
 }

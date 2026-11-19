@@ -1,5 +1,7 @@
 // Backend-only query contract. Keep this aligned with the registered MCP tools
 // and protected REST routes; the public data guide does not advertise searches.
+import { NUMBER_FIELDS, SEARCH_FIELDS } from "../search-index/search.js";
+
 export function searchCapabilities() {
   return {
     version: 1,
@@ -76,11 +78,30 @@ export function searchCapabilities() {
         completeness: "The all-type search also requires a fresh official type catalog. Every queried type needs a fresh validated run below the municipal service's unpageable 2,000-row bound, exact MBLU joins and the last result page. Missing types and unlinked rows keep results partial; approval fields require the live detail tools",
         follow_up_tools: ["get_indexed_record", "get_permit_details", "get_application_details"],
       },
+      {
+        tool: "search_indexed_records",
+        rest: "POST /api/v1/search-indexed-records",
+        sources: Object.keys(SEARCH_FIELDS),
+        scopes: ["all exact parcel-linked records in one indexed source", "one City parcel ID and object ID"],
+        filter_fields: {
+          source_id: "One indexed official source; municipal rows require one exact PermitType",
+          equals: "Exact published fields from indexed_source_fields",
+          number_gte: "Inclusive bounds on reviewed numeric source fields",
+          number_lte: "Inclusive bounds on reviewed numeric source fields",
+          event_date_from: "Source event date, inclusive lower calendar date",
+          event_date_to: "Source event date, inclusive upper calendar date",
+          city_parcel_id: "Optional exact City parcel ID, paired with city_objectid",
+          city_objectid: "Optional exact City feature ID, paired with city_parcel_id",
+        },
+        paging: "1–50 matching source record and parcel-link pairs per page; continue next_cursor",
+        completeness: "Requires fresh validated source and City parcel runs, exact joins, no source row gaps and the last result page. It does not include source rows without an exact parcel link.",
+        follow_up_tools: ["get_indexed_record", "get_parcel_manifest", "get_parcel_records"],
+      },
     ],
     not_yet_available: [
-      "City ward filter and inspection predicates for cross-parcel permit search",
+      "Cross-parcel inspection predicates; the indexed permit search already supports ward scope",
       "Citywide address-level school and trash search with returned street-address labels",
-      "Cross-parcel municipal and State business-location search",
+      "Cross-parcel search over municipal business-license and occupant entities; indexed State location searches are available",
       "Citywide LCI case search and official marketed-space availability search",
     ],
     spatial_summary: {
@@ -91,6 +112,13 @@ export function searchCapabilities() {
       completeness: "Official ID and count checks and complete point geometry batches; incomplete layers return no asserted count",
       note: "Mapped meters do not report available spaces; mapped stop distance is straight-line, not walking distance or service frequency.",
     },
+    indexed_source_fields: Object.fromEntries(Object.entries(SEARCH_FIELDS)
+      .map(([source_id, fields]) => [source_id, {
+        equals: fields,
+        number_gte: NUMBER_FIELDS[source_id] ?? [],
+        number_lte: NUMBER_FIELDS[source_id] ?? [],
+        event_date: "Only the source event_date value stored in the index; null dates do not match date bounds",
+      }])),
     note: "All available matches use official New Haven or State source records. A partial result or missing source check cannot establish that no matching parcel exists.",
   };
 }

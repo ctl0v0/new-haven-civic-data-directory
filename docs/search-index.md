@@ -16,7 +16,7 @@ The index is available to the private Preview API only when its read-only `SEARC
 | City mapped meters and City hosted CT Transit stops | Full official feature ID/count inventory | Mapped inventory and straight-line distance only; no available meter or transit frequency claim. The bus-stop ArcGIS item is owned by a New Haven city account. |
 | CT liquor, child care and cannabis location rosters | Official Socrata row ID, count, schema and page checks; unique City address-point join | Credentials can repeat and are never used as row IDs. Rows without one exact parcel remain unlinked. |
 | NHPS attendance table | Validated official snapshot under 30 days; published ranges joined to City address points | School Choice preference, not guaranteed enrollment. Ambiguous or unmapped addresses remain unresolved. |
-| Municity permit catalog and permits | The full official type catalog is indexed; each type has its own complete row check and exact PrintKey to City MBLU join. One stable group of types refreshes each hour after the initial full sweep. | Types hitting the unpageable 2,000-row service bound are listed as blocked, not counted as complete. Unlinked permit rows remain visible as coverage gaps. Application approval, review tasks and contacts still require live detail searches. |
+| Municity permit catalog and permits | The full official type catalog is indexed; each type has its own complete row check and exact PrintKey to City MBLU join. One stable group of types refreshes each hour after the initial full sweep. Repeated Permit_ID rows are reconciled only when their nonblank published search fields agree; the run reports the raw and repeated row counts. | Types hitting the unpageable 2,000-row service bound are listed as blocked, not counted as complete. Conflicting duplicate IDs or malformed upstream responses fail a type refresh. Unlinked permit rows remain visible as coverage gaps. Application approval, review tasks and contacts still require live detail searches. |
 | Vision assessor cards, LCI property cases, State business registry | Live parcel-only checks | No verified complete citywide enumeration. Their absence from cross-parcel results does not imply no matching record. |
 | Managed lots | Held behind an explicit MBP join review | Do not publish a broad match until its official key semantics are checked. |
 | Tax bills, land records, planning, general State licenses and inspections | Catalog gaps | No verified complete parcel join. |
@@ -56,6 +56,7 @@ The municipal sweep discovers type names directly from the official catalog. The
 - `search_indexed_parcels` intersects one to five published source-field requirements by exact City parcel joins, including one exact municipal permit type combined with other official source predicates. City parcel fields include the imported assessor owner, use, unit, sale and valuation fields; reviewed numeric City fields support inclusive `number_gte` and `number_lte` bounds. `POST /api/v1/search-indexed-parcels` accepts the same JSON input.
 - `search_indexed_permits` searches every indexed permit type when no type is supplied, or up to six exact types, by published `PermStatus` and `PermitDate`, optionally within an indexed ward or neighborhood. It reports every missing, capped, stale, or unlinked type; application and review approval predicates remain in `search_parcel_permits` and the live work-detail tools.
 - `get_indexed_record` retrieves one source row by published record ID with the indexed fields, direct official source URL, exact or ambiguous City parcel links, and refresh coverage. It does not substitute for `get_permit_details` when full live permit children are needed.
+- `search_indexed_records` pages every exact record–parcel match from one indexed source and returns its published fields, official URL, dates, and City parcel identifiers. It accepts the same indexed exact, reviewed numeric, and event-date filters as `search_indexed_parcels`; optional `city_parcel_id` and `city_objectid` limit results to one parcel. The source field allowlist is returned by `list_search_capabilities` as `indexed_source_fields`. This tool is also available at protected `POST /api/v1/search-indexed-records`. Municipal records require an exact `PermitType`. Missing, capped, ambiguous, and unlinked records remain coverage gaps.
 - `get_nearby_feature_counts` returns mapped meter and stop counts within a chosen radius, plus nearest straight-line distance and official layer links. It never reports live parking availability.
 
 Examples for a connected index:
@@ -75,6 +76,14 @@ Omit `permit_types` to search every currently indexed type in the official catal
 ```
 
 Continue `next_cursor` until absent. A last page with `complete_for_query: false` is still incomplete and cannot establish that no match exists. PermitDate is a published permit date; do not relabel it an application approval date. The live permit search remains the path for linked application status, review tasks and contractor contact roles.
+
+To inspect every indexed State liquor location linked to one City parcel, including historical rows the official roster still returns:
+
+```json
+{"source_id":"ct-liquor-permits","city_parcel_id":"12846","city_objectid":"4157","limit":25}
+```
+
+Only exact parcel links appear in the result list. `get_indexed_record` can show ambiguous links for a particular published row. The indexed fields are selected search facts; the live parcel tools remain the source for full parcel detail.
 
 ## Verification
 

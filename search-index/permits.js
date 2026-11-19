@@ -22,7 +22,8 @@ const check = (sourceId, scopeKey, row, maxAge) => {
     fresh, expected_count: Number(row.expected_count),
     returned_count: Number(row.returned_count),
     ambiguous_count: Number(row.ambiguous_count),
-    unlinked_count: Number(row.unlinked_count), finished_at: row.finished_at };
+    unlinked_count: Number(row.unlinked_count), finished_at: row.finished_at,
+    warning: row.warning ?? null };
 };
 
 export async function searchIndexedPermits(input = {}, { query = indexQuery } = {}) {
@@ -67,7 +68,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
   try {
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id,
       r.status, r.finished_at, r.expected_count, r.returned_count,
-      r.ambiguous_count, r.unlinked_count,
+      r.ambiguous_count, r.unlinked_count, r.warning,
       last.status AS latest_attempt_status
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status FROM search_source_runs

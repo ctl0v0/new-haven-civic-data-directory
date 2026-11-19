@@ -6,6 +6,7 @@ import { schemaGuide } from "../parcel/guide-schema.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
+import { SEARCH_FIELDS } from "../search-index/search.js";
 import {
   resolveParcel,
   parcelSummary,
@@ -23,6 +24,7 @@ import {
   searchParcelPermits,
   searchParcels,
   searchIndexedParcels,
+  searchIndexedRecords,
   searchIndexedPermits,
   nearbyFeatureCounts,
   municipalPermitTypes,
@@ -335,6 +337,25 @@ export function createServer() {
       cursor: z.string().max(3000).optional(),
     }),
     (args) => searchIndexedPermits(args),
+  );
+  tool(
+    server,
+    "search_indexed_records",
+    "Search indexed official records and parcel links",
+    "Page all matching records from one indexed City or State source, with their published fields and exact City parcel links. Filter official fields or a selected parcel; a missing, stale or partially linked source keeps completeness false. Municipal records require one exact PermitType. Use get_indexed_record to inspect all joins for a row.",
+    z.object({
+      source_id: z.enum(Object.keys(SEARCH_FIELDS)),
+      equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+      number_gte: z.record(z.string(), z.number()).optional(),
+      number_lte: z.record(z.string(), z.number()).optional(),
+      event_date_from: z.iso.date().optional(),
+      event_date_to: z.iso.date().optional(),
+      city_parcel_id: parcelId.optional(),
+      city_objectid: z.string().regex(/^\d{1,12}$/).optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+      cursor: z.string().max(3000).optional(),
+    }),
+    (args) => searchIndexedRecords(args),
   );
   tool(
     server,

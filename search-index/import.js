@@ -163,7 +163,7 @@ async function linkStateAddresses(runId, sourceId) {
   [runId, Number(addressRun[0].run_id), sourceId]);
 }
 
-export async function finishRun(runId, sourceId, expectedCount) {
+export async function finishRun(runId, sourceId, expectedCount, { sourceWarning = null } = {}) {
   const count = await write(`SELECT COUNT(*)::integer AS n FROM search_records WHERE run_id = $1`, [runId]);
   const returned = Number(count[0].n);
   if (returned !== expectedCount) throw new Error(`Source count ${expectedCount} differs from indexed count ${returned}`);
@@ -187,9 +187,9 @@ export async function finishRun(runId, sourceId, expectedCount) {
     FROM search_record_parcels WHERE run_id = $1`, [runId]))[0].n);
   const unlinked = ["metered-parking-spaces", "transit-stops", "municity-permit-types"].includes(sourceId)
     ? 0 : Math.max(0, returned - distinctLinked);
-  const warning = sourceId === "parcels" && unlinked > 0
+  const warning = [sourceId === "parcels" && unlinked > 0
     ? `${unlinked} official City parcel features lack a published parcel ID`
-    : null;
+    : null, sourceWarning].filter(Boolean).join("; ") || null;
   await write(`WITH finished AS (
     UPDATE search_source_runs SET status = 'complete', finished_at = now(),
       returned_count = $2, linked_count = $3, ambiguous_count = $4,
@@ -272,7 +272,11 @@ export async function importMunicipalPermitType(permitType) {
     const final = await municipalPermitTypeRows(permitType);
     if (!sameMunicipalPermitRows(first.rows, final.rows))
       throw new Error("Municipal permit type changed during refresh");
-    return await finishRun(runId, "municity", first.rows.length);
+    const sourceWarning = first.duplicate_rows
+      ? `Municipal search returned ${first.vendor_count} rows, including ${first.duplicate_rows} repeated Permit_ID rows; indexed published fields were reconciled only where nonblank values did not conflict`
+      : null;
+    return { ...await finishRun(runId, "municity", first.rows.length, { sourceWarning }),
+      vendor_rows: first.vendor_count, repeated_rows: first.duplicate_rows };
   } catch (error) {
     await failRun(runId, error);
     throw error;

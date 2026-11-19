@@ -21,7 +21,7 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
   try {
     const runs = await query(`SELECT r.id AS run_id, r.status, r.expected_count,
       r.returned_count, r.ambiguous_count, r.unlinked_count,
-      r.source_updated_at, r.finished_at,
+      r.source_updated_at, r.finished_at, r.warning,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -34,7 +34,8 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
     const fresh = Date.now() - Date.parse(run.finished_at) <= 48 * 3600_000;
     const complete = fresh && run.status === "complete" &&
       run.latest_attempt_status !== "failed" &&
-      Number(run.expected_count) === Number(run.returned_count);
+      Number(run.expected_count) === Number(run.returned_count) &&
+      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0;
     const coverage = { index_status: complete ? "connected" : "partial",
       active_run_id: Number(run.run_id), fresh, source_count: Number(run.expected_count),
       returned_count: Number(run.returned_count),
@@ -43,7 +44,8 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
       source_updated_at: run.source_updated_at,
       last_successful_refresh: run.finished_at,
       latest_attempt_status: run.latest_attempt_status,
-      latest_attempt_warning: run.latest_attempt_warning };
+      latest_attempt_warning: run.latest_attempt_warning,
+      warning: run.warning };
     const rows = await query(`SELECT record_id, source_url, published_type,
       published_status, event_date, fields,
       CASE WHEN $4::boolean AND geometry IS NOT NULL

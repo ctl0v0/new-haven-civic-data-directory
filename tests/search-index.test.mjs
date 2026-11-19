@@ -4,7 +4,9 @@ import { arcgisInventory, arcgisFeatures, GIS_INDEX_FIELDS } from "../search-ind
 import { indexSourceCatalog } from "../search-index/catalog.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
-import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
+import { buildIndexedSearchQuery, searchIndexedParcels, searchIndexedRecords,
+  SEARCH_FIELDS } from "../search-index/search.js";
+import { searchCapabilities } from "../parcel/search-capabilities.js";
 import { stateRosterInventory, stateRosterRows } from "../search-index/socrata.js";
 import { arcgis } from "../parcel/http.js";
 import { municipalPermitCatalogRows, municipalPermitTypeRows,
@@ -12,6 +14,7 @@ import { municipalPermitCatalogRows, municipalPermitTypeRows,
 import { searchIndexedPermits } from "../search-index/permits.js";
 import { searchParcels } from "../parcel/parcel-search.js";
 import searchParcelsRoute from "../api/v1/search-parcels.js";
+import searchIndexedRecordsRoute from "../api/v1/search-indexed-records.js";
 import nearbyCountsRoute from "../api/v1/nearby-feature-counts.js";
 import mcpRoute from "../api/mcp.js";
 
@@ -75,6 +78,16 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
   const coverage = await getSearchCoverage();
   assert.equal(coverage.index_status, "unconfigured");
   assert.ok(coverage.sources.every((entry) => !entry.complete));
+});
+
+test("cross-source field allowlists follow the official fields stored in the index", () => {
+  assert.ok(SEARCH_FIELDS.parcels.includes("owwner_name_2"));
+  assert.ok(SEARCH_FIELDS.cmt.includes("cmt_chair"));
+  assert.ok(SEARCH_FIELDS["ct-liquor-permits"].includes("expire_date"));
+  const discovered = searchCapabilities().indexed_source_fields;
+  assert.ok(discovered.parcels.equals.includes("owwner_name_2"));
+  assert.ok(discovered.parcels.number_gte.includes("units_commercial"));
+  assert.ok(discovered.municity.equals.includes("PermitType"));
 });
 
 test("GIS inventory compares official IDs and count before indexing any rows", async () => {
@@ -206,8 +219,15 @@ test("municipal type import keeps only official Permit IDs and stops at the unpa
   assert.equal(good.rows[0].fields.PrintKey, "12/34/56");
   await assert.rejects(municipalPermitTypeRows("Hood - C", { catalog,
     get: async () => ({ rows: [row], total: 2000 }) }), /2,000-row bound/);
+  const repeated = await municipalPermitTypeRows("Hood - C", { catalog,
+    get: async () => ({ rows: [{ ...row, PrintKey: "" }, row, row], total: 3 }) });
+  assert.equal(repeated.vendor_count, 3);
+  assert.equal(repeated.duplicate_rows, 2);
+  assert.equal(repeated.rows.length, 1);
+  assert.equal(repeated.rows[0].fields.PrintKey, "12/34/56");
   await assert.rejects(municipalPermitTypeRows("Hood - C", { catalog,
-    get: async () => ({ rows: [row, row], total: 2 }) }), /unique published Permit_ID/);
+    get: async () => ({ rows: [row, { ...row, PrintKey: "99/88/77" }], total: 2 }) }),
+  /conflicting published PrintKey/);
 });
 
 test("municipal refresh compares published permit IDs independent of vendor row order", () => {
@@ -332,6 +352,69 @@ test("indexed record inspection keeps official fields and parcel join evidence s
   await assert.rejects(getIndexedRecord({ source_id: "municity", record_id: "572030" }),
     /Permit type/);
   delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("indexed record search pages published rows and retains exact parcel evidence", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const input = { source_id: "ct-liquor-permits", equals: { status: "ACTIVE" },
+    city_parcel_id: "12846", city_objectid: "4157", limit: 1 };
+  let statement;
+  let params;
+  const query = async (sql, values) => {
+    if (sql.includes("search_active_runs")) return ["parcels", "ct-liquor-permits", "addresses"]
+      .map((source_id, i) => ({ source_id, scope_key: "all", run_id: i + 10,
+        status: "complete", finished_at: new Date(), expected_count: 2,
+        returned_count: 2, ambiguous_count: 0, unlinked_count: 0,
+        latest_attempt_status: "complete" }));
+    statement = sql;
+    params = values;
+    return [{ record_id: "row-1", city_parcel_id: 12846,
+      source_url: "https://data.ct.gov/resource/gwv2-eswx.json", fields: { status: "ACTIVE" } },
+    { record_id: "row-2", city_parcel_id: 12846,
+      source_url: "https://data.ct.gov/resource/gwv2-eswx.json", fields: { status: "ACTIVE" } }];
+  };
+  const page = await searchIndexedRecords(input, { query });
+  assert.equal(page.items.length, 1);
+  assert.ok(page.next_cursor);
+  assert.equal(page.complete_for_query, false);
+  assert.ok(statement.includes("j.join_status = 'exact'"));
+  assert.ok(statement.includes("SELECT DISTINCT r.record_id"));
+  assert.ok(params.includes("12846"));
+  assert.ok(params.includes("ACTIVE"));
+  assert.ok(!statement.includes("ACTIVE"));
+  const missing = await searchIndexedRecords({ source_id: "ct-liquor-permits" },
+    { query: async () => [] });
+  assert.equal(missing.complete_for_query, false);
+  assert.equal(missing.coverage.source_checks[0].status, "not_indexed");
+  await assert.rejects(searchIndexedRecords({ source_id: "municity",
+    equals: { PermStatus: "Issued" } }), /PermitType/);
+  await assert.rejects(searchIndexedRecords({ source_id: "parcels",
+    city_parcel_id: "12846" }), /both City parcel ID/);
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("protected REST and MCP expose the same indexed-record coverage when disconnected", async () => {
+  const url = "https://example.com/api/v1/search-indexed-records";
+  const body = JSON.stringify({ source_id: "parcels", equals: { use_code: "RET" } });
+  const denied = await searchIndexedRecordsRoute.fetch(new Request(url, {
+    method: "POST", headers: { "content-type": "application/json" }, body }));
+  assert.equal(denied.status, 401);
+  const auth = { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` };
+  const rest = await searchIndexedRecordsRoute.fetch(new Request(url, {
+    method: "POST", headers: { ...auth, "content-type": "application/json" }, body }));
+  assert.equal(rest.status, 200);
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json",
+      accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 91, method: "tools/call",
+      params: { name: "search_indexed_records",
+        arguments: { source_id: "parcels", equals: { use_code: "RET" } } } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const raw = await mcp.text();
+  const payload = JSON.parse(raw.startsWith("event:")
+    ? raw.match(/^data: (.+)$/m)?.[1] : raw);
+  assert.deepEqual(payload.result.structuredContent, await rest.json());
 });
 
 test("City parcel search pages candidates and keeps REST and MCP responses aligned", async () => {
