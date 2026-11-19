@@ -1,6 +1,9 @@
 import { guarded } from "../../parcel/api.js";
 import { readRequestText, SourceError } from "../../parcel/http.js";
 import { askIndexedParcels } from "../../search-index/ask.js";
+import { indexConfigured } from "../../search-index/db.js";
+
+console.info(JSON.stringify({ event: "parcel_question_reader", configured: indexConfigured() }));
 
 export default guarded(async (request) => {
   const raw = await readRequestText(request, 2048);
@@ -11,6 +14,7 @@ export default guarded(async (request) => {
     throw new SourceError("Question JSON must be an object", 400);
   const result = await askIndexedParcels(body);
   console.info(JSON.stringify({ event: "parcel_question_result",
+    reader_configured: indexConfigured(),
     input_mode: body.filters ? "edited_filters" : "question",
     status: result.status,
     item_count: result.search_result?.items?.length ?? 0,
