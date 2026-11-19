@@ -287,6 +287,14 @@ test("indexed permit search requires each exact type run before claiming an answ
     { query: async () => rows });
   assert.equal(missing.complete_for_query, false);
   assert.equal(missing.coverage.source_checks.at(-1).status, "not_indexed");
+  const capped = await searchIndexedPermits({ permit_types: ["Roofing"] },
+    { query: async (sql) => sql.includes("search_active_runs") ? rows : [{
+      scope_key: "permit-type:ROOFING", status: "failed",
+      warning: "MUNICIPAL_TYPE_CAP: reached the validated request bound",
+      started_at: new Date(),
+    }] });
+  assert.equal(capped.coverage.source_checks.at(-1).status, "not_indexed");
+  assert.equal(capped.coverage.source_checks.at(-1).latest_attempt_status, "blocked");
   let searchSql = "";
   const complete = await searchIndexedPermits({ permit_types: ["Hood - C"] },
     { query: async (statement) => {
@@ -339,13 +347,15 @@ test("coverage names every catalog type including one blocked at the vendor limi
       { record_id: "Hood - C" }, { record_id: "Roofing" }];
     return [{ scope_key: "permit-type:HOOD - C", status: "complete" },
       { scope_key: "permit-type:ROOFING", status: "failed",
-        warning: "Reached the unpageable 2,000-row bound" }];
+        warning: "MUNICIPAL_TYPE_CAP: reached the validated request bound" }];
   } });
   assert.equal(coverage.index_status, "connected");
   assert.equal(coverage.municipal_permit_catalog.catalog_types, 2);
   assert.equal(coverage.municipal_permit_catalog.types_without_index, 1);
   assert.equal(coverage.municipal_permit_types.find((type) => type.permit_type === "Roofing")
-    .latest_attempt_warning, "Reached the unpageable 2,000-row bound");
+    .latest_attempt_warning, "MUNICIPAL_TYPE_CAP: reached the validated request bound");
+  assert.equal(coverage.municipal_permit_types.find((type) => type.permit_type === "Roofing")
+    .latest_attempt_status, "blocked");
   delete process.env.SEARCH_DATABASE_URL;
 });
 

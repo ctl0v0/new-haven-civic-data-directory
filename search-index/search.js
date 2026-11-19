@@ -35,6 +35,21 @@ export const NUMBER_FIELDS = Object.freeze({
 });
 
 const sourceAge = () => 48 * 3600_000;
+async function missingMunicipalAttempt(scopeKey, query) {
+  if (!scopeKey) return null;
+  try {
+    const rows = await query(`SELECT status, warning, started_at
+      FROM search_source_runs WHERE source_id = 'municity' AND scope_key = $1
+      ORDER BY started_at DESC, id DESC LIMIT 1`, [scopeKey]);
+    const latest = rows[0];
+    return latest ? {
+      latest_attempt_status: latest.status === "failed" &&
+        latest.warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : latest.status,
+      latest_attempt_warning: latest.warning ?? null,
+      latest_attempt_started_at: latest.started_at,
+    } : null;
+  } catch { return null; }
+}
 const checkedDate = (value, key) => {
   if (value == null) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) ||
@@ -177,9 +192,9 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
   try {
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status, r.finished_at,
       r.expected_count, r.returned_count, r.ambiguous_count, r.unlinked_count, r.warning,
-      last.status AS latest_attempt_status
+      last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
-      LEFT JOIN LATERAL (SELECT status FROM search_source_runs
+      LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
@@ -196,9 +211,13 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
       row.scope_key === municipalScope);
     if (municipal) byId.set("municity", municipal);
   }
+  const absentMunicipal = municipalScope && !byId.has("municity")
+    ? await missingMunicipalAttempt(municipalScope, query) : null;
   const sourceChecks = requiredSources.map((source_id) => {
     const run = byId.get(source_id);
-    if (!run) return { source_id, status: "not_indexed" };
+    if (!run) return { source_id, status: "not_indexed",
+      ...(source_id === "municity" ? { scope_key: municipalScope,
+        ...absentMunicipal } : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const complete = run.status === "complete" && fresh && run.latest_attempt_status !== "failed" &&
@@ -209,7 +228,11 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
       run_id: Number(run.run_id), fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count), ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
-      warning: run.warning ?? null };
+      warning: run.warning ?? null,
+      latest_attempt_status: run.latest_attempt_status === "failed" &&
+        run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
+        ? "blocked" : run.latest_attempt_status,
+      latest_attempt_warning: run.latest_attempt_warning ?? null };
   });
   if (sourceChecks.some((check) => check.status === "not_indexed"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
@@ -270,9 +293,9 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status,
       r.finished_at, r.expected_count, r.returned_count,
       r.ambiguous_count, r.unlinked_count, r.warning,
-      last.status AS latest_attempt_status
+      last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
-      LEFT JOIN LATERAL (SELECT status FROM search_source_runs
+      LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
@@ -290,9 +313,13 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
       row.scope_key === municipalScope);
     if (municipal) byId.set("municity", municipal);
   }
+  const absentMunicipal = municipalScope && !byId.has("municity")
+    ? await missingMunicipalAttempt(municipalScope, query) : null;
   const sourceChecks = requiredSources.map((source_id) => {
     const run = byId.get(source_id);
-    if (!run) return { source_id, status: "not_indexed" };
+    if (!run) return { source_id, status: "not_indexed",
+      ...(source_id === "municity" ? { scope_key: municipalScope,
+        ...absentMunicipal } : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const complete = run.status === "complete" && fresh &&
@@ -305,7 +332,11 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
       returned_count: Number(run.returned_count),
       ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
-      warning: run.warning ?? null };
+      warning: run.warning ?? null,
+      latest_attempt_status: run.latest_attempt_status === "failed" &&
+        run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
+        ? "blocked" : run.latest_attempt_status,
+      latest_attempt_warning: run.latest_attempt_warning ?? null };
   });
   if (sourceChecks.some((check) => check.status === "not_indexed"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,

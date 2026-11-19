@@ -11,8 +11,13 @@ const date = (value, name) => {
     throw new SourceError(`Invalid ${name}`, 400);
   return raw;
 };
-const check = (sourceId, scopeKey, row, maxAge) => {
-  if (!row) return { source_id: sourceId, scope_key: scopeKey, status: "not_indexed" };
+const attemptStatus = (status, warning) => status === "failed" &&
+  warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : status;
+const check = (sourceId, scopeKey, row, maxAge, latest = null) => {
+  if (!row) return { source_id: sourceId, scope_key: scopeKey, status: "not_indexed",
+    ...(latest ? { latest_attempt_status: attemptStatus(latest.status, latest.warning),
+      latest_attempt_warning: latest.warning ?? null,
+      latest_attempt_started_at: latest.started_at } : {}) };
   const fresh = Date.now() - Date.parse(row.finished_at) <= maxAge;
   const complete = fresh && row.status === "complete" && row.latest_attempt_status !== "failed" &&
     Number(row.expected_count) === Number(row.returned_count) &&
@@ -23,7 +28,10 @@ const check = (sourceId, scopeKey, row, maxAge) => {
     returned_count: Number(row.returned_count),
     ambiguous_count: Number(row.ambiguous_count),
     unlinked_count: Number(row.unlinked_count), finished_at: row.finished_at,
-    warning: row.warning ?? null };
+    warning: row.warning ?? null,
+    latest_attempt_status: attemptStatus(row.latest_attempt_status,
+      row.latest_attempt_warning),
+    latest_attempt_warning: row.latest_attempt_warning ?? null };
 };
 
 export async function searchIndexedPermits(input = {}, { query = indexQuery } = {}) {
@@ -69,9 +77,9 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id,
       r.status, r.finished_at, r.expected_count, r.returned_count,
       r.ambiguous_count, r.unlinked_count, r.warning,
-      last.status AS latest_attempt_status
+      last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
-      LEFT JOIN LATERAL (SELECT status FROM search_source_runs
+      LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE a.source_id = ANY($1::text[])`, [wanted]);
@@ -100,13 +108,25 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
           note: "The official permit type catalog could not be read; no all-type result was asserted." } };
     }
   }
+  let missingAttempts = new Map();
+  const missingScopes = types.map((type) => `permit-type:${type}`)
+    .filter((scopeKey) => !byKey.has(`municity:${scopeKey}`));
+  if (missingScopes.length) try {
+    const attempts = await query(`SELECT DISTINCT ON (scope_key)
+      scope_key, status, warning, started_at
+      FROM search_source_runs WHERE source_id = 'municity'
+        AND scope_key = ANY($1::text[])
+      ORDER BY scope_key, started_at DESC, id DESC`, [missingScopes]);
+    missingAttempts = new Map(attempts.map((row) => [row.scope_key, row]));
+  } catch { /* Missing attempt details never promote a result to complete. */ }
   const checks = [check("parcels", "all", byKey.get("parcels:all"), 48 * 3600_000),
     ...(allTypes ? [check("municity-permit-types", "all",
       byKey.get("municity-permit-types:all"), 48 * 3600_000)] : []),
     ...(scope === "city" ? [] : [check(scope === "ward" ? "wards" : "neighborhoods",
       "all", byKey.get(`${scope === "ward" ? "wards" : "neighborhoods"}:all`), 48 * 3600_000)]),
     ...types.map((type) => check("municity", `permit-type:${type}`,
-      byKey.get(`municity:permit-type:${type}`), 48 * 3600_000))];
+      byKey.get(`municity:permit-type:${type}`), 48 * 3600_000,
+      missingAttempts.get(`permit-type:${type}`)))];
   if (checks.some((item) => item.status === "not_indexed" && item.source_id !== "municity"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: checks,

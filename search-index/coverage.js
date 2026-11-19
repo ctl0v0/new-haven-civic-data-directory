@@ -46,6 +46,8 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
       const scope = `permit-type:${name.toUpperCase()}`;
       const run = byScope.get(scope);
       const latest = latestByScope.get(scope);
+      const latestStatus = latest?.status === "failed" &&
+        latest.warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : latest?.status;
       const fresh = Boolean(run && now - Date.parse(run.finished_at) <= maxAgeMs("daily"));
       return { permit_type: name, in_catalog: catalogNames.has(name.toUpperCase()),
         indexed: Boolean(run), fresh,
@@ -59,7 +61,7 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
           unlinked_count: Number(run.unlinked_count),
           last_successful_refresh: run.finished_at,
           warning: run.warning } : {}),
-        ...(latest ? { latest_attempt_status: latest.status,
+        ...(latest ? { latest_attempt_status: latestStatus,
           latest_attempt_warning: latest.warning,
           latest_attempt_started_at: latest.started_at } : {}),
       };

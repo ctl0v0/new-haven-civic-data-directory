@@ -204,9 +204,12 @@ export async function finishRun(runId, sourceId, expectedCount, { sourceWarning 
 }
 
 export async function failRun(runId, error) {
+  const reason = String(error?.message ?? error);
+  const warning = error?.code === "MUNICIPAL_TYPE_CAP"
+    ? `${error.code}: ${reason}` : reason;
   await write(`UPDATE search_source_runs SET status = 'failed', finished_at = now(),
     warning = $2 WHERE id = $1 AND status = 'running'`,
-  [runId, String(error?.message ?? error).slice(0, 500)]);
+  [runId, warning.slice(0, 500)]);
 }
 
 export async function importArcgisSource(sourceId) {
