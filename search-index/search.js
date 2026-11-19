@@ -232,7 +232,9 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
         OR (a.source_id = 'municity' AND a.scope_key = $2)`, [requiredSources, municipalScope]);
-  } catch {
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "indexed_search_failed", stage: "active_runs",
+      code: error?.code ?? null, name: error?.name ?? null }));
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "unavailable", source_checks: requiredSources.map((source_id) =>
         ({ source_id, status: "unavailable" })) } };
@@ -314,7 +316,9 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
   const { query: statement, values } = buildIndexedSearchQuery(requirements, runs, cursor.offset, limit);
   let rows;
   try { rows = await query(statement, values); }
-  catch {
+  catch (error) {
+    console.warn(JSON.stringify({ event: "indexed_search_failed", stage: "parcel_matches",
+      code: error?.code ?? null, name: error?.name ?? null }));
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "unavailable", source_checks: sourceChecks,
         note: "The indexed search query failed; no zero result was asserted." } };

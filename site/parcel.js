@@ -2295,6 +2295,12 @@ function setAskStatus(message, state = "") {
   $("ask-status").dataset.state = state;
 }
 async function runAsk(question, filters = null) {
+  if (filters) $("ask-question").value = "";
+  $("ask-run-mode").textContent = filters
+    ? "This result uses the applied filters below. The question box is ready for a new search."
+    : "This result uses the question shown above.";
+  $("ask-run-mode").hidden = false;
+  $("ask-without-commercial").hidden = true;
   setAskStatus(filters ? "Checking edited filters against indexed sources…" :
     "Interpreting the question and checking indexed sources…", "loading");
   $("ask-results").replaceChildren();
@@ -2330,9 +2336,17 @@ async function runAsk(question, filters = null) {
     }
     renderAskContext(response.context);
     if (response.reason || response.clarification) {
-      setAskStatus(`${response.reason ?? response.clarification}${response.status === "blocked" &&
-        parsed?.commercial ? " Uncheck Commercial use codes below to inspect the other matches." : ""}`,
-      response.status);
+      const blockedCommercial = response.status === "blocked" && parsed?.commercial;
+      setAskStatus(`${response.reason ?? response.clarification}${blockedCommercial
+        ? " No parcel search was run with this filter." : ""}`, response.status);
+      if (blockedCommercial) {
+        const button = $("ask-without-commercial");
+        button.hidden = false;
+        button.onclick = () => void runAsk(null, { commercial: false,
+          permit_group: parsed.permit_group, permit_type: parsed.permit_type,
+          permit_status: parsed.permit_status, permit_days: parsed.permit_days,
+          neighborhood: parsed.neighborhood });
+      }
       return;
     }
     const result = response.search_result;
