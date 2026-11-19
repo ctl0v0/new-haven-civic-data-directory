@@ -70,7 +70,7 @@ export async function stateRosterRows(inventory, offset, limit = 500, { get = fe
     throw new SourceError("State roster page did not match the official count");
   return rows.map((row) => {
     const id = row[":id"];
-    if (typeof id !== "string" || !/^row-[A-Za-z0-9_~-]+$/.test(id) ||
+    if (typeof id !== "string" || !/^row-[A-Za-z0-9_.~-]+$/.test(id) ||
         String(row[inventory.source.city] ?? "").toUpperCase() !== "NEW HAVEN")
       throw new SourceError("State roster row ID or city did not match the official page");
     const fields = Object.fromEntries(Object.entries(row).filter(([key]) => key !== ":id"));

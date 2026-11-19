@@ -108,12 +108,14 @@ export async function readRequestText(request, maxBytes = 2048) {
 
 export async function arcgis(layer, parameters = {}) {
   const url = new URL(layer + "/query");
+  const inventoryRequest = parameters.returnIdsOnly === "true" ||
+    parameters.returnCountOnly === "true";
   const params = {
     f: "json",
     where: "1=1",
     outFields: "*",
     returnGeometry: "false",
-    resultRecordCount: "100",
+    ...(inventoryRequest ? {} : { resultRecordCount: "100" }),
     ...parameters,
   };
   for (const [key, value] of Object.entries(params))

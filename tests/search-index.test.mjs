@@ -5,6 +5,7 @@ import { indexSourceCatalog } from "../search-index/catalog.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { stateRosterInventory, stateRosterRows } from "../search-index/socrata.js";
+import { arcgis } from "../parcel/http.js";
 import { municipalPermitTypeRows } from "../search-index/municity.js";
 import { searchIndexedPermits } from "../search-index/permits.js";
 import { searchParcels } from "../parcel/parcel-search.js";
@@ -32,6 +33,29 @@ test.after(() => {
 });
 const json = (body) => new Response(JSON.stringify(body), {
   headers: { "content-type": "application/json" },
+});
+
+test("GIS inventory requests omit the default feature page limit", async () => {
+  const requests = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    requests.push(url);
+    return json(url.searchParams.has("returnIdsOnly")
+      ? { objectIds: [1, 2, 3] }
+      : url.searchParams.has("returnCountOnly")
+        ? { count: 3 } : { features: [] });
+  };
+  try {
+    const layer = "https://gis.newhavenct.gov/server/rest/services/Hosted/test/FeatureServer/0";
+    await arcgis(layer, { returnIdsOnly: "true" });
+    await arcgis(layer, { returnCountOnly: "true" });
+    await arcgis(layer, { objectIds: "1,2,3" });
+    assert.equal(requests[0].searchParams.has("resultRecordCount"), false);
+    assert.equal(requests[1].searchParams.has("resultRecordCount"), false);
+    assert.equal(requests[2].searchParams.get("resultRecordCount"), "100");
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
 });
 
 test("index catalog names every parcel source and keeps documented gaps unavailable", async () => {
@@ -85,10 +109,10 @@ test("State roster retains published row IDs and refuses count or schema gaps", 
       : [{ count: "1" }];
   } });
   const records = await stateRosterRows(source, 0, 500, { get: async () => [
-    { ":id": "row-a_1~b", permit_city: "New Haven", permit_address: "20 Eld Street",
+    { ":id": "row-a.1_~b", permit_city: "New Haven", permit_address: "20 Eld Street",
       credential: "LCT.123", status: "ACTIVE", effective_date: "01/14/2026" },
   ] });
-  assert.equal(records[0].record_id, "row-a_1~b");
+  assert.equal(records[0].record_id, "row-a.1_~b");
   assert.equal(records[0].fields.normalized_site_address, "20 ELD ST");
   assert.equal(records[0].event_date, "2026-01-14");
   assert.match(records[0].source_url, /data\.ct\.gov/);
