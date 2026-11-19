@@ -1,13 +1,13 @@
 import { SourceError } from "../parcel/http.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
+import { GIS_INDEX_FIELDS } from "./arcgis.js";
 import { indexConfigured, indexQuery } from "./db.js";
 
 // Only published, indexed columns may be used as cross-source predicates.
 // A source can be listed here before its first validated import; readiness is
 // checked against the active run on every request.
 export const SEARCH_FIELDS = Object.freeze({
-  parcels: ["parcel_id", "objectid", "mblu", "property_address", "use_code",
-    "zone", "units_commercial", "units_residential", "sale_date"],
+  parcels: GIS_INDEX_FIELDS.parcels,
   addresses: ["house_number", "full_street_name", "unit", "unit_type"],
   "trash-pickup": ["trash_day"],
   zoning: ["zone_code", "district_category", "districts"],
@@ -24,6 +24,14 @@ export const SEARCH_FIELDS = Object.freeze({
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", "ct-liquor-permits",
   "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance"]);
+const NUMBER_FIELDS = Object.freeze({
+  parcels: ["units_commercial", "units_residential", "units_condo",
+    "year_building_built", "total_land_area_acres", "price",
+    "total_assessed_bldg_value", "total_assessed_bldg_xf_value",
+    "total_assessed_improvements", "total_assessed_land_value",
+    "total_assessed_land_outbldg", "total_assessed_extra_features",
+    "total_assessed_parcel_value_x", "total_assessed_parcel_value_y"],
+});
 
 const sourceAge = () => 48 * 3600_000;
 const checkedDate = (value, key) => {
@@ -51,11 +59,27 @@ function checkedRequirements(input) {
           !String(value).trim() || String(value).length > 160)
         throw new SourceError(`Unsupported ${sourceId} exact field filter`, 400);
     }
+    const ranges = {};
+    for (const operator of ["number_gte", "number_lte"]) {
+      const values = item[operator] ?? {};
+      if (!values || typeof values !== "object" || Array.isArray(values) ||
+          Object.keys(values).length > 5)
+        throw new SourceError(`Invalid ${operator} filters`, 400);
+      for (const [key, value] of Object.entries(values))
+        if (!NUMBER_FIELDS[sourceId]?.includes(key) || typeof value !== "number" ||
+            !Number.isFinite(value))
+          throw new SourceError(`Unsupported ${sourceId} numeric field filter`, 400);
+      ranges[operator] = Object.fromEntries(Object.entries(values).sort());
+    }
+    for (const key of Object.keys(ranges.number_gte))
+      if (key in ranges.number_lte && ranges.number_gte[key] > ranges.number_lte[key])
+        throw new SourceError(`Reversed ${sourceId} numeric range`, 400);
     const eventDateFrom = checkedDate(item.event_date_from, "event_date_from");
     const eventDateTo = checkedDate(item.event_date_to, "event_date_to");
     if (eventDateFrom && eventDateTo && eventDateFrom > eventDateTo)
       throw new SourceError("Event date range is reversed", 400);
     return { source_id: sourceId, equals: Object.fromEntries(Object.entries(equals).sort()),
+      ...ranges,
       event_date_from: eventDateFrom, event_date_to: eventDateTo };
   });
 }
@@ -66,6 +90,12 @@ function conditions(requirement, alias, add) {
     const fieldRef = add(field), valueRef = add(String(value).trim());
     parts.push(`upper(trim(${alias}.fields->>${fieldRef})) = upper(${valueRef})`);
   }
+  for (const [operator, sign] of [["number_gte", ">="], ["number_lte", "<="]])
+    for (const [field, value] of Object.entries(requirement[operator] ?? {})) {
+      const fieldRef = add(field), valueRef = add(value);
+      parts.push(`(CASE WHEN jsonb_typeof(${alias}.fields->${fieldRef}) = 'number'
+        THEN (${alias}.fields->>${fieldRef})::numeric END) ${sign} ${valueRef}::numeric`);
+    }
   if (requirement.event_date_from) parts.push(`${alias}.event_date >= ${add(requirement.event_date_from)}::date`);
   if (requirement.event_date_to) parts.push(`${alias}.event_date <= ${add(requirement.event_date_to)}::date`);
   return parts;
@@ -92,7 +122,11 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit) {
     const sourceRun = add(runs[requirement.source_id]);
     const filters = conditions(requirement, "r", add);
     return `(SELECT jsonb_build_object('source_id', ${add(requirement.source_id)}::text,
-      'matching_record_count', count(*), 'example_source_url', min(r.source_url),
+      'matching_record_count', count(*),
+      'example_record', (jsonb_agg(jsonb_build_object(
+        'record_id', r.record_id, 'source_url', r.source_url,
+        'published_type', r.published_type, 'published_status', r.published_status,
+        'event_date', r.event_date) ORDER BY r.record_id)->0),
       'example_city_address_objectid', min(j.city_address_objectid))
       FROM search_record_parcels j JOIN search_records r
         ON r.run_id = j.run_id AND r.source_id = j.source_id AND r.record_id = j.record_id

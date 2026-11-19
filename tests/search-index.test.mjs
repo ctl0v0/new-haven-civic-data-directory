@@ -126,6 +126,7 @@ test("indexed cross-source search uses exact parcel joins and refuses an unindex
   const sql = buildIndexedSearchQuery([{ source_id: "zoning", equals: { zone_code: "BD" },
     event_date_from: null, event_date_to: null }], { parcels: 10, zoning: 11 }, 0, 25);
   assert.match(sql.query, /j\.join_status = 'exact'/);
+  assert.match(sql.query, /'example_record'/);
   assert.ok(!sql.query.includes("BD"));
   assert.ok(sql.values.includes("BD"));
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
@@ -174,6 +175,23 @@ test("cross-source parcel search combines one exact municipal type with another 
     { source_id: "municity", equals: { PermStatus: "Issued" } },
   ] }), /PermitType/);
   delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("indexed parcel ranges compare only source-published JSON numbers", async () => {
+  const requirement = { source_id: "parcels", equals: {},
+    number_gte: { units_commercial: 2 },
+    number_lte: { total_assessed_parcel_value_y: 750000 },
+    event_date_from: null, event_date_to: null };
+  const sql = buildIndexedSearchQuery([requirement], { parcels: 10 }, 0, 25);
+  assert.match(sql.query, /jsonb_typeof\(r\.fields->\$\d+\) = 'number'/);
+  assert.ok(sql.values.includes(2));
+  assert.ok(sql.values.includes(750000));
+  assert.ok(!sql.query.includes("750000"));
+  await assert.rejects(searchIndexedParcels({ requirements: [{ source_id: "parcels",
+    number_gte: { owner_name_1: 2 } }] }), /numeric field/);
+  await assert.rejects(searchIndexedParcels({ requirements: [{ source_id: "parcels",
+    number_gte: { units_commercial: 5 }, number_lte: { units_commercial: 2 } }] }),
+  /Reversed/);
 });
 
 test("municipal type import keeps only official Permit IDs and stops at the unpageable bound", async () => {

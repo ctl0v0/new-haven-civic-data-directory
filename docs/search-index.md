@@ -53,7 +53,7 @@ The municipal sweep discovers type names directly from the official catalog. The
 - `get_parcel_manifest` reports the checked status, returned count and count certainty for every source on one parcel.
 - `get_search_coverage` reports active index runs, freshness, failed refresh attempts, join gaps and parcel-only sources.
 - `search_parcels` scans official City parcel GIS fields live, with City neighborhood and ward scopes and cursor pagination.
-- `search_indexed_parcels` intersects one to five published source-field requirements by exact City parcel joins, including one exact municipal permit type combined with other official source predicates. `POST /api/v1/search-indexed-parcels` accepts the same JSON input.
+- `search_indexed_parcels` intersects one to five published source-field requirements by exact City parcel joins, including one exact municipal permit type combined with other official source predicates. City parcel fields include the imported assessor owner, use, unit, sale and valuation fields; reviewed numeric City fields support inclusive `number_gte` and `number_lte` bounds. `POST /api/v1/search-indexed-parcels` accepts the same JSON input.
 - `search_indexed_permits` searches every indexed permit type when no type is supplied, or up to six exact types, by published `PermStatus` and `PermitDate`, optionally within an indexed ward or neighborhood. It reports every missing, capped, stale, or unlinked type; application and review approval predicates remain in `search_parcel_permits` and the live work-detail tools.
 - `get_nearby_feature_counts` returns mapped meter and stop counts within a chosen radius, plus nearest straight-line distance and official layer links. It never reports live parking availability.
 
@@ -65,6 +65,12 @@ Examples for a connected index:
 
 ```json
 {"permit_types":["Hood - C"],"scope":"neighborhood","neighborhood":"Westville","permit_date_from":"2026-01-01","limit":25}
+```
+
+Omit `permit_types` to search every currently indexed type in the official catalog. For a permit and City parcel field intersection:
+
+```json
+{"requirements":[{"source_id":"municity","equals":{"PermitType":"Hood - C","PermStatus":"Issued"}},{"source_id":"parcels","number_gte":{"units_commercial":1}}],"limit":25}
 ```
 
 Continue `next_cursor` until absent. A last page with `complete_for_query: false` is still incomplete and cannot establish that no match exists. PermitDate is a published permit date; do not relabel it an application approval date. The live permit search remains the path for linked application status, review tasks and contractor contact roles.

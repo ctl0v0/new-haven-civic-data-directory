@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { indexQuery } from "../search-index/db.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { searchIndexedPermits } from "../search-index/permits.js";
+import { searchIndexedParcels } from "../search-index/search.js";
 
 const writer = process.env.SEARCH_DATABASE_WRITE_URL;
 const password = process.env.SEARCH_DATABASE_READER_PASSWORD;
@@ -38,6 +39,12 @@ if (!coverage.municipal_permit_catalog?.indexed)
 const allPermits = await searchIndexedPermits({ limit: 5 });
 if (allPermits.coverage.index_status === "unavailable" || !allPermits.items.length)
   throw new Error("All-type indexed permit search is unavailable");
+const crossSource = await searchIndexedParcels({ requirements: [
+  { source_id: "municity", equals: { PermitType: "Hood - C" } },
+  { source_id: "parcels", number_gte: { units_commercial: 0 } },
+], limit: 5 });
+if (crossSource.coverage.index_status === "unavailable")
+  throw new Error("Municipal and City parcel cross-source query failed");
 
 const addressRuns = await indexQuery(`SELECT run_id FROM search_active_runs
   WHERE source_id = 'addresses' AND scope_key = 'all'`);
@@ -82,5 +89,7 @@ console.log(JSON.stringify({ reader_role_verified: true,
       check.source_id === "municity" && check.run_id != null).length,
     missing_type_count: allPermits.coverage.source_checks.filter((check) =>
       check.source_id === "municity" && check.run_id == null).length },
+  cross_source_query: { returned_this_page: crossSource.items.length,
+    complete_for_query: crossSource.complete_for_query },
   known_permit: knownPermit, address_samples: addressSamples,
   most_overlapping_addresses: mostOverlappingAddresses }));

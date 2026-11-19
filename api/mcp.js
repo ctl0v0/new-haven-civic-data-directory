@@ -307,6 +307,8 @@ export function createServer() {
           "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail",
           "school-attendance", "municity"]),
         equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+        number_gte: z.record(z.string(), z.number()).optional(),
+        number_lte: z.record(z.string(), z.number()).optional(),
         event_date_from: z.iso.date().optional(),
         event_date_to: z.iso.date().optional(),
       })).min(1).max(5),
