@@ -35,3 +35,9 @@ jobs:
           test -n "$SEARCH_DATABASE_WRITE_URL" || { echo 'SEARCH_DATABASE_WRITE_URL is missing'; exit 1; }
           npm run index:migrate
           npm run index:refresh -- managed-lots
+      - name: Verify indexed MCP search using the restricted reader
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+          SEARCH_DATABASE_READER_PASSWORD: ${{ secrets.SEARCH_DATABASE_READER_PASSWORD }}
+          SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
+        run: npm run index:smoke-managed-lots

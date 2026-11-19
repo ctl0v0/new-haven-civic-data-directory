@@ -8,6 +8,7 @@
     "index:migrate": "node scripts/migrate-search-index.mjs",
     "index:verify-writer": "node scripts/verify-search-index-writer.mjs",
     "index:smoke": "node scripts/smoke-search-index.mjs",
+    "index:smoke-managed-lots": "node scripts/smoke-managed-lots.mjs",
     "index:audit-links": "node scripts/audit-search-index-links.mjs",
     "index:grant-reader": "node scripts/grant-search-index-reader.mjs",
     "index:refresh": "node scripts/refresh-search-index.mjs",
