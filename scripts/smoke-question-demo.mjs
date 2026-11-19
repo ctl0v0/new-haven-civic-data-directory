@@ -46,9 +46,25 @@ const inspected = first ? await getIndexedRecord({ source_id: "municity",
 if (first && (!inspected?.found || !inspected.parcel_links.some((link) =>
     Number(link.city_parcel_id) === Number(first.city_parcel_id))))
   throw new Error("A grouped Electrical permit failed indexed record inspection");
+const unlinked = await indexQuery(`SELECT r.record_id, r.source_url,
+    r.fields->>'PermitNo' AS permit_number,
+    r.fields->>'PermitType' AS permit_type,
+    r.fields->>'Parcel_ID' AS vendor_parcel_id,
+    r.fields->>'PrintKey' AS print_key,
+    r.fields->>'PrintKey_Parcel' AS parent_print_key,
+    r.fields->>'VerifiedParentPrintKey' AS verified_parent_print_key,
+    r.fields->>'LegalAddress' AS legal_address
+  FROM search_records r WHERE r.run_id = $1 AND r.source_id = 'municity'
+    AND NOT EXISTS (SELECT 1 FROM search_record_parcels j
+      WHERE j.run_id = r.run_id AND j.source_id = r.source_id
+        AND j.record_id = r.record_id)
+  ORDER BY r.record_id`, [group.run_id]);
+if (unlinked.length !== group.unlinked_count)
+  throw new Error("Grouped Electrical unlinked evidence disagrees with source coverage");
 console.log(JSON.stringify({ event: "question_demo_source_smoke",
   reader_role_verified: true, date_window: window, group,
   source_checks: result.coverage.source_checks,
   complete_for_query: result.complete_for_query,
   first_page_count: result.items.length, has_more: Boolean(result.next_cursor),
-  examples, indexed_record_verified: Boolean(inspected?.found) }));
+  examples, unlinked_evidence: unlinked,
+  indexed_record_verified: Boolean(inspected?.found) }));
