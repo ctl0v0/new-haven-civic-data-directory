@@ -27,7 +27,7 @@ The response includes permit, application, review-task, contact, parcel and neig
 
 ## Paged citywide and multi-type search
 
-The private MCP tool `search_parcel_permits` and protected REST route `/api/v1/search-parcel-permits` add citywide or named City-neighborhood scope, up to six exact published `PermitType` values, and independently bounded source dates. They are backend-only; the public data guide and parcel result UI do not present a question interface. The original `search_municipal_permits` remains available for its narrower contract.
+The private MCP tool `search_parcel_permits` and protected REST route `/api/v1/search-parcel-permits` add citywide or named City-neighborhood scope, up to six exact published `PermitType` values, and independently bounded source dates. The private `list_search_capabilities` tool and `/api/v1/search-capabilities` route list the implemented filters and remaining search gaps. They are backend-only; the public data guide and parcel result UI do not present a question interface. The original `search_municipal_permits` remains available for its narrower contract.
 
 For a review-date question, send `review_status`, optional `review_type`, and `review_completed_from` / `review_completed_to`. Those bounds apply only to a verified linked application's `Task.DateCompleted`; `PermitDate` is returned but is not implicitly filtered. `permit_date_from` / `permit_date_to` separately filter `PermitDate`. `application_status` filters `PermitApplicationStatus`, while `permit_status` filters `PermStatus`. Each returned row retains the published status and date fields, source URLs, exact municipal `PrintKey` to City `mblu` join, and source-public contacts when requested.
 
@@ -47,3 +47,15 @@ Example MCP arguments for a bounded page of the reviewed Hood - C type:
 The response is a **candidate scan page**, not an arbitrary-sized result page. Continue with `next_cursor` and the same criteria until the cursor is absent. Only then can `complete_for_query` be true. Coverage reports scanned candidates, returned permits and distinct City parcels, failed detail checks, ambiguous or absent MBLU joins, source-row gaps, and each type search's status. The cursor is signed and rejects changed criteria or changed municipal results. The official municipal service did not yield a verified stable next page in testing; any type returning 2,000 rows or a larger reported total is marked `partial`, and `complete_for_query` remains false even after all returned rows are scanned. There is still no durable permit database. A future small, refreshed search index of official permit IDs, fields and exact City joins may be needed for broad types; its refresh and coverage would have to be explicit.
 
 The official type catalog has separate `Hood`, `Hood - C`, `Fire Suppression-Hood`, and `Fire Suppression-Hood - C` entries. A request must select which types to include. An `Approved` review task, an application status, and an issued permit remain distinct published fields. The new search does not claim a complete inspection history or infer an approval date from a permit or application status.
+
+## Supporting parcel records
+
+| Search field | Existing parcel evidence | Detail path |
+| --- | --- | --- |
+| `PermitType`, `PermStatus`, `PermitDate`, `PrintKey` | Municipal permit row on the verified parcel | `get_parcel_records` (`activity`) and `get_permit_details` |
+| `PermitApplicationStatus` | Explicitly linked municipal application | `get_permit_details` or `get_application_details` |
+| `TaskType`, `ApprovalStatus`, `DateCompleted` | Task linked by `Entity=Application` and the verified `Application_ID` | `get_permit_details` or `get_application_details` |
+| Source-public `ContactRole` and contact fields | Permit or linked application contact child row | `get_permit_details` or `get_application_details` |
+| City `parcel_id`, `objectid`, `mblu`, and neighborhood intersection | Official City parcel and neighborhood GIS layers | `get_parcel_records` (`property` and `geography`) |
+
+The parcel's grouped activity feed is intentionally compact; review tasks and full public contact fields are on-demand detail records. No supporting field had to be invented or scraped for this first search slice. The parcel UI already links to full permit details, so no new UI field is required for these criteria.

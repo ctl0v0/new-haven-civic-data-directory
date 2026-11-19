@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
+import { searchCapabilities } from "../parcel/search-capabilities.js";
 import {
   resolveParcel,
   parcelSummary,
@@ -246,6 +247,14 @@ export function createServer() {
       cursor: z.string().max(1500).optional(),
     }),
     (args) => searchParcelPermits(args),
+  );
+  tool(
+    server,
+    "list_search_capabilities",
+    "List cross-parcel search capabilities",
+    "Return the implemented backend search scopes, exact source fields, paging and completeness rules, and planned searches that are not yet available.",
+    z.object({}),
+    () => searchCapabilities(),
   );
   tool(
     server,

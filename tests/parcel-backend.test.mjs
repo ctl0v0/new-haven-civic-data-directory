@@ -30,6 +30,7 @@ import permitDetailsRoute from "../api/v1/permit-details.js";
 import applicationDetailsRoute from "../api/v1/application-details.js";
 import searchPermitsRoute from "../api/v1/search-permits.js";
 import searchParcelPermitsRoute from "../api/v1/search-parcel-permits.js";
+import searchCapabilitiesRoute from "../api/v1/search-capabilities.js";
 import mcpRoute from "../api/mcp.js";
 import pilotPage from "../api/pilot-page.js";
 import pilotSession from "../api/pilot-session.js";
@@ -118,6 +119,30 @@ test("protected schema describes the live REST and MCP filter contract", async (
   const mcpText = await mcp.text();
   const payload = JSON.parse(mcpText.startsWith("event:") ? mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
   assert.deepEqual(JSON.parse(payload.result.contents[0].text), guide);
+});
+
+test("private search capability catalog matches REST and MCP without publishing a question UI", async () => {
+  const url = "https://example.com/api/v1/search-capabilities";
+  assert.equal((await searchCapabilitiesRoute.fetch(new Request(url))).status, 401);
+  const auth = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  const rest = await searchCapabilitiesRoute.fetch(new Request(url, { headers: auth }));
+  assert.equal(rest.status, 200);
+  const capabilities = await rest.json();
+  assert.equal(capabilities.available[0].tool, "search_parcel_permits");
+  assert.equal(capabilities.available[0].filter_fields.review_completed_from,
+    "Task.DateCompleted; inclusive lower calendar date");
+  assert.ok(capabilities.not_yet_available.some((gap) => gap.includes("inspection")));
+  const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
+    method: "POST", headers: { ...auth, "content-type": "application/json",
+      accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 69, method: "tools/call",
+      params: { name: "list_search_capabilities", arguments: {} } }),
+  }));
+  assert.equal(mcp.status, 200);
+  const mcpText = await mcp.text();
+  const payload = JSON.parse(mcpText.startsWith("event:") ?
+    mcpText.match(/^data: (.+)$/m)?.[1] : mcpText);
+  assert.deepEqual(payload.result.structuredContent, capabilities);
 });
 
 test("private access fails closed and signed cookies cannot be forged", async () => {
