@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { askIndexedParcels, recentCalendarDates } from "../search-index/ask.js";
+import { askIndexedParcels, interpretBaselineQuestion, questionPermitCatalog, recentCalendarDates } from "../search-index/ask.js";
+import { queryWorkbenchVisible } from "../api/pilot-page.js";
 import { getDataContext, commercialUseCodes } from "../parcel/data-context.js";
 import { municipalDateSearchFormat, municipalPermitDateRows } from "../search-index/municity.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
@@ -34,6 +35,42 @@ const catalog = async () => ({ partial: false, groups: [
 const interpreted = { intent: "search", commercial: false,
   permit_type: "Electrical Permit", permit_group: null, permit_status: null,
   permit_days: 30, neighborhood: null, clarification: null };
+
+test("private query workbench appears on the pilot Preview branch only", () => {
+  assert.equal(queryWorkbenchVisible({ VERCEL_ENV: "preview",
+    VERCEL_GIT_COMMIT_REF: "codex/parcel-pilot" }), true);
+  assert.equal(queryWorkbenchVisible({ VERCEL_ENV: "preview",
+    VERCEL_GIT_COMMIT_REF: "main" }), false);
+  assert.equal(queryWorkbenchVisible({ VERCEL_ENV: "production",
+    VERCEL_GIT_COMMIT_REF: "codex/parcel-pilot", QUERY_DEMO_ENABLED: "true" }), false);
+});
+
+test("baseline spoken questions keep every supported filter and reject extra terms", () => {
+  assert.deepEqual(interpretBaselineQuestion(
+    "Show commercial parcels with electrical permits pulled in the past 30 days"),
+  { intent: "search", commercial: true, permit_type: null,
+    permit_group: "Electrical", permit_status: null, permit_days: 30,
+    neighborhood: null, clarification: null });
+  assert.equal(interpretBaselineQuestion(
+    "Show me all the parcels, commercial parcels that have had electrical permits pulled in past 30 days")?.commercial, true);
+  assert.equal(interpretBaselineQuestion(
+    "Show parcels with electrical permits issued in the past 30 days"), null);
+});
+
+test("question tester reads a fresh complete official type catalog from the index", async () => {
+  let liveCalled = false;
+  const catalog = await questionPermitCatalog({ configured: () => true,
+    now: new Date("2026-11-19T15:00:00Z"),
+    query: async (sql) => sql.includes("FROM search_active_runs")
+      ? [{ id: 42, status: "complete", expected_count: 2, returned_count: 2,
+        finished_at: "2026-11-19T14:00:00Z" }]
+      : [{ record_id: "Electrical Permit", group_name: "Electrical" },
+        { record_id: "Electrical Wiring (NEW)", group_name: "Electrical" }],
+    live: async () => { liveCalled = true; return {}; } });
+  assert.equal(liveCalled, false);
+  assert.deepEqual(catalog.groups[0].types.map((type) => type.name),
+    ["Electrical Permit", "Electrical Wiring (NEW)"]);
+});
 
 test("relative PermitDate uses New Haven calendar dates, including today", () => {
   assert.deepEqual(recentCalendarDates(30, new Date("2026-11-19T15:00:00Z")), {
@@ -78,6 +115,26 @@ test("broad electrical question uses the official group rather than the old exac
   assert.deepEqual(criteria.requirements, [{ source_id: "municity",
     permit_group: "Electrical", event_date_from: "2026-10-21",
     event_date_to: "2026-11-19" }]);
+});
+
+test("edited tester filters use the same catalog and search without another model call", async () => {
+  let criteria;
+  const answer = await askIndexedParcels({ filters: {
+    commercial: false, permit_type: null, permit_group: "Electrical",
+    permit_status: null, permit_days: 30, neighborhood: null,
+  } }, { catalog, interpret: async () => { throw Error("model should not run"); },
+    now: new Date("2026-11-19T15:00:00Z"),
+    search: async (input) => {
+      criteria = input;
+      return { items: [], next_cursor: null, complete_for_query: false,
+        coverage: { source_checks: [{ status: "partial" }] } };
+    } });
+  assert.equal(answer.status, "coverage_limited");
+  assert.deepEqual(criteria.requirements, [{ source_id: "municity",
+    permit_group: "Electrical", event_date_from: "2026-10-21",
+    event_date_to: "2026-11-19" }]);
+  await assert.rejects(askIndexedParcels({ filters: { commercial: false } },
+    { catalog }), { status: 400 });
 });
 
 test("commercial question stays blocked until all official City use codes are reviewed", async () => {

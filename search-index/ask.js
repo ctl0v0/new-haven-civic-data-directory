@@ -16,6 +16,7 @@ const interpretationSchema = z.object({
   neighborhood: z.string().nullable(),
   clarification: z.string().nullable(),
 });
+const editedFiltersSchema = interpretationSchema.omit({ intent: true, clarification: true }).strict();
 
 export function newHavenToday(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
@@ -31,7 +32,24 @@ export function recentCalendarDates(days, now = new Date()) {
   return { from, to, meaning: `${days} New Haven calendar dates including today` };
 }
 
+// A small exact grammar makes the first spoken example testable without an AI
+// gateway. Other phrasing still goes through the constrained interpreter.
+// Unrecognized words never get silently discarded from the question.
+export function interpretBaselineQuestion(question) {
+  const text = String(question ?? "").trim().toLowerCase().replace(/[?.!]$/, "")
+    .replace(/\s+/g, " ");
+  const match = text.match(/^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:parcels,? )?(commercial )?parcels (?:that )?(?:have had|had|have|with) electrical permits (?:pulled )?in (?:the )?(?:past|last|previous) (\d{1,3}) days?$/);
+  if (!match) return null;
+  const days = Number(match[2]);
+  if (days < 1 || days > 366) return null;
+  return { intent: "search", commercial: Boolean(match[1]),
+    permit_type: null, permit_group: "Electrical", permit_status: null,
+    permit_days: days, neighborhood: null, clarification: null };
+}
+
 export async function interpretQuestion(question, typeNames, groupNames) {
+  const baseline = interpretBaselineQuestion(question);
+  if (baseline && groupNames.includes("Electrical")) return baseline;
   const context = getDataContext().entries.filter((entry) => ["city-use-code",
     "municipal-permit-type", "municipal-permit-group", "municipal-permit-date", "municipal-permit-status",
     "city-neighborhood", "search-coverage"].includes(entry.id));
@@ -50,10 +68,41 @@ function canonicalType(name, names) {
   return names.find((item) => item.toUpperCase() === String(name ?? "").trim().toUpperCase()) ?? null;
 }
 
+export async function questionPermitCatalog({ query = indexQuery,
+  live = municipalPermitTypes, configured = indexConfigured,
+  now = new Date() } = {}) {
+  if (configured()) try {
+    const [run] = await query(`SELECT r.id, r.status, r.expected_count,
+      r.returned_count, r.finished_at FROM search_active_runs a
+      JOIN search_source_runs r ON r.id = a.run_id
+      WHERE a.source_id = 'municity-permit-types' AND a.scope_key = 'all'`);
+    if (run?.status === "complete" &&
+        Number(run.expected_count) === Number(run.returned_count) &&
+        now.getTime() - Date.parse(run.finished_at) <= 48 * 3600_000) {
+      const rows = await query(`SELECT record_id, fields->>'group' AS group_name
+        FROM search_records WHERE run_id = $1 AND source_id = 'municity-permit-types'
+        ORDER BY record_id`, [run.id]);
+      if (rows.length === Number(run.returned_count) &&
+          rows.every((row) => row.record_id) &&
+          new Set(rows.map((row) => row.record_id.toUpperCase())).size === rows.length) {
+        const groups = new Map();
+        for (const row of rows) {
+          if (!groups.has(row.group_name)) groups.set(row.group_name, []);
+          groups.get(row.group_name).push({ name: row.record_id });
+        }
+        return { partial: false, groups: [...groups].map(([name, types]) =>
+          ({ name, types })) };
+      }
+    }
+  } catch { /* Check the live official catalog below. */ }
+  return live();
+}
+
 export async function askIndexedParcels(input = {}, { interpret = interpretQuestion,
-  catalog = municipalPermitTypes, search = searchIndexedParcels,
+  catalog = questionPermitCatalog, search = searchIndexedParcels,
   query = indexQuery, now = new Date() } = {}) {
-  const question = String(input.question ?? "").trim();
+  const edited = input.filters != null;
+  const question = edited ? "Edited search filters" : String(input.question ?? "").trim();
   if (!question || question.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(question))
     throw new SourceError("Question must be 1–500 characters", 400);
   let typeNames, groupNames;
@@ -67,9 +116,15 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
       reason: "The official municipal permit type catalog could not be checked." };
   }
   let parsed;
-  try { parsed = interpretationSchema.parse(await interpret(question, typeNames, groupNames)); }
-  catch { return { status: "unavailable", question,
-    reason: "The question interpreter could not return validated search criteria." }; }
+  if (edited) {
+    try { parsed = { ...editedFiltersSchema.parse(input.filters),
+      intent: "search", clarification: null }; }
+    catch { throw new SourceError("Edited filters must use the supported search fields", 400); }
+  } else {
+    try { parsed = interpretationSchema.parse(await interpret(question, typeNames, groupNames)); }
+    catch { return { status: "unavailable", question,
+      reason: "The question interpreter could not return validated search criteria." }; }
+  }
   if (parsed.intent !== "search") return { status: parsed.intent, question,
     clarification: parsed.clarification ?? "Please narrow the question to published parcel and permit fields.",
     context: getDataContext({ term: "permit" }).entries };
@@ -91,6 +146,9 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
   if ((parsed.permit_days || parsed.permit_status) && !permitType && !permitGroup)
     return { status: "clarify", question,
       clarification: "Which published municipal permit type or group should be searched?" };
+  const dateWindow = parsed.permit_days ? recentCalendarDates(parsed.permit_days, now) : null;
+  const interpretation = { ...parsed, permit_type: permitType,
+    permit_group: permitGroup, date_window: dateWindow };
   const requirements = [];
   let codeReview = null;
   if (parsed.commercial) {
@@ -110,8 +168,10 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
     }
     if (!codeReview) requirements.push({ source_id: "parcels", one_of: { use_code: codes } });
   }
-  if (codeReview) return { status: "blocked", question, interpretation: parsed,
-    reason: codeReview, context: getDataContext({ term: "use code" }).entries };
+  if (codeReview) return { status: "blocked", question, interpretation,
+    reason: codeReview, context: getDataContext().entries.filter((entry) =>
+      ["city-use-code", "commercial-parcel-query", "municipal-permit-group",
+        "search-coverage"].includes(entry.id)) };
   if (parsed.neighborhood?.trim()) {
     let neighborhood = parsed.neighborhood.trim();
     let neighborhoodField = "neighborhood";
@@ -133,15 +193,13 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
     requirements.push({ source_id: "neighborhoods",
       equals: { [neighborhoodField]: neighborhood } });
   }
-  let dateWindow = null;
   if (permitType || permitGroup) {
     const requirement = { source_id: "municity",
       ...(permitType ? { equals: { PermitType: permitType } }
         : { permit_group: permitGroup }) };
     if (parsed.permit_status) requirement.equals ??= {};
     if (parsed.permit_status) requirement.equals.PermStatus = parsed.permit_status.trim();
-    if (parsed.permit_days) {
-      dateWindow = recentCalendarDates(parsed.permit_days, now);
+    if (dateWindow) {
       requirement.event_date_from = dateWindow.from;
       requirement.event_date_to = dateWindow.to;
     }
@@ -155,9 +213,7 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
     check.status === "complete") ?? false;
   return { status: searchResult.complete_for_query ? "ready" :
     checksComplete && searchResult.next_cursor ? "paging" : "coverage_limited",
-    question, interpretation: { ...parsed, permit_type: permitType,
-      permit_group: permitGroup,
-      date_window: dateWindow }, criteria, search_result: searchResult,
+    question, interpretation, criteria, search_result: searchResult,
     context: getDataContext().entries.filter((entry) => ["commercial-parcel-query",
       "municipal-permit-group", "municipal-permit-date", "municipal-permit-status", "exact-parcel-join",
       "search-coverage"].includes(entry.id)) };

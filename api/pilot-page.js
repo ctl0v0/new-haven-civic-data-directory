@@ -10,13 +10,20 @@ const footer =
   "</main><footer>Independent research preview. Confirm consequential facts with the original source.</footer></body></html>";
 const login =
   '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>';
-const askHidden = process.env.QUERY_DEMO_ENABLED === "true" ? "" : " hidden";
+// The query workbench is visible only in the protected pilot Preview. A
+// production deployment never inherits it from a copied environment variable.
+export function queryWorkbenchVisible(env = process.env) {
+  return (env.VERCEL_ENV === "preview" &&
+    env.VERCEL_GIT_COMMIT_REF === "codex/parcel-pilot") ||
+    (!env.VERCEL_ENV && env.QUERY_DEMO_ENABLED === "true");
+}
+const askHidden = queryWorkbenchVisible() ? "" : " hidden";
 const app = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
     <button id="browse-tab" type="button" role="tab" aria-selected="false" aria-controls="browse-view">Browse parcel map</button>
     <button id="guide-tab" type="button" role="tab" aria-selected="false" aria-controls="guide-view">Data guide</button>
-    <button id="ask-tab" type="button" role="tab" aria-selected="false" aria-controls="ask-view"${askHidden}>Ask the data</button>
+    <button id="ask-tab" type="button" role="tab" aria-selected="false" aria-controls="ask-view"${askHidden}>Test a question</button>
   </nav>
   <div id="records-view" role="tabpanel" aria-labelledby="records-tab">
   <section class="search-panel" aria-labelledby="page-title">
@@ -85,6 +92,7 @@ const app = `
         <p id="browse-intro">Pan and zoom, then select a parcel. Full records load only after you request them.</p>
         <div id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and official photo.</p></div>
         <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
+        <div id="browse-record-actions" class="browse-record-actions" hidden><button id="browse-open-records" type="button">View full records without map</button></div>
         <details id="browse-map-layers" class="browse-map-layers" hidden><summary>Map layers and sources</summary><p class="meta">The highlighted boundary is the selected City parcel. Nearby features are map context.</p><div id="browse-map-layer-list"></div><div id="browse-map-context-notes" class="map-context-notes"></div></details>
         <div id="browse-data-slot"></div>
         <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
@@ -98,11 +106,12 @@ const app = `
   </section>
   <section id="ask-view" role="tabpanel" aria-labelledby="ask-tab" hidden>
     <div class="ask-workspace">
-      <div class="ask-heading"><p class="eyebrow">Private cross-parcel demo</p><h1>Ask the parcel data</h1><p>Search indexed official records across parcels. The interpretation, source checks, and original records remain visible.</p></div>
+      <div class="ask-heading"><p class="eyebrow">Private search workbench</p><h1>Test a question</h1><p>Ask about indexed New Haven parcels. Each result shows the interpreted filters, official record links, and source coverage. An incomplete result is a set of matches to review, not an all-parcels answer.</p></div>
       <form id="ask-form"><label for="ask-question">Question</label><div class="ask-form-row"><input id="ask-question" type="search" maxlength="500" required placeholder="Show commercial parcels with electrical permits pulled in the past 30 days"><button type="submit">Search records</button></div></form>
+      <div class="ask-examples"><span>Try:</span><button type="button" data-ask-example="Show parcels with electrical permits pulled in the past 30 days">Electrical permits · 30 days</button><button type="button" data-ask-example="Show commercial parcels with electrical permits pulled in the past 30 days">Commercial + electrical · shows the current gap</button></div>
       <p id="ask-status" role="status" aria-live="polite"></p>
       <div id="ask-interpretation" hidden></div>
-      <form id="ask-filter-form" class="ask-filter-form" hidden><p class="eyebrow">Refine the interpretation</p><label><input id="ask-commercial" type="checkbox"> Commercial use codes</label><label>Permit group <input id="ask-permit-group" type="text" maxlength="100" placeholder="Electrical"></label><label>Exact permit type <input id="ask-permit-type" type="text" maxlength="100"></label><label>Permit date: last <input id="ask-days" type="number" min="1" max="366" inputmode="numeric"> calendar days</label><label>City neighborhood <input id="ask-neighborhood" type="text" maxlength="80"></label><button type="submit" class="secondary">Run edited filters</button></form>
+      <form id="ask-filter-form" class="ask-filter-form" hidden><p class="eyebrow">Refine the interpretation</p><label><input id="ask-commercial" type="checkbox"> Commercial use codes</label><label>Permit group <input id="ask-permit-group" type="text" maxlength="100" placeholder="Electrical"></label><label>Exact permit type <input id="ask-permit-type" type="text" maxlength="100"></label><label>Published permit status <input id="ask-permit-status" type="text" maxlength="100"></label><label>Permit date: last <input id="ask-days" type="number" min="1" max="366" inputmode="numeric"> calendar days</label><label>City neighborhood <input id="ask-neighborhood" type="text" maxlength="80"></label><button type="submit" class="secondary">Run edited filters</button></form>
       <div id="ask-coverage" hidden></div>
       <ol id="ask-results" class="ask-results"></ol>
       <button id="ask-more" type="button" class="secondary" hidden>Load more parcels</button>

@@ -11,10 +11,24 @@ capability test for a wider natural-language search contract; each new term
 needs a published field or group, a checked join, context, and an explicit
 coverage boundary.
 
-The tab is hidden until `QUERY_DEMO_ENABLED=true` is set for the private
-Preview deployment. Keep it disabled until the gates below pass. The API and
-MCP tools remain protected by the existing pilot credentials and report their
-own source limitations when called directly.
+The **Test a question** tab is visible on the protected `codex/parcel-pilot`
+Preview branch for source review. It shows partial matches and gaps explicitly;
+it does not claim the complete commercial example works. The tab stays hidden
+in production and other previews. Local development can set
+`QUERY_DEMO_ENABLED=true`. The API and MCP tools remain protected by the
+existing pilot credentials.
+
+The tester includes two example questions. The commercial example shows the
+official use-code blocker and keeps its interpreted filters visible. Unchecking
+Commercial use codes runs the edited fields through the same validation and
+indexed search without a second AI call. The Electrical-only example returns
+linked matches with source counts, unmatched counts, dates and source links.
+From the browse parcel map, **View full records without map** moves the loaded
+parcel into the wide Search records view and preserves the selected section;
+the `view=records` URL restores that map-free layout.
+The tester reads the fresh, validated municipal permit-type catalog from the
+private index when available and falls back to the live official catalog when
+it is absent or stale.
 
 ## Release gates for the Electrical Permit example
 
@@ -45,9 +59,11 @@ own source limitations when called directly.
 4. In Preview, run “Show commercial parcels with electrical permits pulled in
    the past 30 days.” Check the interpreted date range and use-code set, page
    through every result, then verify several returned permit IDs and parcel
-   keys on their linked official records. Confirm the deployment can use AI
-   Gateway through its OIDC token before setting `QUERY_DEMO_ENABLED=true`.
-   Only then enable the tab.
+   keys on their linked official records. The exact baseline wording is parsed
+   without AI Gateway; other natural-language phrasing uses the constrained
+   interpreter. Confirm AI Gateway through the deployment's OIDC token before
+   relying on broader phrasing. Only call the commercial result complete once
+   the source gates above pass.
 
 “Pulled” is the published `PermitDate`. The permit's published status remains
 separate. “Commercial” means City parcels whose published `use_code` is in the
@@ -93,5 +109,5 @@ The City parcel layer publishes 246 distinct `use_code` values without a
 coded-value domain or official label in its layer metadata. The reviewed code
 dictionary remains empty. This blocks a complete answer to the **commercial**
 part of the example until an official New Haven code definition is obtained.
-The Ask tab remains gated off; the protected API/MCP tools return coverage
-limits rather than representing these partial checks as all parcels.
+The private question tester and protected API/MCP tools return coverage limits
+rather than representing these partial checks as all parcels.
