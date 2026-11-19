@@ -22,7 +22,7 @@ export const GIS_INDEX_FIELDS = Object.freeze({
   cmt: ["objectid", "district_num", "district_name", "district_manager",
     "dm_email", "dm_phone", "neighborhood_specialist", "ns_email", "ns_phone",
     "cmt_chair", "cmt_email", "cmt_phone"],
-  "managed-lots": ["objectid", "mbp"],
+  "managed-lots": ["objectid", "mbp", "status", "full_address", "join_info"],
   "ct-brownfields": ["OBJECTID", "Site_Town", "Site_Name", "Site_Addre",
     "Site_Parce", "Parcel_Acr", "Program", "Program_Ap", "Funding_So"],
   "metered-parking-spaces": ["objectid", "meternum", "facilityid", "post_num",

@@ -93,10 +93,12 @@ test("cross-source field allowlists follow the official fields stored in the ind
   assert.ok(SEARCH_FIELDS.parcels.includes("owwner_name_2"));
   assert.ok(SEARCH_FIELDS.cmt.includes("cmt_chair"));
   assert.ok(SEARCH_FIELDS["ct-liquor-permits"].includes("expire_date"));
+  assert.ok(SEARCH_FIELDS["managed-lots"].includes("status"));
   const discovered = searchCapabilities().indexed_source_fields;
   assert.ok(discovered.parcels.equals.includes("owwner_name_2"));
   assert.ok(discovered.parcels.number_gte.includes("units_commercial"));
   assert.ok(discovered.municity.equals.includes("PermitType"));
+  assert.ok(discovered["managed-lots"].equals.includes("mbp"));
 });
 
 test("GIS inventory compares official IDs and count before indexing any rows", async () => {

@@ -29,7 +29,7 @@ export const INDEX_DATASETS = Object.freeze({
   ...Object.fromEntries(Object.entries(gis).map(([id, url]) => [id,
     { id, kind: "arcgis", url, cadence: "daily" }])),
   "managed-lots": { id: "managed-lots", kind: "arcgis", url: LAYERS.managedLots,
-    cadence: "daily", gate: "City MBP field semantics and complete parcel-key matches need verification before broad indexing." },
+    cadence: "daily", gate: "Only exact published MBP to current City MBLU matches are searchable; unmatched rows remain coverage gaps. Source status codes are returned as published and do not establish current vacancy or availability." },
   "transit-stops": {
     id: "transit-stops", kind: "arcgis",
     url: MAP_LAYERS.find((layer) => layer.id === "transit-stops").url,

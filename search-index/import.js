@@ -214,8 +214,8 @@ export async function failRun(runId, error) {
 
 export async function importArcgisSource(sourceId) {
   const definition = INDEX_DATASETS[sourceId];
-  if (definition?.kind !== "arcgis" || sourceId === "managed-lots")
-    throw new Error("GIS source has no cleared full-index release gate");
+  if (definition?.kind !== "arcgis")
+    throw new Error("Unknown GIS index source");
   const runId = await beginRun(sourceId);
   try {
     const inventory = await arcgisInventory(sourceId);

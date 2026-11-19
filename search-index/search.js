@@ -16,6 +16,7 @@ export const SEARCH_FIELDS = Object.freeze({
   neighborhoods: GIS_INDEX_FIELDS.neighborhoods,
   cmt: GIS_INDEX_FIELDS.cmt,
   "ct-brownfields": GIS_INDEX_FIELDS["ct-brownfields"],
+  "managed-lots": GIS_INDEX_FIELDS["managed-lots"],
   "ct-liquor-permits": STATE_ROSTERS["ct-liquor-permits"].fields,
   "ct-child-care-licenses": STATE_ROSTERS["ct-child-care-licenses"].fields,
   "ct-cannabis-retail": STATE_ROSTERS["ct-cannabis-retail"].fields,

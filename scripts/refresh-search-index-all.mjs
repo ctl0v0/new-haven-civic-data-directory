@@ -12,7 +12,7 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
 const jobs = mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
-  ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup",
+  ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup", "managed-lots",
     "ct-brownfields", "metered-parking-spaces", "transit-stops"].map((id) =>
     [id, () => importArcgisSource(id)]),
   ...["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].map((id) =>
