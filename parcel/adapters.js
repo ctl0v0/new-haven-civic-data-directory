@@ -1,5 +1,6 @@
 import { load } from "cheerio";
 import { arcgisToGeoJSON } from "@terraformer/arcgis";
+import { createHash } from "node:crypto";
 import { LAYERS, source, SOURCES } from "./config.js";
 import {
   arcgis,
@@ -11,6 +12,7 @@ import {
 } from "./http.js";
 import { parseLciProperty } from "./lci.js";
 import { normalizeAddress } from "./resolve.js";
+import { stateLocationMatches } from "./state-locations.js";
 import { AGENTS, MASTER, PRINCIPALS, entityChildren, findOfficialOwnerEntity, legalName } from "./business-registry.js";
 
 const ISO = () => new Date().toISOString();
@@ -246,6 +248,44 @@ async function addressRecords(parcel) {
         "Address points inside the parcel are spatial candidates; they do not prove a unit or legal address.",
     },
   );
+}
+
+async function stateLocationRecords(parcel, sourceId) {
+  const checked = await stateLocationMatches(sourceId, parcel);
+  if (checked.notLinked) return notLinked(sourceId, checked.warning);
+  const items = checked.matches.map(({ row, siteField, credentialField, datasetId, addressPointIds }) => {
+    const credential = text(row[credentialField]);
+    const hash = createHash("sha256").update(JSON.stringify(row)).digest("hex").slice(0, 12);
+    const effective = sourceId === "ct-liquor-permits" ? row.effective_date : row.effectivedate;
+    const expiration = sourceId === "ct-liquor-permits" ? row.expire_date : row.expirationdate;
+    const sourceUrl = new URL(`https://data.ct.gov/resource/${datasetId}.json`);
+    if (credential) sourceUrl.searchParams.set(credentialField, credential);
+    const attributes = {
+      ...row,
+      site_address_as_published: row[siteField],
+      site_address_source_field: siteField,
+      ...(sourceId === "ct-child-care-licenses" ? { license_type: row.licensetype } : {}),
+      ...(sourceId === "ct-cannabis-retail" ? { license_type: row.type } : {}),
+      ...(expiration ? { expiration_date: date(expiration) } : {}),
+    };
+    return {
+      ...record(`${credential ?? "row"}:${hash}`, sourceId, attributes, {
+        eventDate: date(effective),
+        match: {
+          method: "state-site-address-city-address-point-unique-parcel",
+          state_site_address_field: siteField,
+          city_address_point_objectids: addressPointIds,
+          city_parcel_objectid: parcel.attributes.objectid,
+          city_parcel_id: parcel.attributes.parcel_id,
+        },
+        sourceUrl: sourceUrl.href,
+        note: "The State site address matches City address points that resolve only to this parcel. The source does not publish a City parcel identifier; mailing or backer addresses were not used for this join.",
+      }),
+      source_record_id: credential ?? hash,
+      category: sourceId === "ct-liquor-permits" ? "Permit" : "License",
+    };
+  });
+  return result(sourceId, items, { partial: checked.partial, warning: checked.warning });
 }
 
 function pointOnSegment([x, y], [ax, ay], [bx, by]) {
@@ -1668,6 +1708,9 @@ const ADAPTERS = Object.freeze({
   "business-master": registryMasterRecords,
   "business-principals": (p) => registryChildRecords(p, "business-principals", PRINCIPALS, "business_id"),
   "business-agents": (p) => registryChildRecords(p, "business-agents", AGENTS, "business_key"),
+  "ct-liquor-permits": (p) => stateLocationRecords(p, "ct-liquor-permits"),
+  "ct-child-care-licenses": (p) => stateLocationRecords(p, "ct-child-care-licenses"),
+  "ct-cannabis-retail": (p) => stateLocationRecords(p, "ct-cannabis-retail"),
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
 });

@@ -372,6 +372,33 @@ export const SOURCES = Object.freeze([
       "Credential addresses lack a verified parcel identifier. Address-only matches are excluded from parcel records.",
   },
   {
+    id: "ct-liquor-permits",
+    group: "business",
+    title: "Connecticut liquor permit locations",
+    url: "https://data.ct.gov/d/gwv2-eswx",
+    mode: "live",
+    coverage:
+      "State permit_address is a permit location, distinct from the backer's address. A row is linked only when that site address matches City address points that resolve exclusively to this parcel. Published status and expiration are retained; a permit does not prove present operation.",
+  },
+  {
+    id: "ct-child-care-licenses",
+    group: "business",
+    title: "Connecticut child care and youth camp licenses",
+    url: "https://data.ct.gov/d/h8mr-dn95",
+    mode: "live",
+    coverage:
+      "State address2 is the licensed program location and is kept distinct from mailaddress2. A row is linked only when the site address matches City address points that resolve exclusively to this parcel. Published license status, type and dates are retained.",
+  },
+  {
+    id: "ct-cannabis-retail",
+    group: "business",
+    title: "Connecticut operating cannabis retail locations",
+    url: "https://data.ct.gov/d/42yd-3x3d",
+    mode: "live",
+    coverage:
+      "The State roster identifies operating cannabis and medical marijuana retail locations. Its street field is linked only when City address points resolve exclusively to this parcel. The roster does not publish an individual status or update date for each row.",
+  },
+  {
     id: "inspections",
     group: "activity",
     title: "Inspections and enforcement",

@@ -1,7 +1,8 @@
 import { getCache } from "@vercel/functions";
 
 const memory = new Map();
-const CACHE_VERSION = "parcel-v14";
+const pending = new Map();
+const CACHE_VERSION = "parcel-v15";
 
 export class SourceError extends Error {
   constructor(message, status = 502) {
@@ -145,26 +146,35 @@ export async function cached(key, producer, ttl = 300) {
   const cacheKey = `${CACHE_VERSION}:${key}`;
   const local = memory.get(cacheKey);
   if (local && local.expires > Date.now()) return local.value;
-  let remote;
+  if (pending.has(cacheKey)) return pending.get(cacheKey);
+  const request = (async () => {
+    let remote;
+    try {
+      remote = await getCache({ namespace: "new-haven-parcel" }).get(cacheKey);
+    } catch {
+      /* local test/dev */
+    }
+    if (remote) return remote;
+    const value = await producer();
+    if (memory.size > 300) memory.clear();
+    memory.set(cacheKey, { value, expires: Date.now() + ttl * 1000 });
+    try {
+      if (JSON.stringify(value).length < 1_800_000)
+        await getCache({ namespace: "new-haven-parcel" }).set(cacheKey, value, {
+          ttl,
+          name: "parcel source lookup",
+        });
+    } catch {
+      /* cache failure must not hide source results */
+    }
+    return value;
+  })();
+  pending.set(cacheKey, request);
   try {
-    remote = await getCache({ namespace: "new-haven-parcel" }).get(cacheKey);
-  } catch {
-    /* local test/dev */
+    return await request;
+  } finally {
+    pending.delete(cacheKey);
   }
-  if (remote) return remote;
-  const value = await producer();
-  if (memory.size > 300) memory.clear();
-  memory.set(cacheKey, { value, expires: Date.now() + ttl * 1000 });
-  try {
-    if (JSON.stringify(value).length < 1_800_000)
-      await getCache({ namespace: "new-haven-parcel" }).set(cacheKey, value, {
-        ttl,
-        name: "parcel source lookup",
-      });
-  } catch {
-    /* cache failure must not hide source results */
-  }
-  return value;
 }
 
 export function json(value, status = 200) {

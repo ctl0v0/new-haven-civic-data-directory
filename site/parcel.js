@@ -3,7 +3,7 @@ const SHOW_SNAPSHOT = true;
 const groups = [
   ["property", "Building and addresses", "City parcel fields, assessment details, valuation rows, and address points on the parcel."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
-  ["business", "Businesses and occupants in records", "Municipal license and occupant rows associated with this parcel. The same LLC can also be named as owner; a license does not confirm that it occupies the building."],
+  ["business", "Businesses and occupants in records", "Municipal parcel records and State licensed locations joined through City address points. A license does not prove current occupancy or operation."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
@@ -38,6 +38,9 @@ const sourceNames = {
   "business-principals": "CT owner LLC principals",
   "business-agents": "CT owner LLC agent",
   "state-licenses": "CT credentials",
+  "ct-liquor-permits": "CT liquor permits",
+  "ct-child-care-licenses": "CT child care and youth camps",
+  "ct-cannabis-retail": "CT cannabis retail locations",
   "lci-cases": "LCI cases",
   "managed-lots": "LCI managed lots",
   planning: "Planning cases",
@@ -405,6 +408,12 @@ function recordStatus(item) {
 }
 function recordTitle(item) {
   const a = item.attributes ?? {};
+  if (item.source_id === "ct-liquor-permits")
+    return brief([a.dba ?? a.backer ?? "State liquor permit", a.credential].filter(Boolean).join(" · "), 120);
+  if (item.source_id === "ct-child-care-licenses")
+    return brief([a.name ?? "Child care or youth camp license", a.licensenumber].filter(Boolean).join(" · "), 120);
+  if (item.source_id === "ct-cannabis-retail")
+    return brief([a.dba ?? a.business ?? "Cannabis retail location", a.license].filter(Boolean).join(" · "), 120);
   if (item.category === "Permit")
     return brief([a.PermitType, a.PermitNo ?? a.PermitNumber].filter(Boolean).join(" · ") || "Permit record", 120);
   if (item.category === "Application")
@@ -522,6 +531,12 @@ function recordDescription(item) {
     return [a.license_type, a.recorded_address, a.expiration_date ? `Expiration listed: ${shortDate(a.expiration_date)}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "municipal-occupants")
     return [a.occupancy_type, a.recorded_address, a.inactive === true ? "Marked inactive" : null].filter(Boolean).join(" · ");
+  if (item.source_id === "ct-liquor-permits")
+    return [a.permit_address, a.status, a.expire_date ? `Expires ${a.expire_date}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "ct-child-care-licenses")
+    return [a.licensetype, a.address2, a.status, a.expirationdate ? `Expires ${shortDate(a.expirationdate)}` : null].filter(Boolean).join(" · ");
+  if (item.source_id === "ct-cannabis-retail")
+    return [a.type, a.street, "State operating-location roster; no row-level status published"].filter(Boolean).join(" · ");
   if (item.source_id === "business-master")
     return [a.entity_type, a.alei ? `ALEI ${a.alei}` : null, a.registry_status ? `Registry status: ${a.registry_status}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "business-principals")
@@ -797,6 +812,26 @@ function appendRecord(parent, item) {
       ["Agent phone", item.attributes.agent_phone],
       ["Agent email", item.attributes.agent_email],
       ["Agent business address", item.attributes.agent_business_address],
+    ].filter(([, value]) => value)
+    : item.source_id === "ct-liquor-permits" ? [
+      ["Permit location", item.attributes.permit_address],
+      ["Credential", item.attributes.credential],
+      ["Published status", item.attributes.status],
+      ["Effective date", item.attributes.effective_date],
+      ["Expiration date", item.attributes.expire_date],
+    ].filter(([, value]) => value)
+    : item.source_id === "ct-child-care-licenses" ? [
+      ["Program location", item.attributes.address2],
+      ["License type", item.attributes.licensetype],
+      ["License number", item.attributes.licensenumber],
+      ["Published status", item.attributes.status],
+      ["Expiration date", shortDate(item.attributes.expirationdate)],
+    ].filter(([, value]) => value)
+    : item.source_id === "ct-cannabis-retail" ? [
+      ["Retail location", item.attributes.street],
+      ["Retailer type", item.attributes.type],
+      ["License", item.attributes.license],
+      ["Business", item.attributes.business],
     ].filter(([, value]) => value)
     : item.source_id === "municity" && item.category === "Permit" ? [
       ["Permit number", item.attributes.PermitNo],
@@ -1526,7 +1561,7 @@ function renderTimelineFilters(data, qs, version) {
   };
   quickFilterSelect(quick, "Category", "All categories", data.facets?.category, timelineFilters.category,
     (value) => municipalCategoryTitles[value] ?? value, (value) => update("category", value));
-  quickFilterSelect(quick, "Published work type", "All work types", data.facets?.record_type, timelineFilters.record_type,
+  quickFilterSelect(quick, "Published record type", "All record types", data.facets?.record_type, timelineFilters.record_type,
     (value) => value, (value) => update("record_type", value));
   quickFilterSelect(quick, "Published status", "All statuses", data.facets?.source_status, timelineFilters.source_status,
     (value) => value, (value) => update("source_status", value));
@@ -1560,8 +1595,8 @@ function renderTimelineFilters(data, qs, version) {
   const details = el("details", null, "filter-drawer");
   details.append(el("summary", `More filters${filterCount(timelineFilters) ? ` · ${filterCount(timelineFilters)} applied` : ""}`));
   const form = el("form", null, "filter-form");
-  filterChoices(form, "category", "Municipal category", data.facets?.category, timelineFilters.category, (value) => municipalCategoryTitles[value] ?? value);
-  filterChoices(form, "record_type", "Published work type", data.facets?.record_type, timelineFilters.record_type, (value) => value);
+  filterChoices(form, "category", "Record category", data.facets?.category, timelineFilters.category, (value) => municipalCategoryTitles[value] ?? value);
+  filterChoices(form, "record_type", "Published record type", data.facets?.record_type, timelineFilters.record_type, (value) => value);
   filterChoices(form, "source_id", "Official source", data.facets?.source_id, timelineFilters.source_id, sourceName);
   filterChoices(form, "source_status", "Exact published status", data.facets?.source_status, timelineFilters.source_status, (value) => value);
   const dates = el("fieldset", null, "filter-fieldset filter-dates");
@@ -1647,7 +1682,7 @@ function renderFilters(id, data, qs, version) {
     saveDataUrl();
     void loadGroup(id, $(`group-${id}`), qs, version);
   };
-  quickFilterSelect(quick, "Published work type", "All work types", data.facets?.record_type, current.record_type,
+  quickFilterSelect(quick, "Published record type", "All record types", data.facets?.record_type, current.record_type,
     (value) => value, (value) => update("record_type", value));
   quickFilterSelect(quick, "Published status", "All statuses", data.facets?.source_status, current.source_status,
     (value) => value, (value) => update("source_status", value));
@@ -1689,8 +1724,8 @@ function renderFilters(id, data, qs, version) {
   const details = el("details", null, "filter-drawer");
   details.append(el("summary", `More filters${amount ? ` · ${amount} applied` : ""}`));
   const form = el("form", null, "filter-form");
-  filterChoices(form, "category", "Municipal category", data.facets?.category, current.category, (value) => municipalCategoryTitles[value] ?? value);
-  filterChoices(form, "record_type", "Published work type", data.facets?.record_type, current.record_type, (value) => value);
+  filterChoices(form, "category", "Record category", data.facets?.category, current.category, (value) => municipalCategoryTitles[value] ?? value);
+  filterChoices(form, "record_type", "Published record type", data.facets?.record_type, current.record_type, (value) => value);
   filterChoices(form, "source_id", "Official source", data.facets?.source_id, current.source_id, sourceName);
   if (["activity", "business", "ownership"].includes(id)) {
     const definitions = new Map((data.display_groups ?? []).map((entry) => [entry.key, entry.title]));
@@ -1747,7 +1782,7 @@ function kindKey(item, id) {
 function orderedKinds(id, facets) {
   const preferred = id === "ownership"
     ? ["owner_names", "owner_registry", "owner_history", "unclassified"]
-    : id === "business" ? ["License", "Occupant"]
+    : id === "business" ? ["License", "Permit", "Occupant"]
       : ["Permit", "License", "Application", "Complaint", "Contact", "Document", "Certificate", "Occupant"];
   return Object.keys(facets?.kind ?? {}).sort((a, b) => {
     const aRank = preferred.indexOf(a);

@@ -1113,11 +1113,15 @@ test("a catalog gap does not turn a complete live business check into a partial 
       return response({ rows: [{ Parcel_ID: 42, PrintKey: "12/34" }], total: 1 });
     if (url.pathname.endsWith("/Parcel/42/Children"))
       return response(Object.fromEntries(["Document", "Application", "Complaint", "Contact", "License", "Permit", "Occupant", "Certificate"].map((category) => [category, []])));
+    if (url.pathname.includes("New_Haven_Addresses_Authoritative_view"))
+      return response({ features: [] });
     throw Error(`Unexpected source: ${url.hostname}`);
   };
   const out = await getGroup("business", p);
   assert.equal(out.partial, false);
   assert.equal(out.sources.find((source) => source.source_id === "state-licenses").status, "not_integrated");
+  assert.ok(["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].every((id) =>
+    out.sources.find((source) => source.source_id === id).status === "not_linked"));
   assert.deepEqual(out.items, []);
 });
 

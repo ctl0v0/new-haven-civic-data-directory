@@ -23,7 +23,7 @@ const fields = [
   ["objectid", "City GIS feature ID", "City parcel layer", "Identifies the exact selected GIS feature."],
   ["source_id", "Source adapter", "This service", "Identifies the official source checked for a returned row."],
   ["source_record_id", "Source record identifier", "Official source", "Preserves the published row or entity identifier when supplied."],
-  ["category", "Source record category", "Official source", "Municipal Permit, Application, License and other published categories remain distinct."],
+  ["category", "Record category", "Official source and adapter", "Municipal categories remain distinct. State liquor permits are grouped as Permit; child care and cannabis credentials are grouped as License."],
   ["attributes", "Returned record fields", "Official source and adapter", "Contains source fields returned by this adapter, sometimes with labeled normalized fields. Check source coverage for fields omitted from the public response."],
   ["event_date", "Dated record value", "Official source", "A source event or record date, not a change detected by this service."],
   ["source_url", "Original record link", "Official source", "Open the official record for consequential use."],
@@ -42,7 +42,7 @@ export function schemaGuide() {
     title: "New Haven parcel data guide",
     methods, fields, groups: GROUPS, display_groups: DISPLAY_GROUPS,
     filters: [
-      { key: "category", label: "Municipal category", applies_to: ["records", "feed"], multiple: true },
+      { key: "category", label: "Record category", applies_to: ["records", "feed"], multiple: true },
       { key: "record_type", label: "Exact published permit, application or license type", applies_to: ["records", "feed"], multiple: true },
       { key: "source_id", label: "Official source", applies_to: ["records", "feed"], multiple: true },
       { key: "display_group", label: "Published status reading group", applies_to: ["records"], multiple: true },

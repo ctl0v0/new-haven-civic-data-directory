@@ -67,7 +67,8 @@ export async function parcelOverview(id, objectid = null) {
   const preferred = {
     property: ["parcels", "assessor-subareas", "assessor-valuations"],
     ownership: ["parcel-owner", "assessor-owner", "business-master"],
-    business: ["municipal-business-licenses", "municipal-occupants"],
+    business: ["municipal-business-licenses", "municipal-occupants",
+      "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"],
     activity: ["municity", "lci-cases", "managed-lots"],
     geography: ["zoning", "neighborhoods"],
     environment: ["ct-brownfields"],
@@ -83,6 +84,9 @@ export async function parcelOverview(id, objectid = null) {
       item.source_id === "business-master" ? a.legal_name :
       item.source_id === "municipal-business-licenses" ? a.business_name :
       item.source_id === "municipal-occupants" ? a.occupant_name :
+      item.source_id === "ct-liquor-permits" ? a.dba ?? a.backer :
+      item.source_id === "ct-child-care-licenses" ? a.name :
+      item.source_id === "ct-cannabis-retail" ? a.dba ?? a.business :
       item.source_id === "zoning" ? a.zone_code ? `Zoning district ${a.zone_code}` : null :
       item.source_id === "neighborhoods" ? a.neighborhood_name ?? a.name :
       item.source_id === "ct-brownfields" ? a.site_name :
@@ -186,7 +190,8 @@ export async function parcelFeed(
   const key = `feed:${feature.attributes.parcel_id}:${feature.attributes.objectid}`;
   const data = await cached(key, async () => {
     const sources = await Promise.all(
-      ["parcel-sale", "assessor-sales", "municity", "lci-cases", "managed-lots"].map(
+      ["parcel-sale", "assessor-sales", "municity", "lci-cases", "managed-lots",
+        "ct-liquor-permits", "ct-child-care-licenses"].map(
         (name) => getSourceRecords(name, feature),
       ),
     );

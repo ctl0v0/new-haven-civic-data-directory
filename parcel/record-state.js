@@ -50,10 +50,12 @@ export function displayGroup(item, asOf = new Date()) {
     return { key: "owner_registry", basis: "Matched State entity record", as_of: checkedOn };
   if (["assessor-sales", "parcel-sale"].includes(item.source_id))
     return { key: "owner_history", basis: item.source_id === "parcel-sale" ? "Published City parcel sale fields" : "Published assessor ownership history row", as_of: checkedOn };
+  if (item.source_id === "ct-cannabis-retail")
+    return { key: "reported", basis: "Included in the State operating retail location roster at lookup; no row-level status or update date is published", as_of: checkedOn };
   const status = publishedStatus(item);
   const normalized = String(status ?? "").toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const a = item.attributes ?? {};
-  const isLicense = item.category === "License" || item.source_id === "municipal-business-licenses";
+  const isLicense = item.category === "License" || item.source_id === "municipal-business-licenses" || item.source_id === "ct-liquor-permits";
   const expiration = isLicense ? dateOnly(a.expiration_date ?? a.ExpirationDate) : null;
   if (pastWords.test(normalized))
     return { key: "past", basis: "Published terminal status", as_of: checkedOn };
