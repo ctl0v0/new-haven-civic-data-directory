@@ -1,6 +1,9 @@
 name: Refresh NHPS attendance zones
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/refresh-nhps-attendance.yml]
   schedule:
     - cron: '20 13 * * 1'
 permissions:
