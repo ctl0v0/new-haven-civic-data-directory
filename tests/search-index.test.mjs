@@ -75,6 +75,12 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
     "parcel_only_pending_complete_enumeration");
   assert.equal(catalog.find((entry) => entry.source_id === "parcel-owner").index_source_id,
     "parcels");
+  assert.equal(catalog.find((entry) => entry.source_id === "municipal-business-licenses")
+    .search_mode, "parcel_only_pending_complete_enumeration");
+  assert.equal(catalog.find((entry) => entry.source_id === "business-master")
+    .index_source_id, null);
+  assert.match(catalog.find((entry) => entry.source_id === "municity").release_gate,
+    /Permit parent rows/);
   const coverage = await getSearchCoverage();
   assert.equal(coverage.index_status, "unconfigured");
   assert.ok(coverage.sources.every((entry) => !entry.complete));

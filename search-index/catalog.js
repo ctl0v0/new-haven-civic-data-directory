@@ -5,9 +5,7 @@ import { MUNICIPAL_PERMIT_TYPES_URL } from "../parcel/permit-types.js";
 // One physical import may serve several source records shown on a parcel.
 const alias = {
   "parcel-assessment": "parcels", "parcel-owner": "parcels", "parcel-sale": "parcels",
-  "cmt-contacts": "cmt", "municipal-business-licenses": "municity",
-  "municipal-occupants": "municity", "business-principals": "business-master",
-  "business-agents": "business-master",
+  "cmt-contacts": "cmt",
 };
 const gis = {
   parcels: LAYERS.parcels, addresses: LAYERS.addresses,
@@ -22,6 +20,8 @@ const parcelOnly = new Set([
   "assessor", "assessor-owner", "assessor-sales", "assessor-valuations",
   "assessor-subareas", "assessor-land", "assessor-buildings",
   "assessor-extra-features", "assessor-outbuildings", "lci-cases",
+  "municipal-business-licenses", "municipal-occupants",
+  "business-master", "business-principals", "business-agents",
 ]);
 const stateLocations = new Set(["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"]);
 
@@ -38,13 +38,11 @@ export const INDEX_DATASETS = Object.freeze({
   },
   "school-attendance": { id: "school-attendance", kind: "official-snapshot", cadence: "daily" },
   municity: { id: "municity", kind: "municipal-type", cadence: "daily",
-    gate: "Types at the municipal 2,000-row search limit cannot be indexed completely." },
+    gate: "Only municipal Permit parent rows are indexed by published type. Applications, complaints, documents, contacts, licenses and occupants remain live parcel-only. Types at the 2,000-row search limit cannot be indexed completely." },
   "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",
     cadence: "daily" },
   ...Object.fromEntries([...stateLocations].map((id) => [id,
     { id, kind: "socrata-location", cadence: "daily" }])),
-  "business-master": { id: "business-master", kind: "registry-owner-join", cadence: "daily",
-    gate: "Only unique legal-name and mailing-address matches are linked." },
 });
 
 export function indexSourceCatalog() {
