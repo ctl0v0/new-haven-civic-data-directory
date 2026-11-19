@@ -1,4 +1,5 @@
 name: Audit private parcel keys and address candidates
+# Recheck the active permit-type runs after the full official type refresh.
 on:
   push:
     branches: [main]
