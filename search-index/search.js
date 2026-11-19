@@ -331,7 +331,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   ) SELECT page.city_parcel_id, page.city_objectid,
     p.fields->>'property_address' AS city_address,
     p.source_url AS city_parcel_source_url,
-    r.record_id, r.source_url, r.published_type, r.published_status,
+    r.source_id, r.record_id, r.source_url, r.published_type, r.published_status,
     r.event_date, r.fields,
     links.city_address_objectids, links.match_methods
     FROM page JOIN search_records r ON r.run_id = ${recordRun}

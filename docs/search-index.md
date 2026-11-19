@@ -77,7 +77,7 @@ Omit `permit_types` to search every currently indexed type in the official catal
 
 Continue `next_cursor` until absent. A last page with `complete_for_query: false` is still incomplete and cannot establish that no match exists. PermitDate is a published permit date; do not relabel it an application approval date. The live permit search remains the path for linked application status, review tasks and contractor contact roles.
 
-To inspect every indexed State liquor location linked to one City parcel, including historical rows the official roster still returns:
+To check for exact State liquor roster matches on a selected City parcel, including historical rows if the official roster still returns them:
 
 ```json
 {"source_id":"ct-liquor-permits","city_parcel_id":"12846","city_objectid":"4157","limit":25}
