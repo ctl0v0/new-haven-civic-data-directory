@@ -1,5 +1,6 @@
 name: Refresh private parcel search index
-# Updating this workflow on main verifies the connection and starts a daily import when enabled.
+# Updating this workflow on main verifies the connection and refreshes exact permit types.
+# The scheduled daily run refreshes City and State baselines.
 on:
   push:
     branches: [main]
@@ -55,7 +56,7 @@ jobs:
           elif [ "$SCHEDULE" = '47 7 * * *' ]; then
             mode=daily
           elif [ "$EVENT_NAME" = push ]; then
-            mode=daily
+            mode=hourly
           else
             mode="$REQUESTED_MODE"
           fi
@@ -83,7 +84,10 @@ jobs:
         env:
           SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
           INDEX_PERMIT_TYPES: ${{ vars.INDEX_PERMIT_TYPES || '["Hood - C"]' }}
+          SEARCH_DATABASE_READER_PASSWORD: ${{ secrets.SEARCH_DATABASE_READER_PASSWORD }}
+          SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
           REFRESH_MODE: ${{ steps.mode.outputs.value }}
         run: |
           npm run index:refresh:all -- "$REFRESH_MODE"
           if [ "$REFRESH_MODE" = daily ]; then npm run index:prune; fi
+          if [ "$REFRESH_MODE" = hourly ]; then npm run index:smoke; fi

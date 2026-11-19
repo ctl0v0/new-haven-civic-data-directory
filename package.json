@@ -7,6 +7,7 @@
     "test": "node --test tests/*.test.mjs",
     "index:migrate": "node scripts/migrate-search-index.mjs",
     "index:verify-writer": "node scripts/verify-search-index-writer.mjs",
+    "index:smoke": "node scripts/smoke-search-index.mjs",
     "index:grant-reader": "node scripts/grant-search-index-reader.mjs",
     "index:refresh": "node scripts/refresh-search-index.mjs",
     "index:refresh:all": "node scripts/refresh-search-index-all.mjs",
