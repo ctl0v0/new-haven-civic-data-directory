@@ -78,12 +78,15 @@ export function parseNhpsSearch(html) {
     const href = anchor.attr("href") ?? "";
     const id = href.match(/\/(\d+)-[^/]+$/)?.[1];
     if (!id) throw new SourceError("NHPS attendance row has no published identifier");
+    const sourceUrl = new URL(href, NHPS_ATTENDANCE_URL);
+    if (sourceUrl.origin !== new URL(NHPS_ATTENDANCE_URL).origin)
+      throw new SourceError("NHPS attendance row link left the official source");
     const [street_name, start, end, k8_school, high_school] = cells.toArray()
       .map((cell) => $(cell).text().replace(/\s+/g, " ").trim());
     if (!street_name || !k8_school || !high_school || !rowRange({ start, end }))
       throw new SourceError("NHPS attendance row has incomplete school or range fields");
     rows.push({ id: Number(id), street_name, start, end, k8_school,
-      high_school, source_url: new URL(href, NHPS_ATTENDANCE_URL).href });
+      high_school, source_url: sourceUrl.href });
   });
   const countText = form.text().match(/Results\s+(\d+)\s*-\s*(\d+)\s+of\s+(\d+)/i);
   if (countText && (Number(countText[2]) !== rows.length || Number(countText[3]) > rows.length))
