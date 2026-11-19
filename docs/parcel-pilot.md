@@ -4,7 +4,7 @@ This pilot starts from an official New Haven parcel record. It queries public so
 
 ## Run and configure
 
-Use Node.js 24 or later. Run `npm ci`, `npm test`, and `npm run build`. For a local Vercel preview, set the variables below in `.env.local` and run `npx vercel dev` in a linked Vercel project. Do not commit the env file.
+Use Node.js 24. Run `npm ci`, `npm test`, and `npm run build`. For a local Vercel preview, set the variables below in `.env.local` and run `npx vercel dev` in a linked Vercel project. Do not commit the env file.
 
 | Variable | Use |
 | --- | --- |
