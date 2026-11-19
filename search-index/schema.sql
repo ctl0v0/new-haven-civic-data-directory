@@ -13,9 +13,17 @@ CREATE TABLE IF NOT EXISTS search_source_runs (
   ambiguous_count integer NOT NULL DEFAULT 0,
   unlinked_count integer NOT NULL DEFAULT 0,
   source_updated_at timestamptz,
+  coverage_date_from date,
+  coverage_date_to date,
   warning text,
-  CHECK (expected_count IS NULL OR expected_count >= 0)
+  CHECK (expected_count IS NULL OR expected_count >= 0),
+  CHECK ((coverage_date_from IS NULL AND coverage_date_to IS NULL) OR
+    (coverage_date_from IS NOT NULL AND coverage_date_to IS NOT NULL AND
+      coverage_date_from <= coverage_date_to))
 );
+
+ALTER TABLE search_source_runs ADD COLUMN IF NOT EXISTS coverage_date_from date;
+ALTER TABLE search_source_runs ADD COLUMN IF NOT EXISTS coverage_date_to date;
 
 CREATE INDEX IF NOT EXISTS search_source_runs_lookup
   ON search_source_runs (source_id, scope_key, started_at DESC);

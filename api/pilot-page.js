@@ -10,11 +10,13 @@ const footer =
   "</main><footer>Independent research preview. Confirm consequential facts with the original source.</footer></body></html>";
 const login =
   '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>';
+const askHidden = process.env.QUERY_DEMO_ENABLED === "true" ? "" : " hidden";
 const app = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
     <button id="browse-tab" type="button" role="tab" aria-selected="false" aria-controls="browse-view">Browse parcel map</button>
     <button id="guide-tab" type="button" role="tab" aria-selected="false" aria-controls="guide-view">Data guide</button>
+    <button id="ask-tab" type="button" role="tab" aria-selected="false" aria-controls="ask-view"${askHidden}>Ask the data</button>
   </nav>
   <div id="records-view" role="tabpanel" aria-labelledby="records-tab">
   <section class="search-panel" aria-labelledby="page-title">
@@ -93,6 +95,19 @@ const app = `
   </section>
   <section id="guide-view" role="tabpanel" aria-labelledby="guide-tab" hidden>
     <div class="guide-shell"><aside class="guide-index" aria-label="Data guide navigation"><p class="eyebrow">Reference</p><h1>Data guide</h1><p>How the parcel records, REST API and MCP tools fit together.</p><nav id="guide-nav"></nav></aside><div id="guide-content" class="guide-content" aria-live="polite"></div><aside id="guide-example" class="guide-example" aria-label="Request and response example"></aside></div>
+  </section>
+  <section id="ask-view" role="tabpanel" aria-labelledby="ask-tab" hidden>
+    <div class="ask-workspace">
+      <div class="ask-heading"><p class="eyebrow">Private cross-parcel demo</p><h1>Ask the parcel data</h1><p>Search indexed official records across parcels. The interpretation, source checks, and original records remain visible.</p></div>
+      <form id="ask-form"><label for="ask-question">Question</label><div class="ask-form-row"><input id="ask-question" type="search" maxlength="500" required placeholder="Show commercial parcels with electrical permits pulled in the past 30 days"><button type="submit">Search records</button></div></form>
+      <p id="ask-status" role="status" aria-live="polite"></p>
+      <div id="ask-interpretation" hidden></div>
+      <form id="ask-filter-form" class="ask-filter-form" hidden><p class="eyebrow">Refine the interpretation</p><label><input id="ask-commercial" type="checkbox"> Commercial use codes</label><label>Permit type <input id="ask-permit-type" type="text" maxlength="100"></label><label>Permit date: last <input id="ask-days" type="number" min="1" max="366" inputmode="numeric"> calendar days</label><label>City neighborhood <input id="ask-neighborhood" type="text" maxlength="80"></label><button type="submit" class="secondary">Run edited filters</button></form>
+      <div id="ask-coverage" hidden></div>
+      <ol id="ask-results" class="ask-results"></ol>
+      <button id="ask-more" type="button" class="secondary" hidden>Load more parcels</button>
+      <div id="ask-context" hidden></div>
+    </div>
   </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
 const escapeHtml = (value) =>

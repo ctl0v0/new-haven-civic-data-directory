@@ -65,6 +65,8 @@ let feedLoadVersion = 0;
 let activeDataSection = "overview";
 let activeRecordGroup = null;
 let guideData = null;
+let askCriteria = null;
+let askCursor = null;
 let overviewGroups = [];
 let timelineReturnedCount = null;
 const municipalCategoryTitles = {
@@ -1352,19 +1354,23 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
 function showExplorerTab(tab) {
   const browsing = tab === "browse";
   const guiding = tab === "guide";
+  const asking = tab === "ask" && !$('ask-tab').hidden;
   document.body.classList.toggle("browse-mode", browsing);
   const url = new URL(location.href);
   if (browsing) url.searchParams.set("view", "map");
   else if (guiding) url.searchParams.set("view", "guide");
+  else if (asking) url.searchParams.set("view", "ask");
   else url.searchParams.delete("view");
   history.replaceState(null, "", `${url.pathname}${url.search}`);
-  $("records-view").hidden = browsing || guiding;
+  $("records-view").hidden = browsing || guiding || asking;
   $("browse-view").hidden = !browsing;
   $("guide-view").hidden = !guiding;
-  if (!guiding) placeRecordContent(browsing);
-  $("records-tab").setAttribute("aria-selected", String(!browsing && !guiding));
+  $("ask-view").hidden = !asking;
+  if (!guiding && !asking) placeRecordContent(browsing);
+  $("records-tab").setAttribute("aria-selected", String(!browsing && !guiding && !asking));
   $("browse-tab").setAttribute("aria-selected", String(browsing));
   $("guide-tab").setAttribute("aria-selected", String(guiding));
+  $("ask-tab").setAttribute("aria-selected", String(asking));
   if (guiding) void loadGuide();
   if (browsing) requestAnimationFrame(() => {
     if (!browseMap) initBrowseMap();
@@ -1373,7 +1379,7 @@ function showExplorerTab(tab) {
       void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
     }
   });
-  else if (!guiding && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
+  else if (!guiding && !asking && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
     if (parcelMap) parcelMap.invalidateSize();
     else void loadMap(selectedQuery(), viewVersion);
   });
@@ -2202,6 +2208,137 @@ $("search-form").addEventListener("submit", async (event) => {
 $("records-tab").addEventListener("click", () => showExplorerTab("records"));
 $("browse-tab").addEventListener("click", () => showExplorerTab("browse"));
 $("guide-tab").addEventListener("click", () => showExplorerTab("guide"));
+$("ask-tab").addEventListener("click", () => showExplorerTab("ask"));
+function renderAskContext(entries = []) {
+  const target = $("ask-context");
+  target.replaceChildren();
+  target.hidden = !entries.length;
+  if (!entries.length) return;
+  target.append(el("h2", "How to read this data"));
+  for (const entry of entries) {
+    const row = el("div", null, "ask-context-row");
+    row.append(el("h3", entry.term), el("p", entry.source_fact),
+      el("p", entry.reading_rule, "meta"), link(entry.official_source_url, "Official source"));
+    target.append(row);
+  }
+}
+function renderAskCoverage(result) {
+  const target = $("ask-coverage");
+  target.replaceChildren();
+  const checks = result?.coverage?.source_checks ?? [];
+  target.hidden = !checks.length;
+  if (!checks.length) return;
+  target.append(el("h2", "Source coverage"));
+  for (const check of checks) {
+    const line = el("p", `${sourceNames[check.source_id] ?? check.source_id}: ${check.status}`);
+    if (check.finished_at) line.append(el("span", ` · checked ${new Date(check.finished_at).toLocaleString()}`));
+    if (check.coverage_date_from && check.coverage_date_to)
+      line.append(el("span", ` · checked window ${check.coverage_date_from} through ${check.coverage_date_to}`));
+    if (check.latest_attempt_warning) line.append(el("span", ` · ${check.latest_attempt_warning}`));
+    else if (check.warning) line.append(el("span", ` · ${check.warning}`));
+    else if (check.date_covered === false) line.append(el("span", " · requested dates are outside this source run"));
+    target.append(line);
+  }
+  target.append(el("p", result.complete_for_query
+    ? "All required source checks are complete through the last result page."
+    : "This is not a complete citywide answer. Follow every page and review incomplete source checks.", "meta"));
+}
+function appendAskItems(items = []) {
+  for (const item of items) {
+    const li = el("li", null, "ask-result");
+    const page = new URL("/parcel", location.href);
+    page.searchParams.set("parcel_id", item.city_parcel_id);
+    page.searchParams.set("objectid", item.city_objectid);
+    const parcelLink = el("a", item.city_address || `City parcel ${item.city_parcel_id}`);
+    parcelLink.href = `${page.pathname}${page.search}`;
+    li.append(parcelLink, el("p", `City parcel ${item.city_parcel_id} · feature ${item.city_objectid}`, "meta"));
+    for (const match of item.matching_sources ?? []) {
+      const example = match.example_record;
+      const row = el("p", `${sourceNames[match.source_id] ?? match.source_id}: ${match.matching_record_count} matching official record${Number(match.matching_record_count) === 1 ? "" : "s"}`);
+      if (example?.event_date) row.append(el("strong", ` · ${String(example.event_date).slice(0, 10)}`, "ask-date"));
+      if (example?.published_status) row.append(el("span", ` · ${example.published_status}`));
+      if (example?.source_url) row.append(document.createTextNode(" · "),
+        link(example.source_url, "Example source record"));
+      li.append(row);
+    }
+    $("ask-results").append(li);
+  }
+}
+async function runAsk(question) {
+  $("ask-status").textContent = "Interpreting the question and checking indexed sources…";
+  $("ask-results").replaceChildren();
+  $("ask-coverage").hidden = true;
+  $("ask-interpretation").hidden = true;
+  $("ask-filter-form").hidden = true;
+  $("ask-more").hidden = true;
+  askCriteria = null;
+  askCursor = null;
+  try {
+    const response = await api("/api/v1/ask-parcels", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) });
+    const parsed = response.interpretation;
+    if (parsed) {
+      const target = $("ask-interpretation");
+      target.replaceChildren(el("h2", "Interpreted filters"));
+      const parts = [parsed.commercial ? "City parcels in reviewed commercial use codes" : null,
+        parsed.permit_type ? `Permit type: ${parsed.permit_type}` : null,
+        parsed.permit_status ? `Published permit status: ${parsed.permit_status}` : null,
+        parsed.date_window ? `PermitDate: ${parsed.date_window.from} through ${parsed.date_window.to}` : null,
+        parsed.neighborhood ? `City neighborhood: ${parsed.neighborhood}` : null].filter(Boolean);
+      for (const part of parts) target.append(el("p", part));
+      target.hidden = !parts.length;
+      $("ask-commercial").checked = Boolean(parsed.commercial);
+      $("ask-permit-type").value = parsed.permit_type ?? "";
+      $("ask-days").value = parsed.permit_days ?? "";
+      $("ask-neighborhood").value = parsed.neighborhood ?? "";
+      $("ask-filter-form").hidden = false;
+    }
+    renderAskContext(response.context);
+    if (response.reason || response.clarification) {
+      $("ask-status").textContent = response.reason ?? response.clarification;
+      return;
+    }
+    const result = response.search_result;
+    if (!result) { $("ask-status").textContent = "No validated search result was returned."; return; }
+    askCriteria = response.criteria;
+    askCursor = result.next_cursor;
+    appendAskItems(result.items);
+    renderAskCoverage(result);
+    $("ask-more").hidden = !askCursor;
+    $("ask-status").textContent = result.items.length
+      ? `${result.items.length} parcel${result.items.length === 1 ? "" : "s"} on this page. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`
+      : result.complete_for_query ? "No matching parcels in the checked sources." :
+        "No matching parcels on this page; source coverage is incomplete, so zero is not established.";
+  } catch (error) { $("ask-status").textContent = error.message; }
+}
+$("ask-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void runAsk($("ask-question").value.trim());
+});
+$("ask-filter-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const parts = [$("ask-commercial").checked ? "commercial parcels" : "parcels",
+    $("ask-permit-type").value.trim() ? `with permit type ${$("ask-permit-type").value.trim()}` : "",
+    $("ask-days").value ? `with PermitDate in the last ${$("ask-days").value} days` : "",
+    $("ask-neighborhood").value.trim() ? `in the ${$("ask-neighborhood").value.trim()} City neighborhood` : ""];
+  const question = parts.filter(Boolean).join(" ");
+  $("ask-question").value = question;
+  void runAsk(question);
+});
+$("ask-more").addEventListener("click", async () => {
+  if (!askCursor || !askCriteria) return;
+  $("ask-status").textContent = "Loading the next matching parcels…";
+  try {
+    const result = await api("/api/v1/search-indexed-parcels", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...askCriteria, cursor: askCursor }) });
+    appendAskItems(result.items);
+    askCursor = result.next_cursor;
+    $("ask-more").hidden = !askCursor;
+    renderAskCoverage(result);
+    $("ask-status").textContent = `${$("ask-results").children.length} parcels shown. ${result.complete_for_query ? "The checked result is complete." : "Review source coverage and remaining pages."}`;
+  } catch (error) { $("ask-status").textContent = error.message; }
+});
 function setMobileBrowseView(view) {
   document.body.classList.toggle("mobile-records-active", view === "records");
   $("mobile-map-tab").setAttribute("aria-pressed", String(view === "map"));
@@ -2219,7 +2356,8 @@ $("browse-panel-toggle").addEventListener("click", () => {
 $("records-tab").parentElement.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
-  const tabs = [$("records-tab"), $("browse-tab"), $("guide-tab")];
+  const tabs = [$("records-tab"), $("browse-tab"), $("guide-tab"), $("ask-tab")]
+    .filter((tab) => !tab.hidden);
   const current = tabs.indexOf(document.activeElement);
   const index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
     (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
@@ -2229,6 +2367,7 @@ $("records-tab").parentElement.addEventListener("keydown", (event) => {
 });
 const initial = new URL(location.href).searchParams;
 if (initial.get("view") === "guide") showExplorerTab("guide");
+if (initial.get("view") === "ask" && !$("ask-tab").hidden) showExplorerTab("ask");
 if (initial.get("view") === "map") {
   showExplorerTab("browse");
   if (initial.has("parcel_id")) requestAnimationFrame(async () => {
@@ -2245,7 +2384,7 @@ if (initial.get("view") === "map") {
     }
   });
 }
-if (initial.has("parcel_id") && !["map", "guide"].includes(initial.get("view"))) {
+if (initial.has("parcel_id") && !["map", "guide", "ask"].includes(initial.get("view"))) {
   const restore = async () => {
     const startingVersion = viewVersion;
     const original = initial.get("query_address");

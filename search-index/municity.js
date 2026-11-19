@@ -10,6 +10,55 @@ const LIMIT = 10000;
 const INDEX_FIELDS = ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
   "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
   "LegalAddress"];
+const municipalUrl = (searchfield, value, numrecs = LIMIT) => {
+  const url = new URL(VENDOR);
+  for (const [key, fieldValue] of Object.entries({ Customer: "NewHavenCityCT",
+    entity: "Permit", entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
+    module: "", numrecs: String(numrecs), operator: "=", pid: "",
+    searchfield, section: "", value })) url.searchParams.set(key, fieldValue);
+  return url;
+};
+const vendorOptions = { headers: { SourceId: "2" }, timeout: 60000,
+  maxBytes: 75_000_000 };
+
+async function municipalSearch(searchfield, value, numrecs, get) {
+  const data = await get(municipalUrl(searchfield, value, numrecs), vendorOptions);
+  const rows = data.rows === "" && Number(data.total) === 0 ? [] : data.rows;
+  const total = Number(data.total);
+  if (!Array.isArray(rows) || !Number.isSafeInteger(total) || total < rows.length)
+    throw new SourceError("Municipal permit search did not establish its row list and total count");
+  return { rows, total };
+}
+
+function normalizedPermitRows(rows, type) {
+  const filtered = rows.filter((row) => String(row.PermitType ?? "").trim().toUpperCase() === type.toUpperCase());
+  const byId = new Map();
+  const present = (value) => value != null && String(value).trim() !== "";
+  for (const row of filtered) {
+    const id = String(row.Permit_ID ?? "");
+    if (!/^\d+$/.test(id))
+      throw new SourceError("Municipal permit row lacks a published numeric Permit_ID");
+    const existing = byId.get(id) ?? {};
+    for (const field of INDEX_FIELDS) {
+      const value = row[field];
+      if (!present(value)) continue;
+      if (present(existing[field]) && JSON.stringify(existing[field]) !== JSON.stringify(value))
+        throw new SourceError(`Municipal permit ${id} has conflicting published ${field} values`);
+      existing[field] = value;
+    }
+    byId.set(id, existing);
+  }
+  return { duplicate_rows: filtered.length - byId.size,
+    rows: [...byId].map(([id, fields]) => ({
+      record_id: id,
+      source_url: `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/${id}`,
+      published_type: fields.PermitType ?? null,
+      published_status: fields.PermStatus ?? null,
+      event_date: municipalDate(fields.PermitDate),
+      fields: Object.fromEntries(INDEX_FIELDS.filter((field) => field in fields)
+        .map((field) => [field, fields[field]])),
+    })) };
+}
 
 export class MunicipalPermitCapError extends SourceError {
   constructor(permitType, publishedTotal) {
@@ -69,49 +118,55 @@ export async function municipalPermitTypeRows(permitType, { get = fetchJson,
   const listed = await catalog();
   if (!listed.groups?.some((group) => group.types?.some((item) => item.name === type)))
     throw new SourceError("Permit type is absent from the official municipal catalog", 404);
-  const url = new URL(VENDOR);
-  for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT",
-    entity: "Permit", entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
-    module: "", numrecs: String(LIMIT), operator: "=", pid: "",
-    searchfield: "PermitType", section: "", value: type }))
-    url.searchParams.set(key, value);
-  const data = await get(url, { headers: { SourceId: "2" }, timeout: 60000,
-    maxBytes: 75_000_000 });
-  const rows = data.rows === "" && Number(data.total) === 0 ? [] : data.rows;
-  if (!Array.isArray(rows)) throw new SourceError("Municipal permit type search returned no row list");
-  const publishedTotal = Number(data.total);
-  if (!Number.isSafeInteger(publishedTotal) || publishedTotal < rows.length)
-    throw new SourceError("Municipal permit type search did not establish a total count");
+  const { rows, total: publishedTotal } = await municipalSearch("PermitType", type, LIMIT, get);
   const boundReached = rows.length >= LIMIT || publishedTotal > rows.length;
   if (boundReached) throw new MunicipalPermitCapError(type, publishedTotal);
   if (rows.some((row) => !String(row?.PermitType ?? "").trim()))
     throw new SourceError("Municipal permit search returned a row without a published type");
-  const filtered = rows.filter((row) => String(row.PermitType ?? "").trim().toUpperCase() === type.toUpperCase());
-  const byId = new Map();
-  const present = (value) => value != null && String(value).trim() !== "";
-  for (const row of filtered) {
-    const id = String(row.Permit_ID ?? "");
-    if (!/^\d+$/.test(id))
-      throw new SourceError("Municipal permit type row lacks a published numeric Permit_ID");
-    const existing = byId.get(id) ?? {};
-    for (const field of INDEX_FIELDS) {
-      const value = row[field];
-      if (!present(value)) continue;
-      if (present(existing[field]) && JSON.stringify(existing[field]) !== JSON.stringify(value))
-        throw new SourceError(`Municipal permit ${id} has conflicting published ${field} values`);
-      existing[field] = value;
-    }
-    byId.set(id, existing);
+  return { type, vendor_count: rows.length, ...normalizedPermitRows(rows, type) };
+}
+
+// This is a capability probe, not a claim that the vendor supports date
+// enumeration. Importers must validate the published total for every day.
+export async function municipalDateSearchFormat(type = "Electrical Permit", { get = fetchJson } = {}) {
+  const sample = await municipalSearch("PermitType", type, 50, get);
+  const dated = sample.rows.find((row) => /^\d+$/.test(String(row.Permit_ID ?? "")) &&
+    municipalDate(row.PermitDate));
+  if (!dated) throw new SourceError("Municipal date-search probe found no dated permit row");
+  const date = municipalDate(dated.PermitDate);
+  for (const value of [date.slice(5, 7) + "/" + date.slice(8, 10) + "/" + date.slice(0, 4), date]) {
+    const result = await municipalSearch("PermitDate", value, LIMIT, get);
+    if (result.rows.length >= LIMIT || result.total !== result.rows.length) continue;
+    if (result.rows.some((row) => municipalDate(row.PermitDate) !== date)) continue;
+    if (result.rows.some((row) => String(row.Permit_ID) === String(dated.Permit_ID)))
+      return value === date ? "iso" : "us";
   }
-  return { type, vendor_count: rows.length,
-    duplicate_rows: filtered.length - byId.size,
-    rows: [...byId].map(([id, fields]) => ({
-      record_id: id,
-      source_url: `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/${id}`,
-      published_type: fields.PermitType ?? null,
-      published_status: fields.PermStatus ?? null,
-      event_date: municipalDate(fields.PermitDate),
-      fields: Object.fromEntries(INDEX_FIELDS.filter((field) => field in fields)
-        .map((field) => [field, fields[field]])),
-    })) };
+  throw new SourceError("Municipal PermitDate query did not reproduce a known official permit; recent window is unverified");
+}
+
+export async function municipalPermitDateRows(date, type, format, { get = fetchJson } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !["us", "iso"].includes(format))
+    throw new SourceError("Invalid municipal date search", 400);
+  const value = format === "iso" ? date : `${date.slice(5, 7)}/${date.slice(8, 10)}/${date.slice(0, 4)}`;
+  const { rows, total } = await municipalSearch("PermitDate", value, LIMIT, get);
+  if (rows.length >= LIMIT || total !== rows.length)
+    throw new MunicipalPermitCapError(`PermitDate ${date}`, total);
+  if (rows.some((row) => municipalDate(row.PermitDate) !== date ||
+      !String(row.PermitType ?? "").trim() || !/^\d+$/.test(String(row.Permit_ID ?? ""))))
+    throw new SourceError("Municipal PermitDate query returned an unverified row or date");
+  return { date, vendor_count: total, ...normalizedPermitRows(rows, type) };
+}
+
+export async function municipalParentPrintKey(parcelId, { get = fetchJson } = {}) {
+  if (!/^\d{1,12}$/.test(String(parcelId ?? ""))) return null;
+  const url = new URL(VENDOR);
+  for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT",
+    entity: "Parcel", entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
+    module: "", numrecs: "5", operator: "=", pid: "", searchfield: "Parcel_ID",
+    section: "", value: String(parcelId) })) url.searchParams.set(key, value);
+  const data = await get(url, { headers: { SourceId: "2" }, timeout: 10000,
+    maxBytes: 10_000_000 });
+  if (Number(data.total) !== 1 || !Array.isArray(data.rows) || data.rows.length !== 1 ||
+      String(data.rows[0].Parcel_ID) !== String(parcelId)) return null;
+  return String(data.rows[0].PrintKey ?? "").trim() || null;
 }

@@ -27,6 +27,7 @@ export const SEARCH_FIELDS = Object.freeze({
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", "ct-liquor-permits",
   "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance"]);
+const ONE_OF_FIELDS = Object.freeze({ parcels: ["use_code"] });
 export const NUMBER_FIELDS = Object.freeze({
   parcels: ["units_commercial", "units_residential", "units_condo",
     "year_building_built", "total_land_area_acres", "price",
@@ -37,6 +38,8 @@ export const NUMBER_FIELDS = Object.freeze({
 });
 
 const sourceAge = () => 48 * 3600_000;
+const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
+  : String(value ?? "").slice(0, 10);
 async function missingMunicipalAttempt(scopeKey, query) {
   if (!scopeKey) return null;
   try {
@@ -77,6 +80,16 @@ function checkedRequirements(input) {
           !String(value).trim() || String(value).length > 160)
         throw new SourceError(`Unsupported ${sourceId} exact field filter`, 400);
     }
+    const oneOf = item.one_of ?? {};
+    if (!oneOf || typeof oneOf !== "object" || Array.isArray(oneOf) ||
+        Object.keys(oneOf).length > 1)
+      throw new SourceError("Invalid one_of filter", 400);
+    for (const [key, values] of Object.entries(oneOf)) {
+      if (!ONE_OF_FIELDS[sourceId]?.includes(key) || key in equals ||
+          !Array.isArray(values) || !values.length || values.length > 250 ||
+          values.some((value) => typeof value !== "string" || !value.trim() || value.length > 40))
+        throw new SourceError(`Unsupported ${sourceId} one_of filter`, 400);
+    }
     const ranges = {};
     for (const operator of ["number_gte", "number_lte"]) {
       const values = item[operator] ?? {};
@@ -97,6 +110,8 @@ function checkedRequirements(input) {
     if (eventDateFrom && eventDateTo && eventDateFrom > eventDateTo)
       throw new SourceError("Event date range is reversed", 400);
     return { source_id: sourceId, equals: Object.fromEntries(Object.entries(equals).sort()),
+      one_of: Object.fromEntries(Object.entries(oneOf).map(([key, values]) =>
+        [key, [...new Set(values.map((value) => value.trim().toUpperCase()))].sort()])),
       ...ranges,
       event_date_from: eventDateFrom, event_date_to: eventDateTo };
   });
@@ -107,6 +122,10 @@ function conditions(requirement, alias, add) {
   for (const [field, value] of Object.entries(requirement.equals)) {
     const fieldRef = add(field), valueRef = add(String(value).trim());
     parts.push(`upper(trim(${alias}.fields->>${fieldRef})) = upper(${valueRef})`);
+  }
+  for (const [field, values] of Object.entries(requirement.one_of ?? {})) {
+    const fieldRef = add(field), valuesRef = add(values);
+    parts.push(`upper(trim(${alias}.fields->>${fieldRef})) = ANY(${valuesRef}::text[])`);
   }
   for (const [operator, sign] of [["number_gte", ">="], ["number_lte", "<="]])
     for (const [field, value] of Object.entries(requirement[operator] ?? {})) {
@@ -194,6 +213,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
   try {
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status, r.finished_at,
       r.expected_count, r.returned_count, r.ambiguous_count, r.unlinked_count, r.warning,
+      r.coverage_date_from, r.coverage_date_to,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -222,11 +242,19 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
         ...absentMunicipal } : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
+    const dateCovered = source_id !== "municity" ||
+      (!run.coverage_date_from && !run.coverage_date_to) ||
+      Boolean(municipalRequirements[0]?.event_date_from && municipalRequirements[0]?.event_date_to &&
+        municipalRequirements[0].event_date_from >= dateOnly(run.coverage_date_from) &&
+        municipalRequirements[0].event_date_to <= dateOnly(run.coverage_date_to));
     const complete = run.status === "complete" && fresh && run.latest_attempt_status !== "failed" &&
       Number(run.expected_count) === Number(run.returned_count) &&
-      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0;
+      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0 && dateCovered;
     return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
       status: complete ? "complete" : "partial",
+      ...(source_id === "municity" ? { date_covered: dateCovered,
+        coverage_date_from: run.coverage_date_from ? dateOnly(run.coverage_date_from) : null,
+        coverage_date_to: run.coverage_date_to ? dateOnly(run.coverage_date_to) : null } : {}),
       run_id: Number(run.run_id), fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count), ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
@@ -295,6 +323,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status,
       r.finished_at, r.expected_count, r.returned_count,
       r.ambiguous_count, r.unlinked_count, r.warning,
+      r.coverage_date_from, r.coverage_date_to,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -324,12 +353,20 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
         ...absentMunicipal } : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
+    const dateCovered = source_id !== "municity" ||
+      (!run.coverage_date_from && !run.coverage_date_to) ||
+      Boolean(requirement.event_date_from && requirement.event_date_to &&
+        requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
+        requirement.event_date_to <= dateOnly(run.coverage_date_to));
     const complete = run.status === "complete" && fresh &&
       run.latest_attempt_status !== "failed" &&
       Number(run.expected_count) === Number(run.returned_count) &&
-      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0;
+      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0 && dateCovered;
     return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
       status: complete ? "complete" : "partial", run_id: Number(run.run_id),
+      ...(source_id === "municity" ? { date_covered: dateCovered,
+        coverage_date_from: run.coverage_date_from ? dateOnly(run.coverage_date_from) : null,
+        coverage_date_to: run.coverage_date_to ? dateOnly(run.coverage_date_to) : null } : {}),
       fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count),
       ambiguous_count: Number(run.ambiguous_count),

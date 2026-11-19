@@ -13,18 +13,27 @@ const date = (value, name) => {
 };
 const attemptStatus = (status, warning) => status === "failed" &&
   warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : status;
-const check = (sourceId, scopeKey, row, maxAge, latest = null) => {
+const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
+  : String(value ?? "").slice(0, 10);
+const check = (sourceId, scopeKey, row, maxAge, latest = null, from = null, to = null) => {
   if (!row) return { source_id: sourceId, scope_key: scopeKey, status: "not_indexed",
     ...(latest ? { latest_attempt_status: attemptStatus(latest.status, latest.warning),
       latest_attempt_warning: latest.warning ?? null,
       latest_attempt_started_at: latest.started_at } : {}) };
   const fresh = Date.now() - Date.parse(row.finished_at) <= maxAge;
+  const dateCovered = sourceId !== "municity" ||
+    (!row.coverage_date_from && !row.coverage_date_to) ||
+    Boolean(from && to && from >= dateOnly(row.coverage_date_from) &&
+      to <= dateOnly(row.coverage_date_to));
   const complete = fresh && row.status === "complete" && row.latest_attempt_status !== "failed" &&
     Number(row.expected_count) === Number(row.returned_count) &&
-    Number(row.ambiguous_count) === 0 && Number(row.unlinked_count) === 0;
+    Number(row.ambiguous_count) === 0 && Number(row.unlinked_count) === 0 && dateCovered;
   return { source_id: sourceId, scope_key: scopeKey,
     status: complete ? "complete" : "partial", run_id: Number(row.run_id),
-    fresh, expected_count: Number(row.expected_count),
+    fresh, ...(sourceId === "municity" ? { date_covered: dateCovered,
+      coverage_date_from: row.coverage_date_from ? dateOnly(row.coverage_date_from) : null,
+      coverage_date_to: row.coverage_date_to ? dateOnly(row.coverage_date_to) : null } : {}),
+    expected_count: Number(row.expected_count),
     returned_count: Number(row.returned_count),
     ambiguous_count: Number(row.ambiguous_count),
     unlinked_count: Number(row.unlinked_count), finished_at: row.finished_at,
@@ -77,6 +86,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id,
       r.status, r.finished_at, r.expected_count, r.returned_count,
       r.ambiguous_count, r.unlinked_count, r.warning,
+      r.coverage_date_from, r.coverage_date_to,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -126,7 +136,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
       "all", byKey.get(`${scope === "ward" ? "wards" : "neighborhoods"}:all`), 48 * 3600_000)]),
     ...types.map((type) => check("municity", `permit-type:${type}`,
       byKey.get(`municity:permit-type:${type}`), 48 * 3600_000,
-      missingAttempts.get(`permit-type:${type}`)))];
+      missingAttempts.get(`permit-type:${type}`), from, to))];
   if (checks.some((item) => item.status === "not_indexed" && item.source_id !== "municity"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: checks,

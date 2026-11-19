@@ -3,6 +3,8 @@ import { z } from "zod";
 import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
+import { getDataContext } from "../parcel/data-context.js";
+import { askIndexedParcels } from "../search-index/ask.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
@@ -311,6 +313,7 @@ export function createServer() {
           "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail",
           "school-attendance", "municity"]),
         equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+        one_of: z.record(z.string(), z.array(z.string().min(1).max(40)).min(1).max(250)).optional(),
         number_gte: z.record(z.string(), z.number()).optional(),
         number_lte: z.record(z.string(), z.number()).optional(),
         event_date_from: z.iso.date().optional(),
@@ -320,6 +323,23 @@ export function createServer() {
       cursor: z.string().max(3000).optional(),
     }),
     (args) => searchIndexedParcels(args),
+  );
+  tool(
+    server,
+    "ask_indexed_parcels",
+    "Ask a bounded parcel search question",
+    "Interpret a question into reviewed City parcel and municipal permit filters, then return exact parcel matches and source coverage. An unavailable official definition or capped source blocks a complete answer.",
+    z.object({ question: z.string().min(1).max(500) }),
+    (args) => askIndexedParcels(args),
+  );
+  tool(
+    server,
+    "get_data_context",
+    "Get official-source data context",
+    "Read official-source field meanings and separate service reading rules for parcel, permit, neighborhood and Community Management Team data.",
+    z.object({ term: z.string().max(100).optional(), source_id: z.string().max(80).optional(),
+      field: z.string().max(80).optional() }),
+    (args) => getDataContext(args),
   );
   tool(
     server,
@@ -413,6 +433,14 @@ export function createServer() {
       mimeType: "application/json",
     },
     async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(schemaGuide()) }] }),
+  );
+  server.registerResource(
+    "data-context",
+    "newhaven://parcel/context",
+    { title: "Official-source parcel data context", description: "Definitions, reading rules, and code-review status",
+      mimeType: "application/json" },
+    async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json",
+      text: JSON.stringify(getDataContext()) }] }),
   );
   server.registerResource(
     "source-coverage",

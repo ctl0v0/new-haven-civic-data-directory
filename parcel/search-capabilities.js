@@ -53,6 +53,7 @@ export function searchCapabilities() {
         scopes: ["City parcel joins across one to five published-source requirements"],
         filter_fields: {
           equals: "Exact source-published fields from the search field allowlist",
+          one_of: "Reviewed City parcel use_code values only; OR within the list",
           number_gte: "Inclusive lower bound on reviewed numeric City parcel fields, including unit counts and assessed values",
           number_lte: "Inclusive upper bound on the same reviewed numeric City parcel fields",
           municipal_type: "A municity requirement must name one exact PermitType; it can be combined with City and State source requirements",
@@ -60,7 +61,7 @@ export function searchCapabilities() {
           event_date_to: "Source-published event date only, inclusive",
         },
         paging: "1–100 matched parcels per page; continue next_cursor",
-        completeness: "Requires a fresh validated active run for every source, exact joins, no source row gaps, and the last result page; currently depends on connecting and refreshing the private index",
+        completeness: "Requires a fresh validated active run for every source, exact joins, no source row gaps, and the last result page. A date-bounded municipal run can establish completeness only inside its published coverage window",
         follow_up_tools: ["get_search_coverage", "get_indexed_record", "get_parcel_manifest", "get_parcel_records"],
       },
       {
@@ -117,6 +118,7 @@ export function searchCapabilities() {
     indexed_source_fields: Object.fromEntries(Object.entries(SEARCH_FIELDS)
       .map(([source_id, fields]) => [source_id, {
         equals: fields,
+        one_of: source_id === "parcels" ? ["use_code"] : [],
         number_gte: NUMBER_FIELDS[source_id] ?? [],
         number_lte: NUMBER_FIELDS[source_id] ?? [],
         event_date: "Only the source event_date value stored in the index; null dates do not match date bounds",

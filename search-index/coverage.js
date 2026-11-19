@@ -15,6 +15,7 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
     const rows = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id,
       r.status, r.expected_count, r.returned_count, r.linked_count,
       r.ambiguous_count, r.unlinked_count, r.source_updated_at,
+      r.coverage_date_from, r.coverage_date_to,
       r.finished_at, r.warning, last.status AS latest_attempt_status,
       last.started_at AS latest_attempt_started_at,
       last.warning AS latest_attempt_warning
@@ -56,7 +57,8 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
       const fresh = Boolean(run && now - Date.parse(run.finished_at) <= maxAgeMs("daily"));
       return { permit_type: name, in_catalog: catalogNames.has(name.toUpperCase()),
         indexed: Boolean(run), fresh,
-        complete: Boolean(run && fresh && run.status === "complete" &&
+        complete: Boolean(run && fresh && !run.coverage_date_from &&
+          !run.coverage_date_to && run.status === "complete" &&
           latest?.status === "complete" &&
           Number(run.expected_count) === Number(run.returned_count) &&
           Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0),
@@ -64,6 +66,12 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
           returned_count: Number(run.returned_count), linked_count: Number(run.linked_count),
           ambiguous_count: Number(run.ambiguous_count),
           unlinked_count: Number(run.unlinked_count),
+          coverage_date_from: run.coverage_date_from ?? null,
+          coverage_date_to: run.coverage_date_to ?? null,
+          complete_for_covered_window: Boolean(fresh && run.status === "complete" &&
+            latest?.status === "complete" &&
+            Number(run.expected_count) === Number(run.returned_count) &&
+            Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0),
           last_successful_refresh: run.finished_at,
           warning: run.warning } : {}),
         ...(latest ? { latest_attempt_status: latestStatus,

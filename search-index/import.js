@@ -3,7 +3,9 @@ import { arcgisInventory, arcgisFeatures } from "./arcgis.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
 import { municipalPermitCatalogRows, municipalPermitTypeRows,
-  sameMunicipalPermitRows } from "./municity.js";
+  sameMunicipalPermitRows, municipalDateSearchFormat, municipalPermitDateRows,
+  municipalParentPrintKey } from "./municity.js";
+import { recentCalendarDates } from "./ask.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, schoolAddress,
@@ -11,11 +13,14 @@ import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, schoolAddress,
 
 const write = (statement, values = []) => indexQuery(statement, values, { write: true });
 
-export async function beginRun(sourceId, scopeKey = "all", expectedCount = null, sourceUpdatedAt = null) {
+export async function beginRun(sourceId, scopeKey = "all", expectedCount = null,
+  sourceUpdatedAt = null, coverageDates = null) {
   const rows = await write(`INSERT INTO search_source_runs
-    (source_id, scope_key, status, expected_count, source_updated_at)
-    VALUES ($1, $2, 'running', $3, $4) RETURNING id`,
-  [sourceId, scopeKey, expectedCount, sourceUpdatedAt]);
+    (source_id, scope_key, status, expected_count, source_updated_at,
+      coverage_date_from, coverage_date_to)
+    VALUES ($1, $2, 'running', $3, $4, $5, $6) RETURNING id`,
+  [sourceId, scopeKey, expectedCount, sourceUpdatedAt,
+    coverageDates?.from ?? null, coverageDates?.to ?? null]);
   return Number(rows[0].id);
 }
 
@@ -135,6 +140,28 @@ async function linkExactParcelKey(runId, sourceId, keyField, { mbluOnly = false 
   [runId, Number(parcelRun[0].run_id), keyField, sourceId]);
 }
 
+async function linkAdditionalMunicipalKey(runId, keyField) {
+  const parcelRun = await write(`SELECT run_id FROM search_active_runs
+    WHERE source_id = 'parcels' AND scope_key = 'all'`);
+  if (!parcelRun.length) throw new Error("Complete City parcel baseline is required for permit joins");
+  await write(`INSERT INTO search_record_parcels
+    (run_id, source_id, record_id, city_parcel_id, city_objectid, match_method, join_status)
+    SELECT r.run_id, r.source_id, r.record_id,
+      (p.fields->>'parcel_id')::bigint, (p.fields->>'objectid')::bigint,
+      $4, CASE WHEN COUNT(*) OVER (PARTITION BY r.record_id) = 1
+        THEN 'exact' ELSE 'ambiguous' END
+    FROM search_records r JOIN search_records p
+      ON p.run_id = $2 AND p.source_id = 'parcels'
+      AND regexp_replace(upper(replace(r.fields->>$3, '/', ' ')), '[[:space:]]+', ' ', 'g') =
+        regexp_replace(upper(replace(p.fields->>'mblu', '/', ' ')), '[[:space:]]+', ' ', 'g')
+    WHERE r.run_id = $1 AND r.source_id = 'municity'
+      AND NULLIF(trim(r.fields->>$3), '') IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM search_record_parcels j
+        WHERE j.run_id = r.run_id AND j.source_id = r.source_id AND j.record_id = r.record_id)`,
+  [runId, Number(parcelRun[0].run_id), keyField,
+    keyField === "PrintKey_Parcel" ? "published-permit-parent-key-exact" : "verified-municipal-parent-key-exact"]);
+}
+
 async function linkStateAddresses(runId, sourceId) {
   const addressRun = await write(`SELECT run_id FROM search_active_runs
     WHERE source_id = 'addresses' AND scope_key = 'all'`);
@@ -170,7 +197,11 @@ export async function finishRun(runId, sourceId, expectedCount, { sourceWarning 
   if (sourceId === "parcels") await linkCityParcels(runId);
   else if (sourceId === "ct-brownfields") await linkExactParcelKey(runId, sourceId, "Site_Parce");
   else if (sourceId === "managed-lots") await linkExactParcelKey(runId, sourceId, "mbp");
-  else if (sourceId === "municity") await linkExactParcelKey(runId, sourceId, "PrintKey", { mbluOnly: true });
+  else if (sourceId === "municity") {
+    await linkExactParcelKey(runId, sourceId, "PrintKey", { mbluOnly: true });
+    await linkAdditionalMunicipalKey(runId, "PrintKey_Parcel");
+    await linkAdditionalMunicipalKey(runId, "VerifiedParentPrintKey");
+  }
   else if (["school-attendance", "municity-permit-types"].includes(sourceId)) {
     /* School rows are linked during import; catalog rows do not describe parcels. */
   }
@@ -280,6 +311,70 @@ export async function importMunicipalPermitType(permitType) {
       : null;
     return { ...await finishRun(runId, "municity", first.rows.length, { sourceWarning }),
       vendor_rows: first.vendor_count, repeated_rows: first.duplicate_rows };
+  } catch (error) {
+    await failRun(runId, error);
+    throw error;
+  }
+}
+
+export async function importMunicipalRecentElectrical({ now = new Date(),
+  dateFormat = municipalDateSearchFormat, dateRows = municipalPermitDateRows,
+  parentKey = municipalParentPrintKey } = {}) {
+  const type = "Electrical Permit";
+  const range = recentCalendarDates(30, now);
+  const runId = await beginRun("municity", `permit-type:${type.toUpperCase()}`,
+    null, null, range);
+  try {
+    const format = await dateFormat(type);
+    const days = Array.from({ length: 30 }, (_, index) =>
+      new Date(Date.parse(`${range.from}T00:00:00Z`) + index * 86400_000)
+        .toISOString().slice(0, 10));
+    const first = [];
+    const dailyCounts = [];
+    for (const day of days) {
+      const result = await dateRows(day, type, format);
+      first.push(...result.rows);
+      dailyCounts.push(result.vendor_count);
+    }
+    const ids = new Set(first.map((row) => row.record_id));
+    if (ids.size !== first.length || first.some((row) => row.event_date == null))
+      throw new Error("Recent Electrical Permit window has duplicate IDs across dates or an undated row");
+    const parents = new Map();
+    for (const row of first) {
+      const key = (value) => String(value ?? "").replaceAll("/", " ")
+        .trim().replace(/\s+/g, " ").toUpperCase();
+      if (key(row.fields.PrintKey) && key(row.fields.PrintKey_Parcel) &&
+          key(row.fields.PrintKey) !== key(row.fields.PrintKey_Parcel))
+        throw new Error(`Municipal permit ${row.record_id} publishes conflicting parcel keys`);
+      if (row.fields.PrintKey || !row.fields.Parcel_ID) continue;
+      const id = String(row.fields.Parcel_ID);
+      if (!parents.has(id)) {
+        try { parents.set(id, await parentKey(id)); }
+        catch { parents.set(id, null); }
+      }
+      if (parents.get(id)) row.fields.VerifiedParentPrintKey = parents.get(id);
+      if (key(row.fields.PrintKey_Parcel) && key(row.fields.VerifiedParentPrintKey) &&
+          key(row.fields.PrintKey_Parcel) !== key(row.fields.VerifiedParentPrintKey))
+        throw new Error(`Municipal permit ${row.record_id} disagrees with its verified parent parcel`);
+    }
+    await setRunInventory(runId, first.length);
+    for (let offset = 0; offset < first.length; offset += 200)
+      await insertRecords(runId, "municity", first.slice(offset, offset + 200));
+    const second = [];
+    for (const [index, day] of days.entries()) {
+      const result = await dateRows(day, type, format);
+      if (result.vendor_count !== dailyCounts[index])
+        throw new Error("Municipal daily permit count changed during refresh");
+      second.push(...result.rows);
+    }
+    for (const row of second)
+      if (parents.get(String(row.fields.Parcel_ID)))
+        row.fields.VerifiedParentPrintKey = parents.get(String(row.fields.Parcel_ID));
+    if (!sameMunicipalPermitRows(first, second))
+      throw new Error("Municipal recent permit rows changed during refresh");
+    return { ...await finishRun(runId, "municity", first.length),
+      coverage_date_from: range.from, coverage_date_to: range.to,
+      daily_counts: dailyCounts };
   } catch (error) {
     await failRun(runId, error);
     throw error;

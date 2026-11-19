@@ -1,5 +1,6 @@
 import { importArcgisSource, importStateRoster, importMunicipalPermitType,
-  importMunicipalPermitCatalog, importSchoolAttendance } from "../search-index/import.js";
+  importMunicipalPermitCatalog, importSchoolAttendance,
+  importMunicipalRecentElectrical } from "../search-index/import.js";
 import { municipalPermitCatalogRows, municipalTypeShard } from "../search-index/municity.js";
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 
@@ -12,6 +13,7 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
 const jobs = mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
+  ["municity:Electrical Permit:recent-30-days", () => importMunicipalRecentElectrical()],
   ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup", "managed-lots",
     "ct-brownfields", "metered-parking-spaces", "transit-stops"].map((id) =>
     [id, () => importArcgisSource(id)]),
@@ -24,8 +26,11 @@ const jobs = mode === "daily" ? [
   const allTypes = municipalPermitCatalogRows(catalog).map((row) => row.record_id)
     .sort((a, b) => a.localeCompare(b));
   const shard = new Date().getUTCHours();
-  const types = mode === "hourly" ? allTypes.filter((type) => municipalTypeShard(type) === shard)
-    : allTypes;
+  // The recent Electrical run has a bounded date contract. A full-type capped
+  // attempt must not replace or invalidate it until full history is solved.
+  const eligible = allTypes.filter((type) => type !== "Electrical Permit");
+  const types = mode === "hourly" ? eligible.filter((type) => municipalTypeShard(type) === shard)
+    : eligible;
   console.log(JSON.stringify({ event: "municipal_refresh_selection", mode,
     catalog_types: allTypes.length, selected_types: types.length,
     ...(mode === "hourly" ? { utc_hour_shard: shard } : {}) }));

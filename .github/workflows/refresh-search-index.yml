@@ -1,9 +1,9 @@
 name: Refresh private parcel search index
-# Updating this workflow on main refreshes every cataloged municipal permit type.
-# Hourly runs refresh one stable type shard; the daily run refreshes City and State baselines.
+# A Preview branch update runs the City and State baselines and the bounded
+# recent Electrical check. Hourly runs refresh one stable permit-type shard.
 on:
   push:
-    branches: [main]
+    branches: [main, codex/parcel-pilot]
     paths: [.github/workflows/refresh-search-index.yml]
   workflow_dispatch:
     inputs:
@@ -56,7 +56,7 @@ jobs:
           elif [ "$SCHEDULE" = '47 7 * * *' ]; then
             mode=daily
           elif [ "$EVENT_NAME" = push ]; then
-            mode=municipal
+            mode=daily
           else
             mode="$REQUESTED_MODE"
           fi
@@ -96,5 +96,8 @@ jobs:
           refresh_status=$?
           set -e
           if [ "$REFRESH_MODE" = daily ] && [ "$refresh_status" -eq 0 ]; then npm run index:prune; fi
+          if [ "$REFRESH_MODE" = daily ] && [ "$refresh_status" -eq 0 ]; then
+            npm run index:audit-use-codes || echo 'Official City use-code audit unavailable; commercial query remains gated'
+          fi
           if [ "$REFRESH_MODE" != daily ]; then npm run index:smoke; fi
           exit "$refresh_status"
