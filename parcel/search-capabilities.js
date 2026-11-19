@@ -59,7 +59,7 @@ export function searchCapabilities() {
         },
         paging: "1–100 matched parcels per page; continue next_cursor",
         completeness: "Requires a fresh validated active run for every source, exact joins, no source row gaps, and the last result page; currently depends on connecting and refreshing the private index",
-        follow_up_tools: ["get_search_coverage", "get_parcel_manifest", "get_parcel_records"],
+        follow_up_tools: ["get_search_coverage", "get_indexed_record", "get_parcel_manifest", "get_parcel_records"],
       },
       {
         tool: "search_indexed_permits",
@@ -74,6 +74,7 @@ export function searchCapabilities() {
         },
         paging: "1–50 matching permit rows per page; continue next_cursor",
         completeness: "The all-type search also requires a fresh official type catalog. Every queried type needs a fresh validated run below the municipal service's unpageable 2,000-row bound, exact MBLU joins and the last result page. Missing types and unlinked rows keep results partial; approval fields require the live detail tools",
+        follow_up_tools: ["get_indexed_record", "get_permit_details", "get_application_details"],
       },
     ],
     not_yet_available: [

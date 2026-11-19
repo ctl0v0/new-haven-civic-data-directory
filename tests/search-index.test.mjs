@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { arcgisInventory, arcgisFeatures, GIS_INDEX_FIELDS } from "../search-index/arcgis.js";
 import { indexSourceCatalog } from "../search-index/catalog.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
+import { getIndexedRecord } from "../search-index/record.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { stateRosterInventory, stateRosterRows } from "../search-index/socrata.js";
 import { arcgis } from "../parcel/http.js";
@@ -301,6 +302,35 @@ test("coverage names every catalog type including one blocked at the vendor limi
   assert.equal(coverage.municipal_permit_catalog.types_without_index, 1);
   assert.equal(coverage.municipal_permit_types.find((type) => type.permit_type === "Roofing")
     .latest_attempt_warning, "Reached the unpageable 2,000-row bound");
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
+test("indexed record inspection keeps official fields and parcel join evidence separate", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const row = { record_id: "572030", source_url: "https://www.municityconnect.com/Permit/572030",
+    published_type: "Hood - C", published_status: "Issued",
+    fields: { PermitNo: "M-23-00357" } };
+  const inspect = async (recordId) => getIndexedRecord({ source_id: "municity",
+    permit_type: "Hood - C", record_id: recordId }, { query: async (sql, values) => {
+    if (sql.includes("FROM search_active_runs a")) {
+      assert.deepEqual(values, ["municity", "permit-type:HOOD - C"]);
+      return [{ run_id: 11, status: "complete", finished_at: new Date(),
+        expected_count: 1, returned_count: 1, ambiguous_count: 0,
+        unlinked_count: 0, latest_attempt_status: "complete" }];
+    }
+    if (sql.includes("FROM search_records WHERE")) return recordId === "572030" ? [row] : [];
+    return [{ city_parcel_id: 12846, city_objectid: 4157,
+      match_method: "published-parcel-key-exact", join_status: "exact" }];
+  } });
+  const found = await inspect("572030");
+  assert.equal(found.record.fields.PermitNo, "M-23-00357");
+  assert.equal(found.parcel_links[0].city_parcel_id, 12846);
+  assert.equal(found.complete_for_query, true);
+  const absent = await inspect("999999");
+  assert.equal(absent.found, false);
+  assert.equal(absent.complete_for_query, true);
+  await assert.rejects(getIndexedRecord({ source_id: "municity", record_id: "572030" }),
+    /Permit type/);
   delete process.env.SEARCH_DATABASE_URL;
 });
 

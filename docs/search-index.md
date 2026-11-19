@@ -55,6 +55,7 @@ The municipal sweep discovers type names directly from the official catalog. The
 - `search_parcels` scans official City parcel GIS fields live, with City neighborhood and ward scopes and cursor pagination.
 - `search_indexed_parcels` intersects one to five published source-field requirements by exact City parcel joins, including one exact municipal permit type combined with other official source predicates. City parcel fields include the imported assessor owner, use, unit, sale and valuation fields; reviewed numeric City fields support inclusive `number_gte` and `number_lte` bounds. `POST /api/v1/search-indexed-parcels` accepts the same JSON input.
 - `search_indexed_permits` searches every indexed permit type when no type is supplied, or up to six exact types, by published `PermStatus` and `PermitDate`, optionally within an indexed ward or neighborhood. It reports every missing, capped, stale, or unlinked type; application and review approval predicates remain in `search_parcel_permits` and the live work-detail tools.
+- `get_indexed_record` retrieves one source row by published record ID with the indexed fields, direct official source URL, exact or ambiguous City parcel links, and refresh coverage. It does not substitute for `get_permit_details` when full live permit children are needed.
 - `get_nearby_feature_counts` returns mapped meter and stop counts within a chosen radius, plus nearest straight-line distance and official layer links. It never reports live parking availability.
 
 Examples for a connected index:

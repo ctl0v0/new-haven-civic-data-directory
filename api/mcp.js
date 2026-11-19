@@ -5,6 +5,7 @@ import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
+import { getIndexedRecord } from "../search-index/record.js";
 import {
   resolveParcel,
   parcelSummary,
@@ -342,6 +343,17 @@ export function createServer() {
     "Return source-by-source index readiness, last complete refresh, join gaps, and live-only source limits. A live parcel lookup is not proof of citywide search coverage.",
     z.object({}),
     () => getSearchCoverage(),
+  );
+  tool(
+    server,
+    "get_indexed_record",
+    "Inspect one official indexed record",
+    "Return one official source row by its published ID, its indexed fields, exact or ambiguous City parcel joins, and refresh coverage. Municipal permit records require the exact published permit type. Full permit children remain available through get_permit_details.",
+    z.object({ source_id: z.string().min(1).max(80),
+      record_id: z.string().min(1).max(160),
+      permit_type: z.string().min(1).max(100).optional(),
+      include_geometry: z.boolean().optional() }),
+    (args) => getIndexedRecord(args),
   );
   tool(
     server,
