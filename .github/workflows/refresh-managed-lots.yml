@@ -1,0 +1,37 @@
+name: Refresh private City managed-lots index
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/refresh-managed-lots.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-parcel-managed-lots-index
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: vars.PARCEL_INDEX_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/parcel-pilot
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate private import revision
+        run: |
+          git rev-parse --short=12 HEAD
+          npm test
+      - name: Import official City managed-lot records
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+        run: |
+          test -n "$SEARCH_DATABASE_WRITE_URL" || { echo 'SEARCH_DATABASE_WRITE_URL is missing'; exit 1; }
+          npm run index:migrate
+          npm run index:refresh -- managed-lots
