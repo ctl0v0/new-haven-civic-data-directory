@@ -2,7 +2,7 @@ import { getCache } from "@vercel/functions";
 
 const memory = new Map();
 const pending = new Map();
-const CACHE_VERSION = "parcel-v16";
+const CACHE_VERSION = "parcel-v17";
 
 export class SourceError extends Error {
   constructor(message, status = 502) {
@@ -21,6 +21,7 @@ export async function fetchBounded(
     headers = {},
     method = "GET",
     body,
+    redirect = "error",
   } = {},
 ) {
   const response = await fetch(url, {
@@ -28,12 +29,13 @@ export async function fetchBounded(
     body,
     headers: { accept, ...headers },
     signal: AbortSignal.timeout(timeout),
-    redirect: "error",
+    redirect,
     cache: "no-store",
   });
   if (!response.ok) {
     const error = new SourceError(`Upstream returned HTTP ${response.status}`);
     error.upstreamStatus = response.status;
+    error.upstreamLocation = response.headers.get("location");
     throw error;
   }
   if (Number(response.headers.get("content-length") || 0) > maxBytes)

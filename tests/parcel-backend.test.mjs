@@ -760,6 +760,8 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
           Fullname: "Example Owner",
           ContactRole: "Owner",
           ContactType: "OWNER",
+          Modified: "2026-11-19T08:33:51.9843129-05:00",
+          CreatedDate: "2023-12-01T22:01:39.54",
           Email: "private@example.org",
           Phone: "555-0100",
         }],
@@ -792,6 +794,8 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
     "C-22-02774");
   assert.equal(out.items.find((x) => x.category === "Contact").attributes.contact_role,
     "Owner");
+  assert.equal(out.items.find((x) => x.category === "Contact").event_date, null);
+  assert.match(out.items.find((x) => x.category === "Contact").note, /Undated/);
   assert.doesNotMatch(JSON.stringify(out), /Private notes|Private complaint narrative|private@example.org|555-0100/);
 });
 
@@ -925,6 +929,7 @@ test("verified municipal permit details expose fees and reviews once with explic
         { Document_ID: 327612, Name: "Private document", Public: false,
           UrlExists: true, Url: "https://www.municitymedia.com/private/permit.pdf" }],
         Contact: [{ Contact_ID: 639971, Fullname: "Example Owner", ContactRole: "Owner",
+          Modified: "2026-11-19T08:33:51.9843129-05:00",
           Phone: "555-0100", Email: "private@example.org" },
         { Contact_ID: 639972, Fullname: "Licensed Contractor", ContactRole: "Contractor",
           CompanyName: "Example Plumbing", Role: { IsPublic: 1 },
@@ -948,6 +953,7 @@ test("verified municipal permit details expose fees and reviews once with explic
   assert.equal(result.category_counts.Flag, 1);
   assert.equal(result.items.find((item) => item.category === "Inspection").attributes.Status, "Passed");
   const contractor = result.items.find((item) => item.category === "Contact" && item.attributes.ContactRole === "Contractor");
+  assert.equal(result.items.find((item) => item.category === "Contact" && item.attributes.ContactRole === "Owner").event_date, null);
   assert.equal(contractor.attributes.CompanyName, "Example Plumbing");
   assert.equal(contractor.attributes.Phone, "203-555-0188");
   assert.equal(contractor.linked_from.length, 2);
@@ -1403,6 +1409,25 @@ test("assessor card does not merge facts from multiple buildings", async () => {
   `, { headers: { "content-type": "text/html" } });
   const out = await getSourceRecords("assessor", parcel(999031));
   assert.deepEqual(out.items[0].attributes.building_facts, { building_count: 2 });
+});
+
+test("Vision assessor error redirect is reported as one precise source failure", async () => {
+  globalThis.fetch = async (input, options) => {
+    assert.match(String(input), /Parcel\.aspx\?pid=999033$/);
+    assert.equal(options.redirect, "manual");
+    return new Response(null, { status: 302, headers: {
+      location: "/newhavenct/Error.aspx?Message=There%20was%20an%20error%20loading%20the%20parcel.",
+    } });
+  };
+  const p = parcel(999033);
+  const [card, owner, sales] = await Promise.all([
+    getSourceRecords("assessor", p), getSourceRecords("assessor-owner", p),
+    getSourceRecords("assessor-sales", p),
+  ]);
+  for (const check of [card, owner, sales]) {
+    assert.equal(check.status, "unavailable");
+    assert.match(check.warning, /Vision assessor card for City parcel ID 999033 redirected to its "error loading the parcel" page/);
+  }
 });
 
 test("assessor subareas preserve separate source tables and omit unreadable totals", async () => {

@@ -45,6 +45,10 @@ const app = `
       <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>
     </figure></div>
   </section>
+  <section id="school-attendance-summary" class="school-attendance-summary" aria-labelledby="school-attendance-title" hidden>
+    <div class="section-heading"><div><p class="eyebrow">Address-specific record</p><h2 id="school-attendance-title">School Choice attendance zones</h2></div></div>
+    <div id="school-attendance-results" aria-live="polite"></div>
+  </section>
   <section id="parcel-map-section" class="map-panel" aria-labelledby="parcel-map-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Mapped parcel</p><h2 id="parcel-map-title">City parcel boundary</h2></div><p>The outline is a parcel boundary, not a building footprint.</p></div>
     <div class="map-workspace">
@@ -61,7 +65,7 @@ const app = `
     <div id="snapshot-grid" class="snapshot-grid"></div>
   </section>
   <section id="feed-section" class="timeline-section" aria-labelledby="timeline-title" hidden>
-    <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. A document or contact date may only mark an update to that record.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. Undated contacts remain in the Activity records.</p></div>
     <div id="timeline-filters"></div>
     <ol id="feed" class="timeline"></ol>
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>

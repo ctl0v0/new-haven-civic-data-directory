@@ -643,6 +643,25 @@ body.browse-mode .overview-highlights, body.browse-mode .overview-group > .sourc
 }
 .record-review-main { min-width: 0; padding: 1.1rem 0 2rem 1.4rem; }
 .record-review-main .parcel-hero { margin-top: 0; padding-top: .35rem; }
+.school-attendance-summary { border-top: 1px solid #cbdacf; border-bottom: 1px solid #cbdacf; padding: .85rem 0; margin: -1rem 0 1.4rem; }
+.school-attendance-summary .section-heading { margin-bottom: .45rem; }
+.school-attendance-summary h2 { margin: .1rem 0; font-size: 1.15rem; }
+.school-attendance-list { list-style: none; padding: 0; margin: 0; }
+.school-attendance-row { border-top: 1px solid #dce6de; padding: .55rem 0; font-size: .85rem; }
+.school-attendance-address { display: block; margin-bottom: .3rem; }
+.school-attendance-schools { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr); gap: .2rem .7rem; margin: 0 0 .3rem; }
+.school-attendance-schools dt { color: #4c655d; }
+.school-attendance-schools dd { margin: 0; font-weight: 650; }
+.school-attendance-row a { font-size: .8rem; }
+.school-attendance-focus, .school-attendance-provenance, .school-attendance-summary .source-note { margin: .4rem 0; font-size: .82rem; }
+.school-attendance-focus { font-weight: 700; color: #175b42; }
+.school-attendance-provenance { color: #4c655d; }
+.school-attendance-other { border-top: 1px solid #dce6de; padding: .55rem 0; }
+.school-attendance-other summary { cursor: pointer; color: #07543e; font-size: .85rem; }
+.school-attendance-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem; margin: .6rem 0 0; }
+.school-attendance-actions button { width: auto; padding: .45rem .7rem; font-size: .8rem; }
+.school-attendance-actions a { font-size: .8rem; }
+@media (max-width: 44rem) { .school-attendance-schools { grid-template-columns: 1fr; } .school-attendance-schools dd { margin-bottom: .35rem; } }
 .record-review-main #parcel-summary,
 .record-review-main #snapshot,
 .record-review-main #feed-section,

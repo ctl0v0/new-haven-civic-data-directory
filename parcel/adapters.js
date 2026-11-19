@@ -661,11 +661,25 @@ async function assessorData(parcel) {
   if (assessorPending.has(id)) return assessorPending.get(id);
   const pending = cached(`assessor-card:${id}`, async () => {
     const url = `https://gis.vgsi.com/newhavenct/Parcel.aspx?pid=${id}`;
-    const html = await fetchBounded(url, {
-      accept: "text/html,application/xhtml+xml",
-      timeout: 9000,
-      maxBytes: 5_000_000,
-    });
+    let html;
+    try {
+      html = await fetchBounded(url, {
+        accept: "text/html,application/xhtml+xml",
+        timeout: 9000,
+        maxBytes: 5_000_000,
+        redirect: "manual",
+      });
+    } catch (error) {
+      if (error instanceof SourceError && [301, 302, 303, 307, 308].includes(error.upstreamStatus)) {
+        const destination = new URL(error.upstreamLocation ?? url, url);
+        if (destination.origin === new URL(url).origin &&
+          /^\/newhavenct\/Error\.aspx$/i.test(destination.pathname) &&
+          /error loading the parcel/i.test(destination.searchParams.get("Message") ?? ""))
+          throw new SourceError(`Vision assessor card for City parcel ID ${id} redirected to its "error loading the parcel" page.`);
+        throw new SourceError(`Vision assessor card for City parcel ID ${id} redirected without a verified card.`);
+      }
+      throw error;
+    }
     const $ = load(html);
     if (Number($("#MainContent_lblPid").first().text().trim()) !== id)
       throw new SourceError("Assessor card did not confirm parcel ID");
@@ -1489,7 +1503,9 @@ async function municityRecords(parcel) {
   for (const [kind, idKey, dateKeys] of [
     ["Document", "Document_ID", ["Modified", "CreatedDate"]],
     ["Complaint", "Complaint_ID", ["Date", "CreatedDate"]],
-    ["Contact", "Contact_ID", ["Modified", "CreatedDate"]],
+    // A Contact Modified/CreatedDate timestamp is service metadata, not a dated
+    // contact, ownership, or occupancy event. Keep the row, without an event date.
+    ["Contact", "Contact_ID", []],
     ["Permit", "Permit_ID", ["PermitDate", "CreatedDate"]],
     ["Application", "Application_ID", ["ApplicationDate", "CreatedDate"]],
     ["License", "License_ID", ["IssueDate", "CreatedDate"]],
@@ -1547,7 +1563,7 @@ async function municityRecords(parcel) {
                 kind === "Complaint"
                   ? "Municipal complaint case metadata; narrative and personal contact fields are omitted."
                   : kind === "Contact"
-                    ? "Municipal parcel-linked contact summary; verify the role and whether it is current."
+                    ? "Undated municipal parcel-linked contact summary. The service's update timestamp does not date the role; verify whether it is current."
                     : kind === "Document"
                       ? "Public municipal document metadata; the linked file is hosted by the source."
                       : kind === "Occupant"

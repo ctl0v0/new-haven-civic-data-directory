@@ -59,6 +59,7 @@ function childAttributes(kind, row) {
   return attributes;
 }
 function childDate(kind, row) {
+  if (kind === "Contact") return null;
   const fields = kind === "Fee" ? ["Date", "CreatedDate"]
     : kind === "Task" ? ["DateCompleted", "CreatedDate"]
       : kind === "Inspection" ? ["CloseDate", "SchedDate", "CreatedDate"]

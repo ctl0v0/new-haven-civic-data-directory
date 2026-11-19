@@ -177,6 +177,7 @@ function showDataSection(id, updateUrl = true) {
   activeDataSection = id;
   $("record-detail").hidden = true;
   $("parcel-map-section").hidden = id !== "overview";
+  $("school-attendance-summary").hidden = id !== "overview";
   $("snapshot").hidden = id !== "overview";
   $("feed-section").hidden = id !== "timeline";
   for (const [key] of groups) {
@@ -430,7 +431,20 @@ function sourceIssueReason(source) {
   return source.warning ?? source.coverage ?? source.status;
 }
 function sourceIssueLabels(sources) {
-  return sources.map((source) => `${sourceName(source.source_id)} (${source.status}): ${sourceIssueReason(source)}`).join("; ");
+  const assessorIds = new Set(["assessor", "assessor-owner", "assessor-sales", "assessor-valuations",
+    "assessor-subareas", "assessor-land", "assessor-buildings", "assessor-extra-features", "assessor-outbuildings"]);
+  const assessor = sources.filter((source) => assessorIds.has(source.source_id));
+  const sameCheck = assessor.length > 1 && assessor.every((source) =>
+    source.status === assessor[0].status && sourceIssueReason(source) === sourceIssueReason(assessor[0]));
+  let shownAssessor = false;
+  return sources.flatMap((source) => {
+    if (sameCheck && assessorIds.has(source.source_id)) {
+      if (shownAssessor) return [];
+      shownAssessor = true;
+      return [`Vision assessor card check (${source.status}; ${assessor.length} affected sources): ${sourceIssueReason(source)}`];
+    }
+    return [`${sourceName(source.source_id)} (${source.status}): ${sourceIssueReason(source)}`];
+  }).join("; ");
 }
 function recordStatus(item) {
   const a = item.attributes ?? {};
@@ -1012,6 +1026,8 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   $("record-detail").hidden = true;
   $("overview-counts").replaceChildren();
   $("snapshot-grid").replaceChildren(el("p", "Loading source-linked overview…", "meta"));
+  $("school-attendance-results").replaceChildren(el("p", "Loading official school attendance zones…", "meta"));
+  $("school-attendance-summary").hidden = true;
   $("feed").replaceChildren();
   $("parcel-summary").hidden = true;
   $("snapshot").hidden = true;
@@ -1048,6 +1064,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
     const tasks = [];
     if (!browsing) tasks.push(loadHeroPhoto(qs, version));
     tasks.push(browsing ? loadBrowseSelectedMap(qs, version) : loadMap(qs, version));
+    tasks.push(loadSchoolAttendance(qs, version));
     tasks.push(loadOverview(qs, version));
     for (const [id, title] of groups) {
       const section = el("section", null, "panel");
@@ -1061,6 +1078,74 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
     if (version === viewVersion) status("Overview loaded. Choose a group to request and inspect its records.");
   } catch (error) {
     if (version === viewVersion) status(error.message);
+  }
+}
+function schoolAttendanceRow(item) {
+  const a = item.attributes ?? {};
+  const row = el("li", null, "school-attendance-row");
+  row.append(el("strong", a.address ?? "Address unavailable", "school-attendance-address"));
+  const schools = el("dl", null, "school-attendance-schools");
+  for (const [label, value] of [
+    ["K–8 attendance zone", a.k8_attendance_zone_school],
+    ["High school attendance zone", a.high_school_attendance_zone_school],
+  ]) {
+    schools.append(el("dt", label), el("dd", value ?? "Not published"));
+  }
+  row.append(schools);
+  if (item.source_url) row.append(link(item.source_url, "Open NHPS source row"));
+  return row;
+}
+async function loadSchoolAttendance(qs, version) {
+  const section = $("school-attendance-summary");
+  const results = $("school-attendance-results");
+  try {
+    const data = await api(`/api/v1/school-attendance?${qs}`);
+    if (version !== viewVersion) return;
+    results.replaceChildren();
+    section.hidden = activeDataSection !== "overview";
+    const matches = searchedAddress
+      ? data.items.filter((item) => item.address_evidence?.matches_query)
+      : [];
+    const primary = searchedAddress ? matches : data.items.slice(0, 2);
+    const other = data.items.filter((item) => !primary.includes(item));
+    if (searchedAddress && !matches.length)
+      results.append(el("p", `No verified NHPS attendance-zone row matched ${searchedAddress}. Other addresses on this parcel may have results below.`, "source-note"));
+    if (primary.length) {
+      if (searchedAddress) results.append(el("p", `Matched searched address: ${searchedAddress}`, "school-attendance-focus"));
+      const list = el("ul", null, "school-attendance-list");
+      primary.forEach((item) => list.append(schoolAttendanceRow(item)));
+      results.append(list);
+    }
+    if (other.length) {
+      const details = el("details", null, "school-attendance-other");
+      details.append(el("summary", `${other.length} other ${other.length === 1 ? "address" : "addresses"} on this parcel`));
+      const list = el("ul", null, "school-attendance-list");
+      other.forEach((item) => list.append(schoolAttendanceRow(item)));
+      details.append(list);
+      results.append(details);
+    }
+    if (!data.items.length && !searchedAddress)
+      results.append(el("p", "No verified NHPS attendance-zone rows were returned for this parcel's checked addresses.", "source-note"));
+    const snapshot = data.items.find((item) => item.attributes?.source_lookup_mode === "official_snapshot");
+    if (snapshot) results.append(el("p", `Official NHPS export retrieved ${shortDate(snapshot.attributes.source_snapshot_retrieved_at)}; the live lookup was unavailable.`, "school-attendance-provenance"));
+    else if (data.items.length) results.append(el("p", "Checked against the live NHPS attendance-zone search.", "school-attendance-provenance"));
+    if (data.source.warning) results.append(el("p", data.source.warning, "source-warning"));
+    results.append(el("p", "NHPS describes these as School Choice placement preferences, not guaranteed enrollment.", "source-note"));
+    const actions = el("p", null, "school-attendance-actions");
+    const open = el("button", "Review all school source records", "secondary");
+    open.type = "button";
+    open.addEventListener("click", () => {
+      groupFilters.set("property", { ...filterState("property"), source_id: ["school-attendance"] });
+      loadedGroups.delete("property");
+      navigateDataSection("property");
+    });
+    actions.append(open);
+    if (data.source.source_url) actions.append(link(data.source.source_url, "NHPS attendance-zone search"));
+    results.append(actions);
+  } catch (error) {
+    if (version !== viewVersion) return;
+    section.hidden = activeDataSection !== "overview";
+    results.replaceChildren(el("p", `Could not check school attendance zones: ${error.message}`, "source-warning"));
   }
 }
 async function loadMap(qs, version) {
@@ -1994,9 +2079,7 @@ function appendTimelineEvent(parent, item) {
   const content = el("div", null, "timeline-content");
   const kind = item.category === "Document"
     ? eventDateLabel(item) === "Modified date" ? "Document modified" : "Document record"
-    : item.category === "Contact"
-      ? "Contact record"
-      : item.category === "Occupant"
+    : item.category === "Occupant"
         ? eventDateLabel(item) === "Created date" ? "Occupant record created" : "Occupant record"
       : item.source_id === "parcel-sale"
         ? "Sale date on City parcel record"
