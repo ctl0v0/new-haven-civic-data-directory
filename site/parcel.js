@@ -59,6 +59,8 @@ let feedLoadVersion = 0;
 let activeDataSection = "overview";
 let activeRecordGroup = null;
 let guideData = null;
+let overviewGroups = [];
+let timelineReturnedCount = null;
 const municipalCategoryTitles = {
   Document: "Documents",
   Application: "Applications",
@@ -181,6 +183,8 @@ function showDataSection(id, updateUrl = true) {
     const current = button.dataset.section === id;
     button.setAttribute("aria-current", current ? "page" : "false");
   }
+  const sectionPicker = $("mobile-section-picker");
+  if (sectionPicker) sectionPicker.value = id;
   if (updateUrl) saveDataUrl();
   if (selected && requestedParcelKey === parcelKey(selected)) {
     if (id === "timeline" && !feedLoaded) {
@@ -192,34 +196,65 @@ function showDataSection(id, updateUrl = true) {
     }
   }
 }
+function navigateDataSection(id) {
+  showDataSection(id);
+  if (!document.body.classList.contains("browse-mode")) {
+    const target = id === "overview" ? $("parcel-summary") : id === "timeline" ? $("feed-section") : $(`group-${id}`);
+    requestAnimationFrame(() => target?.scrollIntoView({ behavior: "auto", block: "start" }));
+  }
+}
+function updateDataNavCounts() {
+  const nav = $("group-nav");
+  for (const button of nav.querySelectorAll(".data-nav-button")) {
+    const id = button.dataset.section;
+    const group = overviewGroups.find((entry) => entry.id === id);
+    const count = id === "timeline" ? timelineReturnedCount : group?.record_count;
+    const badge = button.querySelector(".nav-record-count");
+    if (badge) {
+      badge.textContent = count == null ? "" : String(count);
+      badge.hidden = count == null;
+    }
+    const title = id === "overview" ? "Overview" : id === "timeline" ? "Timeline" : groups.find(([key]) => key === id)?.[1];
+    button.setAttribute("aria-label", count == null ? title : `${title}, ${count} returned rows`);
+    const option = nav.querySelector(`#mobile-section-picker option[value="${id}"]`);
+    if (option) option.textContent = count == null ? title : `${title} · ${count} returned`;
+  }
+}
 function renderDataNav() {
   const nav = $("group-nav");
   nav.replaceChildren();
   nav.append(
     el("p", "Explore this parcel", "eyebrow record-nav-label"),
     el("h2", "Record sections", "record-nav-title"),
-    el("p", "Choose a section, then use its filters to narrow the returned records.", "record-nav-hint"),
+    el("p", "Counts are returned rows; groups can overlap. Choose a section to inspect or filter it.", "record-nav-hint"),
   );
+  const pickerLabel = el("label", "Record section", "mobile-section-label");
+  const picker = el("select", null, "mobile-section-picker");
+  picker.id = "mobile-section-picker";
+  picker.addEventListener("change", () => navigateDataSection(picker.value));
+  pickerLabel.append(picker);
+  nav.append(pickerLabel);
   for (const [id, title] of [["overview", "Overview"], ["timeline", "Timeline"], ...groups.map(([id, title]) => [id, title])]) {
-    const button = el("button", title, "data-nav-button");
+    const option = el("option", title);
+    option.value = id;
+    picker.append(option);
+    const button = el("button", null, "data-nav-button");
     button.type = "button";
     button.dataset.section = id;
-    button.addEventListener("click", () => {
-      showDataSection(id);
-      if (!document.body.classList.contains("browse-mode")) {
-        const target = id === "overview" ? $("parcel-summary") : id === "timeline" ? $("feed-section") : $(`group-${id}`);
-        requestAnimationFrame(() => target?.scrollIntoView({ behavior: "auto", block: "start" }));
-      }
-    });
+    button.append(el("span", title), el("span", null, "nav-record-count"));
+    button.addEventListener("click", () => navigateDataSection(id));
     nav.append(button);
   }
   nav.hidden = false;
+  updateDataNavCounts();
   showDataSection(activeDataSection, false);
 }
 async function loadOverview(qs, version) {
   try {
     const data = await api(`/api/v1/overview?${qs}`);
     if (version !== viewVersion) return;
+    overviewGroups = data.groups;
+    updateDataNavCounts();
     const counts = $("overview-counts");
     counts.replaceChildren();
     const total = data.groups.reduce((sum, group) => sum + group.record_count, 0);
@@ -333,6 +368,12 @@ function recordStatus(item) {
 }
 function recordTitle(item) {
   const a = item.attributes ?? {};
+  if (item.category === "Permit")
+    return brief([a.PermitType, a.PermitNo ?? a.PermitNumber].filter(Boolean).join(" · ") || "Permit record", 120);
+  if (item.category === "Application")
+    return brief([a.ApplicationType, a.ApplicationNumber ?? a.ApplicaNo].filter(Boolean).join(" · ") || "Application record", 120);
+  if (item.category === "License" && item.source_id !== "municipal-business-licenses" && !a.business_name && !a.BusinessName && !a.name)
+    return brief([a.LicenseType ?? a.license_type, a.LicenseNumber ?? a.license_number].filter(Boolean).join(" · ") || "License record", 120);
   if (item.source_id === "addresses")
     return `${a.house_number ?? ""} ${a.full_street_name ?? `${a.street_name ?? ""} ${a.suffix_type ?? ""}`}`.trim() || "City address point";
   if (item.source_id === "trash-pickup")
@@ -816,6 +857,8 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   selected = item;
   requestedParcelKey = null;
   activeDataSection = "overview";
+  overviewGroups = [];
+  timelineReturnedCount = null;
   groupFilters.clear();
   groupLoadVersions.clear();
   loadedGroups.clear();
@@ -1387,11 +1430,64 @@ function filterState(id) {
     event_date_from: "", event_date_to: "", address_match: false,
   };
 }
+function quickFilterSelect(parent, title, allLabel, values, selected, label, onChange) {
+  if (!Object.keys(values ?? {}).length && !selected.length) return;
+  const wrapper = el("label", null, "quick-filter");
+  wrapper.append(el("span", title));
+  const select = document.createElement("select");
+  const all = el("option", allLabel);
+  all.value = "";
+  select.append(all);
+  if (selected.length > 1) {
+    const multiple = el("option", `${selected.length} selected · edit in More filters`);
+    multiple.value = "__multiple__";
+    multiple.disabled = true;
+    select.append(multiple);
+    select.value = multiple.value;
+  }
+  const options = { ...values };
+  for (const value of selected) if (!(value in options)) options[value] = null;
+  for (const [value, count] of Object.entries(options)) {
+    const option = el("option", `${label(value)}${count == null ? "" : ` · ${count}`}`);
+    option.value = value;
+    select.append(option);
+  }
+  if (selected.length === 1) select.value = selected[0];
+  select.addEventListener("change", () => onChange(select.value ? [select.value] : []));
+  wrapper.append(select);
+  parent.append(wrapper);
+}
+function quickAddressMatch(parent, checked, onChange) {
+  if (!searchedAddress) return;
+  const label = el("label", null, "quick-address-match");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  input.addEventListener("change", () => onChange(input.checked));
+  label.append(input, document.createTextNode(`Source address matches ${searchedAddress}`));
+  parent.append(label);
+}
 function renderTimelineFilters(data, qs, version) {
   const container = $("timeline-filters");
   container.replaceChildren();
-  const summary = el("p", `${data.total} of ${data.returned_total} returned dated rows${data.partial ? " · some source checks incomplete" : ""}`, "overview-summary");
+  const summary = el("p", null, "overview-summary");
+  summary.id = "timeline-result-count";
   container.append(summary);
+  container.append(el("p", "All returned dates and published statuses are included until you apply a filter. Older and closed records remain reachable by loading more rows.", "filter-context"));
+  const quick = el("div", null, "quick-filters");
+  const update = (key, value) => {
+    timelineFilters = { ...timelineFilters, [key]: value };
+    saveDataUrl();
+    void loadFeed(qs, version);
+  };
+  quickFilterSelect(quick, "Category", "All categories", data.facets?.category, timelineFilters.category,
+    (value) => municipalCategoryTitles[value] ?? value, (value) => update("category", value));
+  quickFilterSelect(quick, "Published work type", "All work types", data.facets?.record_type, timelineFilters.record_type,
+    (value) => value, (value) => update("record_type", value));
+  quickFilterSelect(quick, "Published status", "All statuses", data.facets?.source_status, timelineFilters.source_status,
+    (value) => value, (value) => update("source_status", value));
+  quickAddressMatch(quick, timelineFilters.address_match, (value) => update("address_match", value));
+  container.append(quick);
   if (filterCount(timelineFilters)) {
     const active = el("div", null, "active-filters");
     active.append(el("span", `${filterCount(timelineFilters)} applied`, "filter-count"));
@@ -1409,7 +1505,7 @@ function renderTimelineFilters(data, qs, version) {
     container.append(active);
   }
   const details = el("details", null, "filter-drawer");
-  details.append(el("summary", `Timeline filters${filterCount(timelineFilters) ? ` · ${filterCount(timelineFilters)} applied` : ""}`));
+  details.append(el("summary", `More filters${filterCount(timelineFilters) ? ` · ${filterCount(timelineFilters)} applied` : ""}`));
   const form = el("form", null, "filter-form");
   filterChoices(form, "category", "Municipal category", data.facets?.category, timelineFilters.category, (value) => municipalCategoryTitles[value] ?? value);
   filterChoices(form, "record_type", "Published work type", data.facets?.record_type, timelineFilters.record_type, (value) => value);
@@ -1491,6 +1587,19 @@ function filterChoices(parent, key, title, values, selected, label) {
 function renderFilters(id, data, qs, version) {
   const current = filterState(id);
   const container = el("div", null, "filters-area");
+  container.append(el("p", "All returned records are shown by default, including older, closed, voided and expired rows. Within each category, recent source-reported statuses appear first; each record retains its exact published status. Filter option counts are before filters.", "filter-context"));
+  const quick = el("div", null, "quick-filters");
+  const update = (key, value) => {
+    groupFilters.set(id, { ...current, [key]: value });
+    saveDataUrl();
+    void loadGroup(id, $(`group-${id}`), qs, version);
+  };
+  quickFilterSelect(quick, "Published work type", "All work types", data.facets?.record_type, current.record_type,
+    (value) => value, (value) => update("record_type", value));
+  quickFilterSelect(quick, "Published status", "All statuses", data.facets?.source_status, current.source_status,
+    (value) => value, (value) => update("source_status", value));
+  quickAddressMatch(quick, current.address_match, (value) => update("address_match", value));
+  container.append(quick);
   const active = el("div", null, "active-filters");
   const amount = filterCount(current);
   if (amount) {
@@ -1525,7 +1634,7 @@ function renderFilters(id, data, qs, version) {
   }
   container.append(active);
   const details = el("details", null, "filter-drawer");
-  details.append(el("summary", `Filters${amount ? ` · ${amount} applied` : ""}`));
+  details.append(el("summary", `More filters${amount ? ` · ${amount} applied` : ""}`));
   const form = el("form", null, "filter-form");
   filterChoices(form, "category", "Municipal category", data.facets?.category, current.category, (value) => municipalCategoryTitles[value] ?? value);
   filterChoices(form, "record_type", "Published work type", data.facets?.record_type, current.record_type, (value) => value);
@@ -1597,14 +1706,14 @@ function renderCategoryIndex(parent, id, data, qs, version) {
   if (!["activity", "business", "ownership"].includes(id)) return;
   const index = el("nav", null, "category-index");
   index.setAttribute("aria-label", `${groups.find(([key]) => key === id)?.[1] ?? id} categories`);
-  index.append(el("p", "Browse categories · counts are returned rows before filters", "meta"));
+  index.append(el("p", "Browse categories · counts are returned rows before filters; select a category to request its rows directly", "meta"));
   const all = el("button", "All categories", "category-button");
   all.type = "button";
   const currentSelection = filterState(id);
   all.setAttribute("aria-pressed", String(!currentSelection.category.length && !currentSelection.source_id.length && !currentSelection.display_group.length));
   all.onclick = () => {
     const current = filterState(id);
-    groupFilters.set(id, { ...current, category: [], record_type: [], source_id: [], display_group: [] });
+    groupFilters.set(id, { ...current, category: [], source_id: [], display_group: [] });
     saveDataUrl();
     void loadGroup(id, $(`group-${id}`), qs, version);
   };
@@ -1617,7 +1726,7 @@ function renderCategoryIndex(parent, id, data, qs, version) {
       key.startsWith("source:") ? currentSelection.source_id.includes(key.slice(7)) : currentSelection.category.includes(key)));
     button.onclick = () => {
       const current = filterState(id);
-      const next = { ...current, category: [], record_type: [], source_id: [], display_group: [] };
+      const next = { ...current, category: [], source_id: [], display_group: [] };
       if (id === "ownership") next.display_group = [key];
       else if (key.startsWith("source:")) next.source_id = [key.slice(7)];
       else next.category = [key];
@@ -1639,13 +1748,13 @@ function prepareHierarchy(parent, id, data) {
       (!filters.source_id.length || !key.startsWith("source:") || filters.source_id.includes(key.slice(7)))));
   for (const key of keys) {
     const category = el("section", null, "record-category");
+    category.hidden = true;
     const heading = el("div", null, "record-category-heading");
-    heading.append(el("h3", kindTitle(key, data)), el("span", `${data.facets.kind[key]} returned`, "group-count"));
+    const countNode = el("span", `0 shown · ${data.facets.kind[key]} returned`, "group-count");
+    heading.append(el("h3", kindTitle(key, data)), countNode);
     category.append(heading);
-    const empty = el("p", "No rows in this page. Select this category above to request its matching rows.", "category-page-note");
-    category.append(empty);
     parent.append(category);
-    state.categories.set(key, { category, empty, statuses: new Map() });
+    state.categories.set(key, { category, countNode, count: 0, statuses: new Map() });
   }
 }
 function appendHierarchicalRecord(parent, item) {
@@ -1653,7 +1762,9 @@ function appendHierarchicalRecord(parent, item) {
   const key = kindKey(item, state.id);
   const target = state.categories.get(key);
   if (!target) return;
-  target.empty.remove();
+  target.category.hidden = false;
+  target.count += 1;
+  target.countNode.textContent = `${target.count} shown · ${state.data.facets.kind[key]} returned`;
   if (state.id === "ownership") {
     let list = target.statuses.get("all");
     if (!list) {
@@ -1665,18 +1776,22 @@ function appendHierarchicalRecord(parent, item) {
     return;
   }
   const statusKey = item.display_group?.key ?? "unclassified";
-  let list = target.statuses.get(statusKey);
-  if (!list) {
+  let status = target.statuses.get(statusKey);
+  if (!status) {
     const section = el("section", null, "status-section");
     const name = state.data.display_groups?.find((entry) => entry.key === statusKey)?.title ?? "Status not stated";
     const count = state.data.facets?.kind_display_group?.[key]?.[statusKey] ?? 0;
-    section.append(el("h4", `${name} · ${count} returned`));
-    list = el("div", null, "record-list");
+    const heading = el("h4", `${name} · 0 shown · ${count} returned`);
+    section.append(heading);
+    const list = el("div", null, "record-list");
     section.append(list);
     target.category.append(section);
-    target.statuses.set(statusKey, list);
+    status = { list, heading, name, count, shown: 0 };
+    target.statuses.set(statusKey, status);
   }
-  appendRecord(list, item);
+  status.shown += 1;
+  status.heading.textContent = `${status.name} · ${status.shown} shown · ${status.count} returned`;
+  appendRecord(status.list, item);
 }
 async function loadGroup(id, section, qs, version, cursor = null) {
   const generation = cursor ? groupLoadVersions.get(id) : (groupLoadVersions.set(id, (groupLoadVersions.get(id) ?? 0) + 1), groupLoadVersions.get(id));
@@ -1694,7 +1809,7 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       section.replaceChildren();
       const heading = el("div", null, "group-heading");
       heading.append(el("h2", definition[1]));
-      heading.append(el("span", `${data.total} of ${data.returned_total} returned`, "group-count"));
+      heading.append(el("span", null, "group-count"));
       section.append(heading);
       section.append(el("p", definition[2], "group-intro"));
       section.append(renderFilters(id, data, qs, version));
@@ -1720,6 +1835,9 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       if (["activity", "business", "ownership"].includes(id)) appendHierarchicalRecord(records, item);
       else appendRecord(records, item);
     }
+    const shown = records.querySelectorAll(".record-card").length;
+    const count = section.querySelector(".group-heading .group-count");
+    if (count) count.textContent = `${shown} shown of ${data.total} matching · ${data.returned_total} returned by sources`;
     if (data.next_cursor) {
       const b = el("button", "Load more records", "load-more secondary");
       b.type = "button";
@@ -1793,6 +1911,10 @@ async function loadFeed(qs, version, cursor = null) {
         $("feed").append(el("li", `${gaps.length} timeline sources have limited coverage. Review source status in the groups below.`, "timeline-note"));
     }
     for (const item of data.items) appendTimelineEvent($("feed"), item);
+    timelineReturnedCount = data.returned_total;
+    updateDataNavCounts();
+    const summary = $("timeline-result-count");
+    if (summary) summary.textContent = `${$("feed").querySelectorAll(".timeline-entry").length} shown of ${data.total} matching dated rows · ${data.returned_total} returned by sources${data.partial ? " · some source checks incomplete" : ""}`;
     if (!data.items.length && !cursor)
       $("feed").append(
         el("li", "No dated records were returned by the checked sources.", "timeline-note"),
