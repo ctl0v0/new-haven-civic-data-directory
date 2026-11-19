@@ -428,6 +428,8 @@ test("indexed record search pages published rows and retains exact parcel eviden
   assert.equal(page.complete_for_query, false);
   assert.ok(statement.includes("j.join_status = 'exact'"));
   assert.ok(statement.includes("SELECT DISTINCT r.record_id"));
+  assert.ok(statement.includes("a.record_id = j.city_address_objectid::text"));
+  assert.ok(statement.includes("'full_street_name', a.fields->>'full_street_name'"));
   assert.ok(params.includes("12846"));
   assert.ok(params.includes("ACTIVE"));
   assert.ok(!statement.includes("ACTIVE"));

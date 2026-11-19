@@ -356,6 +356,17 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     filters.push(`j.city_objectid = ${add(objectId)}::bigint`);
   }
   const parcelRun = add(runs.parcels);
+  const addressRun = ADDRESS_DEPENDENT.has(sourceId) ? add(runs.addresses) : null;
+  const addressJoin = addressRun == null ? "" : `
+      LEFT JOIN search_records a ON a.run_id = ${addressRun}
+        AND a.source_id = 'addresses'
+        AND a.record_id = j.city_address_objectid::text`;
+  const addressEvidence = addressRun == null ? "'[]'::jsonb" : `COALESCE(
+        jsonb_agg(DISTINCT jsonb_build_object(
+          'objectid', a.record_id, 'house_number', a.fields->>'house_number',
+          'full_street_name', a.fields->>'full_street_name',
+          'unit', a.fields->>'unit', 'source_url', a.source_url))
+          FILTER (WHERE a.record_id IS NOT NULL), '[]'::jsonb)`;
   const statement = `WITH page AS MATERIALIZED (
     SELECT DISTINCT r.record_id, r.event_date, j.city_parcel_id, j.city_objectid
     FROM search_records r JOIN search_record_parcels j
@@ -370,7 +381,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     p.source_url AS city_parcel_source_url,
     r.source_id, r.record_id, r.source_url, r.published_type, r.published_status,
     r.event_date, r.fields,
-    links.city_address_objectids, links.match_methods
+    links.city_address_objectids, links.city_address_points, links.match_methods
     FROM page JOIN search_records r ON r.run_id = ${recordRun}
       AND r.source_id = ${sourceRef} AND r.record_id = page.record_id
     JOIN search_records p ON p.run_id = ${parcelRun} AND p.source_id = 'parcels'
@@ -379,8 +390,9 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     LEFT JOIN LATERAL (
       SELECT array_agg(DISTINCT j.city_address_objectid)
         FILTER (WHERE j.city_address_objectid IS NOT NULL) AS city_address_objectids,
+        ${addressEvidence} AS city_address_points,
         array_agg(DISTINCT j.match_method) AS match_methods
-      FROM search_record_parcels j WHERE j.run_id = ${recordRun}
+      FROM search_record_parcels j${addressJoin} WHERE j.run_id = ${recordRun}
         AND j.source_id = ${sourceRef} AND j.record_id = page.record_id
         AND j.city_parcel_id = page.city_parcel_id
         AND j.city_objectid = page.city_objectid AND j.join_status = 'exact'
