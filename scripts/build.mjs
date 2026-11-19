@@ -46,3 +46,6 @@ await mkdir(new URL('dist/leaflet/images/',root),{recursive:true});
 for (const name of ['leaflet.css','leaflet.js']) await copyFile(new URL('node_modules/leaflet/dist/'+name,root),new URL('dist/leaflet/'+name,root));
 for (const name of (await readdir(new URL('node_modules/leaflet/dist/images/',root))).filter(name=>name.endsWith('.png'))) await copyFile(new URL('node_modules/leaflet/dist/images/'+name,root),new URL('dist/leaflet/images/'+name,root));
 console.log('Validated and built '+entries.length+' source entries.');
+if (process.env.VERCEL_ENV === 'preview' &&
+    process.env.VERCEL_GIT_COMMIT_REF === 'codex/parcel-pilot')
+  await import('./smoke-preview-question.mjs');
