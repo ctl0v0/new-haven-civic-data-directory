@@ -1,5 +1,8 @@
 name: Refresh private parcel search index
 on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/refresh-search-index.yml]
   workflow_dispatch:
     inputs:
       mode:
@@ -16,8 +19,26 @@ concurrency:
   group: private-parcel-search-index
   cancel-in-progress: false
 jobs:
+  verify:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/parcel-pilot
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Check Neon writer connection without importing data
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+        run: npm run index:verify-writer
   refresh:
-    if: vars.PARCEL_INDEX_ENABLED == 'true'
+    if: github.event_name != 'push' && vars.PARCEL_INDEX_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
