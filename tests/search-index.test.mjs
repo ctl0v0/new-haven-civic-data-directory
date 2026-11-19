@@ -277,6 +277,33 @@ test("all-type permit search returns indexed matches while listing missing catal
   delete process.env.SEARCH_DATABASE_URL;
 });
 
+test("coverage names every catalog type including one blocked at the vendor limit", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const coverage = await getSearchCoverage({ query: async (sql) => {
+    if (sql.includes("FROM search_active_runs a")) return [
+      { source_id: "municity-permit-types", scope_key: "all", run_id: 10,
+        status: "complete", finished_at: new Date(), expected_count: 2,
+        returned_count: 2, linked_count: 0, ambiguous_count: 0, unlinked_count: 0,
+        latest_attempt_status: "complete" },
+      { source_id: "municity", scope_key: "permit-type:HOOD - C", run_id: 11,
+        status: "complete", finished_at: new Date(), expected_count: 1,
+        returned_count: 1, linked_count: 1, ambiguous_count: 0, unlinked_count: 0,
+        latest_attempt_status: "complete" },
+    ];
+    if (sql.includes("SELECT record_id")) return [
+      { record_id: "Hood - C" }, { record_id: "Roofing" }];
+    return [{ scope_key: "permit-type:HOOD - C", status: "complete" },
+      { scope_key: "permit-type:ROOFING", status: "failed",
+        warning: "Reached the unpageable 2,000-row bound" }];
+  } });
+  assert.equal(coverage.index_status, "connected");
+  assert.equal(coverage.municipal_permit_catalog.catalog_types, 2);
+  assert.equal(coverage.municipal_permit_catalog.types_without_index, 1);
+  assert.equal(coverage.municipal_permit_types.find((type) => type.permit_type === "Roofing")
+    .latest_attempt_warning, "Reached the unpageable 2,000-row bound");
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
 test("City parcel search pages candidates and keeps REST and MCP responses aligned", async () => {
   globalThis.fetch = async (input) => {
     const u = new URL(input);

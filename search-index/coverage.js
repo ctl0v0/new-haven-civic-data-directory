@@ -3,7 +3,7 @@ import { indexSourceCatalog } from "./catalog.js";
 
 const maxAgeMs = (cadence) => cadence === "hourly" ? 2 * 3600_000 : 48 * 3600_000;
 
-export async function getSearchCoverage() {
+export async function getSearchCoverage({ query = indexQuery } = {}) {
   const catalog = indexSourceCatalog();
   if (!indexConfigured()) return {
     index_status: "unconfigured", sources: catalog.map((source) => ({
@@ -12,7 +12,7 @@ export async function getSearchCoverage() {
     note: "The private search index has not been connected. Existing live parcel and bounded permit tools remain available.",
   };
   try {
-    const rows = await indexQuery(`SELECT a.source_id, a.scope_key, r.id AS run_id,
+    const rows = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id,
       r.status, r.expected_count, r.returned_count, r.linked_count,
       r.ambiguous_count, r.unlinked_count, r.source_updated_at,
       r.finished_at, r.warning, last.status AS latest_attempt_status,
@@ -26,10 +26,10 @@ export async function getSearchCoverage() {
       .map((row) => [row.source_id, row]));
     const now = Date.now();
     const typeCatalogRun = active.get("municity-permit-types");
-    const typeNames = typeCatalogRun ? await indexQuery(`SELECT record_id
+    const typeNames = typeCatalogRun ? await query(`SELECT record_id
       FROM search_records WHERE run_id = $1 AND source_id = 'municity-permit-types'
       ORDER BY record_id`, [typeCatalogRun.run_id]) : [];
-    const latestTypes = await indexQuery(`SELECT DISTINCT ON (scope_key)
+    const latestTypes = await query(`SELECT DISTINCT ON (scope_key)
       scope_key, status, warning, started_at
       FROM search_source_runs WHERE source_id = 'municity'
         AND scope_key LIKE 'permit-type:%'
