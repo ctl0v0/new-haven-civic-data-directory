@@ -1,0 +1,33 @@
+name: Audit private parcel link coverage
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/audit-search-index-links.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: vars.PARCEL_INDEX_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/parcel-pilot
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate private audit revision
+        run: |
+          git rev-parse --short=12 HEAD
+          npm test
+      - name: Audit indexed municipal parcel links with the read-only role
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+          SEARCH_DATABASE_READER_PASSWORD: ${{ secrets.SEARCH_DATABASE_READER_PASSWORD }}
+          SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
+        run: npm run index:audit-links
