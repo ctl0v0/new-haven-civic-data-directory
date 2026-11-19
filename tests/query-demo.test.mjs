@@ -135,6 +135,27 @@ test("one-of use-code SQL is parameterized and a date-bound permit run cannot an
   delete process.env.SEARCH_DATABASE_URL;
 });
 
+test("City features without a matching reviewed use code do not limit a scoped use-code query", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const input = { requirements: [{ source_id: "parcels",
+    one_of: { use_code: ["3030"] } }] };
+  const active = [{ source_id: "parcels", scope_key: "all", run_id: 31,
+    status: "complete", finished_at: new Date(), expected_count: 100,
+    returned_count: 100, ambiguous_count: 0, unlinked_count: 6,
+    latest_attempt_status: "complete" }];
+  const query = async (statement) => statement.includes("search_active_runs a") ? active
+    : statement.includes("count(*)::integer AS count") ? [{ count: 0 }] : [];
+  const result = await searchIndexedParcels(input, { query });
+  assert.equal(result.complete_for_query, true);
+  assert.equal(result.coverage.source_checks[0].unlinked_count, 6);
+  assert.equal(result.coverage.source_checks[0].unlinked_outside_filter, 6);
+  const limited = await searchIndexedParcels(input, { query: async (statement) =>
+    statement.includes("search_active_runs a") ? active
+      : statement.includes("count(*)::integer AS count") ? [{ count: 1 }] : [] });
+  assert.equal(limited.complete_for_query, false);
+  delete process.env.SEARCH_DATABASE_URL;
+});
+
 test("date search must reproduce a known vendor permit and reconcile the exact day", async () => {
   const sample = { Permit_ID: 99, PermitType: "Electrical Permit",
     PermitDate: "11/18/2026", PrintKey: "1 2 3" };

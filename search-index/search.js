@@ -264,6 +264,34 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
         ? "blocked" : run.latest_attempt_status,
       latest_attempt_warning: run.latest_attempt_warning ?? null };
   });
+  // Some City features have no parcel ID, MBLU, address, or use code. They
+  // cannot match a query explicitly limited to reviewed use codes. Verify that
+  // exclusion against the active official rows before calling this particular
+  // City-classified query complete; keep the global unlinked count visible.
+  const parcelUseCodes = requirements.find((item) => item.source_id === "parcels" &&
+    item.one_of?.use_code?.length)?.one_of.use_code;
+  const parcelCheck = sourceChecks.find((item) => item.source_id === "parcels");
+  const parcelRun = byId.get("parcels");
+  if (parcelUseCodes && parcelCheck?.status === "partial" && parcelRun &&
+      parcelCheck.fresh && parcelRun.status === "complete" &&
+      parcelRun.latest_attempt_status !== "failed" &&
+      Number(parcelRun.expected_count) === Number(parcelRun.returned_count) &&
+      Number(parcelRun.ambiguous_count) === 0 &&
+      Number(parcelRun.unlinked_count) > 0) {
+    try {
+      const [row] = await query(`SELECT count(*)::integer AS count
+        FROM search_records p WHERE p.run_id = $1 AND p.source_id = 'parcels'
+          AND upper(trim(p.fields->>'use_code')) = ANY($2::text[])
+          AND NOT EXISTS (SELECT 1 FROM search_record_parcels j
+            WHERE j.run_id = p.run_id AND j.source_id = p.source_id
+              AND j.record_id = p.record_id AND j.join_status = 'exact')`,
+      [parcelRun.run_id, parcelUseCodes]);
+      if (Number(row?.count) === 0) {
+        parcelCheck.status = "complete";
+        parcelCheck.unlinked_outside_filter = Number(parcelRun.unlinked_count);
+      }
+    } catch { /* Unknown scope stays partial. */ }
+  }
   if (sourceChecks.some((check) => check.status === "not_indexed"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: sourceChecks,
