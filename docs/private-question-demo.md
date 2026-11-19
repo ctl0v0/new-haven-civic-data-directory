@@ -72,3 +72,26 @@ and exact parcel joins as of its refresh, not for unpublished future changes.
 
 The City Community Management Team context points to the [City's CMT page](https://www.newhavenct.gov/government/community-management-team).
 The parcel and use-code source is the [City parcel GIS layer](https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0).
+
+## November 19, 2026 source check
+
+The official catalog listed 38 types in its Electrical group. The verified
+October 21–November 19 date window returned 81 Electrical-group permits; 77
+had an exact City parcel link and four did not. The read-only smoke check
+returned permit IDs, published `PermitType`, `PermitDate`, City parcel IDs and
+source links. It did not call the set of 77 a complete answer.
+
+The four unmatched [municipal permit records](https://www.municityconnect.com/#/app/NewHavenCityCT/landing)
+publish parcel keys absent from the City GIS parcel layer. Municipal Parcel
+notes for permits 590915 (1450 Chapel St) and 590963 (789 Howard Ave) describe
+their parcels as portions of another mapped MBLU; that prose has not been
+converted into an automatic join. The other two permit records, 590646 and
+590925, have no explicit parent MBLU in the municipal Parcel fields checked.
+An address or key prefix alone remains diagnostic evidence, not a join.
+
+The City parcel layer publishes 246 distinct `use_code` values without a
+coded-value domain or official label in its layer metadata. The reviewed code
+dictionary remains empty. This blocks a complete answer to the **commercial**
+part of the example until an official New Haven code definition is obtained.
+The Ask tab remains gated off; the protected API/MCP tools return coverage
+limits rather than representing these partial checks as all parcels.
