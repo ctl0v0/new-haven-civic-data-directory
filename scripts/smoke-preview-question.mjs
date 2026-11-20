@@ -1,5 +1,7 @@
 import { recentCalendarDates, askIndexedParcels } from '../search-index/ask.js';
 import { indexConfigured } from '../search-index/db.js';
+import { askParcelData } from '../search-index/parcel-question.js';
+import { queryParcelData } from '../search-index/parcel-query.js';
 import { searchIndexedParcels } from '../search-index/search.js';
 import { checkRecentPermitWindows } from './smoke-recent-permits.mjs';
 
@@ -40,6 +42,20 @@ try {
     status: answer.status, ...sourceSummary(answer.search_result) }));
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_question_end_to_end_failed',
+    code: error?.code ?? null, name: error?.name ?? null }));
+}
+
+try {
+  const review = await askParcelData({ question: 'show me permits for plumbing in the last 30 days', plan_only: true });
+  const permit = review.plan?.requirements[0];
+  if (review.status !== 'planned' || review.items || permit?.permit_group !== 'Plumbing' ||
+      permit.equals?.PermitType || permit.date?.field !== 'PermitDate')
+    throw new Error('The plumbing question did not prepare a group-only search plan');
+  const result = await queryParcelData({ plan: review.plan });
+  console.log(JSON.stringify({ event: 'preview_plumbing_plan_and_search', date: permit.date,
+    status: result.status, has_more: Boolean(result.next_cursor), ...sourceSummary(result) }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_plumbing_plan_and_search_failed',
     code: error?.code ?? null, name: error?.name ?? null }));
 }
 
