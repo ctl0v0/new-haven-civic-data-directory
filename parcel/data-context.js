@@ -135,7 +135,10 @@ export function commercialUseCodes() {
 
 export function parcelUseCodesForSearch(category) {
   if (category === "business_space") return commercialUseCodes() ?? [];
-  return [...(cityUseCodeIndex ?? [])].filter(([, row]) => row.category === category).map(([code]) => code);
+  // The mixed-use search requires a reviewed residential and business mix.
+  // A general assessor mixed-use label is sufficient for the recorded-use map.
+  return [...(cityUseCodeIndex ?? [])].filter(([, row]) => row.category === category &&
+    (category !== "mixed_use" || row.business_space === true)).map(([code]) => code);
 }
 
 export function reviewedUseCodeValues() {

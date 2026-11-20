@@ -113,7 +113,8 @@ we compared those published codes with the exact New Haven PIDs and codes in
 the [State-published 2025 assessor export](https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data).
 The map uses only entries with a confirmed code and a single published label
 across the matched records. The export reports generic mixed-use labels for
-codes including `3030`. The map shows those labels with their source and leaves
-the category unclassified until the combination of residential and commercial
-use is confirmed. Commercial questions remain blocked while any published
-code has an unresolved commercial classification.
+codes `107C`, `3030`, `303I`, and `303R`. The map colors those codes orange under
+Mixed-use and shows the assessor’s label and source in the parcel sidebar.
+Queries for a confirmed residential and business mix require a reviewed
+definition identifying both uses. The generic assessor labels carry no
+reviewed business-space assignment.

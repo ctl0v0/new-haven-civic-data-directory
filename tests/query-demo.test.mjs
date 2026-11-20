@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { askIndexedParcels, interpretBaselineQuestion, questionPermitCatalog, recentCalendarDates } from "../search-index/ask.js";
 import { queryWorkbenchVisible } from "../api/pilot-page.js";
-import { getDataContext, recordedParcelUse } from "../parcel/data-context.js";
+import { getDataContext, parcelUseCodesForSearch, recordedParcelUse } from "../parcel/data-context.js";
 import { municipalDateSearchFormat, municipalPermitDateRows, verifiedMunicipalPermitDays } from "../search-index/municity.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { auditCityUseCodes } from "../search-index/use-codes.js";
@@ -52,6 +52,17 @@ test("recorded parcel use requires an exact, reviewed City use-code definition",
   for (const code of ["ABC 1", "1", "", null])
     assert.equal(recordedParcelUse(code, dictionary).category, "unclassified");
   assert.equal(recordedParcelUse("001", { ...dictionary, codes: [...codes, codes[0]] }).category, "unclassified");
+});
+
+test("published mixed-use labels classify the map without establishing a residential and business mix", () => {
+  for (const code of ["107C", "3030", "303I", "303R"]) {
+    const use = recordedParcelUse(code);
+    assert.equal(use.category, "mixed_use");
+    assert.match(use.published_label, /^MIX(?:ED)? USE\b/);
+    assert.match(use.definition_source_url, /^https:\/\/data\.ct\.gov\//);
+    assert.equal(parcelUseCodesForSearch("mixed_use").includes(code), false);
+    assert.equal(parcelUseCodesForSearch("business_space").includes(code), false);
+  }
 });
 
 test("private query workbench appears on the pilot Preview branch only", () => {

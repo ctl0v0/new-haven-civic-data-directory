@@ -2557,8 +2557,12 @@ function displaySearchResult(result, { append = false } = {}) {
     message = "The private parcel index is not connected in this Preview.";
   else if (indexStatus === "unavailable")
     message = "The private parcel index could not be queried.";
-  else if (count)
-    message = `${count} ${noun}${count === 1 ? "" : "s"} shown. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`;
+  else if (count) {
+    const more = askCursor ? " More matches are available." : "";
+    const coverage = result.complete_for_query ? " Source checks and paging are complete."
+      : !askCursor || result.status === "coverage_limited" || indexStatus === "partial" ? " Review source coverage." : "";
+    message = `${count} ${noun}${count === 1 ? "" : "s"} shown.${more}${coverage}`;
+  }
   else if (candidates > 0)
     message = `No verified matches among the ${candidates} candidate parcels checked in this batch.${askCursor
       ? " More candidate parcels are available to check." : result.complete_for_query ? "" : " Review source coverage for incomplete checks."}`;

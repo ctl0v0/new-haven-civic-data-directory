@@ -400,3 +400,20 @@ test("a contact query scans past an empty candidate batch and returns a linked c
   assert.equal(result.coverage.live_source_checks[0].status, "partial");
   assert.equal(result.next_cursor, null);
 });
+
+test("indexed permits keep the requested page size while live permit details use bounded batches", async () => {
+  const requirements = [{ source_id: "municity", equals: { PermitType: "Hood - C" } }];
+  const permitFields = { source_id: "municity", fields: ["PermitNo", "PermitType"] };
+  const catalog = async () => ({ groups: [{ name: "Mechanical", types: [{ name: "Hood - C" }] }] });
+  for (const [include, expectedLimit] of [
+    [[permitFields], 25],
+    [[permitFields, { source_id: "permit-inspections" }], 3],
+  ]) {
+    const result = await queryParcelData({ plan: { requirements, include, limit: 25 } }, { catalog,
+      search: async ({ limit }) => {
+        assert.equal(limit, expectedLimit);
+        return { items: [], complete_for_query: false, coverage: { index_status: "partial" } };
+      }, load: assert.fail });
+    assert.deepEqual(result.items, []);
+  }
+});

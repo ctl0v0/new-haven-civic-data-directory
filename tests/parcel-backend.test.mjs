@@ -2311,7 +2311,13 @@ test("map browsing requests only bounded City parcel polygons until a parcel is 
     const feature = parcel(999091);
     Object.assign(feature.attributes, { use_code: "TEST-UNREVIEWED", zone: "BD",
       units_commercial: 2, units_residential: 3 });
-    return response({ features: [feature], spatialReference: { wkid: 4326 } });
+    const features = [feature];
+    if (url.searchParams.has("geometry")) {
+      const mixedUse = parcel(10386);
+      mixedUse.attributes.use_code = "3030";
+      features.push(mixedUse);
+    }
+    return response({ features, spatialReference: { wkid: 4326 } });
   };
   const url = "https://example.com/api/v1/browse-parcels?bbox=-72.93,41.3,-72.92,41.31";
   assert.equal((await browseParcelsRoute.fetch(new Request(url))).status, 401);
@@ -2319,8 +2325,11 @@ test("map browsing requests only bounded City parcel polygons until a parcel is 
   const result = await browseParcelsRoute.fetch(new Request(url, { headers }));
   assert.equal(result.status, 200);
   const data = await result.json();
-  assert.equal(data.features.length, 1);
+  assert.equal(data.features.length, 2);
   assert.equal(data.features[0].properties.parcel_id, 999091);
+  const mixedUse = data.features[1].properties.recorded_use;
+  assert.equal(mixedUse.category, "mixed_use");
+  assert.equal(mixedUse.published_label, "MIXED USE  MDL-94");
   assert.deepEqual(requests.length, 1);
   const use = data.features[0].properties.recorded_use;
   assert.equal(use.category, "unclassified");

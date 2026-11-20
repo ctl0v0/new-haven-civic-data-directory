@@ -40,7 +40,7 @@
     {
       "code": "107C",
       "published_label": "MIX USE R  MDL-94",
-      "category": "unclassified",
+      "category": "mixed_use",
       "business_space": null,
       "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
     },
@@ -89,21 +89,21 @@
     {
       "code": "3030",
       "published_label": "MIXED USE  MDL-94",
-      "category": "unclassified",
+      "category": "mixed_use",
       "business_space": null,
       "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
     },
     {
       "code": "303I",
       "published_label": "MIXED USE  MDL-96",
-      "category": "unclassified",
+      "category": "mixed_use",
       "business_space": null,
       "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
     },
     {
       "code": "303R",
       "published_label": "MIXED USE  MDL-01",
-      "category": "unclassified",
+      "category": "mixed_use",
       "business_space": null,
       "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
     },

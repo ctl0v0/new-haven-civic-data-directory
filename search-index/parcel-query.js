@@ -431,8 +431,9 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
   const state = readSearchCursor(cursor, hash, sourceHash);
   const indexedSources = plan.include.filter(({ source_id }) => entries.get(source_id).queryable &&
     source_id !== "municity").map(({ source_id }) => source_id);
+  // A municipal requirement already supplies the matched permit rows from the index.
   const live = plan.contact_role || plan.permit_description_terms || plan.include.some(({ source_id }) =>
-    !indexedSources.includes(source_id));
+    !indexedSources.includes(source_id) && !(source_id === "municity" && municipal));
   const filtersLive = Boolean(plan.require_contact_role || plan.permit_description_terms);
   const searchPage = (indexCursor) => search({ requirements,
     limit: live ? Math.min(3, plan.limit) : plan.limit, cursor: indexCursor }, { query,

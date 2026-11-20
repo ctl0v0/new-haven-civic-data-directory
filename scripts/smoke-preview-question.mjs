@@ -59,6 +59,17 @@ try {
     code: error?.code ?? null, name: error?.name ?? null }));
 }
 
+try {
+  const result = await queryParcelData({ plan: {
+    requirements: [{ source_id: 'municity', equals: { PermitType: 'Hood - C' } }],
+    include: [{ source_id: 'municity', fields: ['PermitNo', 'PermitType'] }],
+  } });
+  console.log(JSON.stringify({ event: 'preview_hood_permit_page', status: result.status,
+    has_more: Boolean(result.next_cursor), ...sourceSummary(result) }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_hood_permit_page_failed', name: error?.name }));
+}
+
 // Read-only evidence check for the parcel use and zoning Preview.
 try {
   const { browseParcels } = await import('../parcel/browse.js');
@@ -73,6 +84,7 @@ try {
   }));
   console.log(JSON.stringify({ event: 'preview_parcel_use', polygons: map.features.length,
     classified: map.features.filter((feature) => feature.properties.recorded_use.category !== 'unclassified').length,
+    mixed_use_polygons: map.features.filter((feature) => feature.properties.recorded_use.category === 'mixed_use').length,
     zoning_status: zoning?.status, zoning_codes: zoning?.district_codes,
     examples: examples.map((item) => item.status === 'fulfilled' ? item.value : item.reason?.message) }));
 } catch (error) {
