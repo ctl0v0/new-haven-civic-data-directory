@@ -62,6 +62,8 @@ const sourceNames = {
 };
 let selected = null;
 let maplessRecords = false;
+let nearbyBusinessRequest = null;
+let nearbyBusinessConfigured = false;
 let viewVersion = 0;
 let searchedAddress = "";
 const displayTargets = new WeakMap();
@@ -195,6 +197,7 @@ function restoredFilters(params) {
 function showDataSection(id, updateUrl = true) {
   if (!(["overview", "timeline"].includes(id) || groups.some(([key]) => key === id))) id = "overview";
   activeDataSection = id;
+  if (id !== "overview") closeNearbyBusinessResearch();
   $("record-detail").hidden = true;
   $("parcel-map-section").hidden = id !== "overview" || maplessRecords;
   $("school-attendance-summary").hidden = id !== "overview";
@@ -1029,6 +1032,7 @@ function normalizedAddress(value) {
 }
 async function choose(item, searchedQuery = null, viewer = "records", restoreState = false) {
   const version = ++viewVersion;
+  closeNearbyBusinessResearch();
   const priorParams = restoreState ? new URL(location.href).searchParams : null;
   const browsing = viewer === "browse";
   $("browse-record-actions").hidden = true;
@@ -1426,6 +1430,7 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   const activity = tab === "activity" && !$("activity-tab").hidden;
   const readingRecords = !browsing && !guiding && !asking && !activity;
   maplessRecords = readingRecords && noMap;
+  if (!maplessRecords) closeNearbyBusinessResearch();
   document.body.classList.toggle("browse-mode", browsing);
   document.body.classList.toggle("record-only-mode", maplessRecords);
   const url = new URL(location.href);
@@ -2386,6 +2391,7 @@ async function loadFeed(qs, version, cursor = null) {
 }
 $("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  closeNearbyBusinessResearch();
   maplessRecords = false;
   document.body.classList.remove("record-only-mode");
   const version = ++viewVersion;
@@ -2451,6 +2457,122 @@ $("browse-open-records").addEventListener("click", () => {
   void loadHeroPhoto(selectedQuery(), viewVersion);
   navigateDataSection(activeDataSection);
 });
+
+function closeNearbyBusinessResearch() {
+  const panel = $("nearby-business-research");
+  if (!panel || panel.hidden) return;
+  nearbyBusinessRequest?.abort();
+  nearbyBusinessRequest = null;
+  panel.hidden = true;
+  $("nearby-business-open").setAttribute("aria-expanded", "false");
+  $("nearby-business-result").replaceChildren();
+  $("nearby-business-result").hidden = true;
+}
+
+$("nearby-business-open")?.addEventListener("click", async () => {
+  if (!selected || requestedParcelKey !== parcelKey(selected)) return;
+  const panel = $("nearby-business-research");
+  if (!panel.hidden) {
+    closeNearbyBusinessResearch();
+    return;
+  }
+  showExplorerTab("records", { noMap: true });
+  showDataSection("overview");
+  panel.hidden = false;
+  $("nearby-business-open").setAttribute("aria-expanded", "true");
+  $("nearby-business-title").focus();
+  const form = $("nearby-business-form");
+  form.reset();
+  const origin = form.elements.origin;
+  origin.replaceChildren(new Option("Choose a City address or parcel center", ""));
+  const status = $("nearby-business-status");
+  const note = $("nearby-business-origin-note");
+  note.hidden = true;
+  status.textContent = "Checking City address points…";
+  nearbyBusinessConfigured = false;
+  $("nearby-business-fields").disabled = true;
+  $("nearby-business-count").disabled = true;
+  const request = new AbortController();
+  nearbyBusinessRequest = request;
+  try {
+    const data = await api(`/api/v1/nearby-business-count?${selectedQuery()}`, { signal: request.signal });
+    if (request !== nearbyBusinessRequest) return;
+    for (const choice of data.origins) {
+      const repeated = choice.address && data.origins.filter(({ address }) => address === choice.address).length > 1;
+      const label = repeated ? `${choice.address} · City point ${choice.objectid}` : choice.address ?? "City parcel's mapped center";
+      origin.add(new Option(label, choice.id));
+    }
+    origin.value = data.default_origin ?? "";
+    nearbyBusinessConfigured = data.configured;
+    note.textContent = data.warning ?? (!data.default_origin && searchedAddress
+      ? `A City point for ${searchedAddress} could not be verified. Choose a published address from this parcel.`
+      : "The search uses a straight-line radius.");
+    note.hidden = false;
+    status.textContent = !data.configured ? "Live business counts are awaiting a Places Aggregate API key for this Preview."
+      : !data.origins.length ? "No verified City address point is available for this search." : "";
+    $("nearby-business-count").disabled = !data.configured || !origin.value;
+  } catch (error) {
+    if (request === nearbyBusinessRequest) status.textContent = error.message;
+  } finally {
+    if (request === nearbyBusinessRequest) {
+      nearbyBusinessRequest = null;
+      $("nearby-business-fields").disabled = false;
+    }
+  }
+});
+
+$("nearby-business-form")?.addEventListener("change", (event) => {
+  $("nearby-business-result").replaceChildren();
+  $("nearby-business-result").hidden = true;
+  $("nearby-business-count").disabled = !nearbyBusinessConfigured || !event.currentTarget.elements.origin.value;
+  if (nearbyBusinessConfigured) $("nearby-business-status").textContent = "";
+});
+
+$("nearby-business-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!maplessRecords || $("nearby-business-research").hidden || nearbyBusinessRequest || !nearbyBusinessConfigured) return;
+  const form = event.currentTarget;
+  const { origin, category, radius_meters } = form.elements;
+  if (!origin.value || !selected) return;
+  const request = new AbortController();
+  nearbyBusinessRequest = request;
+  const status = $("nearby-business-status");
+  const output = $("nearby-business-result");
+  output.replaceChildren();
+  output.hidden = true;
+  status.textContent = "Counting Google Maps listings…";
+  $("nearby-business-fields").disabled = true;
+  try {
+    const data = await api("/api/v1/nearby-business-count", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
+      body: JSON.stringify({ ...Object.fromEntries(selectedQuery()), origin: origin.value,
+        category: category.value, radius_meters: Number(radius_meters.value) }),
+    });
+    if (request !== nearbyBusinessRequest) return;
+    const heading = el("p", data.category_label, "nearby-business-result-heading");
+    heading.prepend(el("strong", `${data.count} `));
+    const originLabel = data.origin.address ?? "the City parcel's mapped center";
+    const detail = el("p", `Listed as operating within ${data.radius_label} of ${originLabel}.`);
+    const source = el("p", null, "meta");
+    const checked = new Date(data.retrieved_at);
+    const time = el("time", new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
+    }).format(checked));
+    time.dateTime = data.retrieved_at;
+    source.append(link(data.source_url, data.attribution), document.createTextNode(" · Checked "), time);
+    output.replaceChildren(heading, detail, source);
+    output.hidden = false;
+    status.textContent = "";
+  } catch (error) {
+    if (request === nearbyBusinessRequest) status.textContent = error.message;
+  } finally {
+    if (request === nearbyBusinessRequest) {
+      nearbyBusinessRequest = null;
+      $("nearby-business-fields").disabled = false;
+    }
+  }
+});
+
 function queryExplorer() {
   queryModule ??= import("/query-explorer.js").then((module) => ({
     ...module,

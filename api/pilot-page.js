@@ -2,7 +2,9 @@ import {
   authorized,
   pilotConfigurationIssues,
   pilotConfigured,
+  pilotPreviewEnabled,
 } from "../parcel/auth.js";
+import { businessCategories, businessRadii, DEFAULT_BUSINESS_RADIUS } from "../parcel/nearby-business-count.js";
 
 const header =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Parcel pilot · New Haven Civic Data</title><link rel="stylesheet" href="/leaflet/leaflet.css"><link rel="stylesheet" href="/parcel.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a href="/index.html">New Haven Civic Data Directory</a><span>Private parcel pilot</span></header><main id="main">';
@@ -10,14 +12,28 @@ const footer =
   "</main><footer>Independent research preview. Confirm consequential facts with the original source.</footer></body></html>";
 const login =
   '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>';
-// The query workbench is visible only in the protected pilot Preview. A
-// production deployment never inherits it from a copied environment variable.
-export function queryWorkbenchVisible(env = process.env) {
-  return (env.VERCEL_ENV === "preview" &&
-    env.VERCEL_GIT_COMMIT_REF === "codex/parcel-pilot") ||
-    (!env.VERCEL_ENV && env.QUERY_DEMO_ENABLED === "true");
-}
-const askHidden = queryWorkbenchVisible() ? "" : " hidden";
+export { pilotPreviewEnabled as queryWorkbenchVisible };
+const previewToolsVisible = pilotPreviewEnabled();
+const askHidden = previewToolsVisible ? "" : " hidden";
+const nearbyBusinessResearch = previewToolsVisible ? `
+  <section id="nearby-business-research" aria-labelledby="nearby-business-title" hidden>
+    <h2 id="nearby-business-title" tabindex="-1">Nearby business research</h2>
+    <form id="nearby-business-form">
+      <fieldset id="nearby-business-fields" aria-label="Nearby business filters" disabled>
+        <div class="nearby-business-field"><label for="nearby-business-origin">Search from</label><select id="nearby-business-origin" name="origin" required><option value="">Choose a City address</option></select></div>
+        <div class="nearby-business-field"><label for="nearby-business-type">Business type</label><select id="nearby-business-type" name="category">
+          ${Object.entries(businessCategories).map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}
+        </select></div>
+        <div class="nearby-business-field"><label for="nearby-business-radius">Radius</label><select id="nearby-business-radius" name="radius_meters">
+          ${Object.entries(businessRadii).map(([meters, label]) => `<option value="${meters}"${Number(meters) === DEFAULT_BUSINESS_RADIUS ? " selected" : ""}>${label}</option>`).join("")}
+        </select></div>
+        <button type="submit" id="nearby-business-count" disabled>Count businesses</button>
+      </fieldset>
+    </form>
+    <p id="nearby-business-origin-note" class="meta" hidden></p>
+    <p id="nearby-business-status" role="status"></p>
+    <div id="nearby-business-result" aria-live="polite" hidden></div>
+  </section>` : "";
 const app = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
@@ -50,11 +66,13 @@ const app = `
       <p id="parcel-identifiers" class="meta"></p>
       <p id="parcel-match" class="match-note" hidden></p>
       <p class="small parcel-overview-note">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
+      ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby businesses</button>' : ""}
     </div><figure id="parcel-photo" class="parcel-photo" hidden>
       <img id="parcel-photo-image" alt="Verified parcel photo">
       <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>
     </figure></div>
   </section>
+  ${nearbyBusinessResearch}
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
     <h2 id="snapshot-title">At a glance</h2>
     <div id="snapshot-grid" class="snapshot-grid"></div>

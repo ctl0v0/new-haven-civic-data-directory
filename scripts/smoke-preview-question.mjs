@@ -177,6 +177,17 @@ try {
   console.warn(JSON.stringify({ event: 'preview_browse_east_rock_failed', name: error?.name, message: error?.message }));
 }
 
+// Check the City's alternate address evidence without calling Google.
+try {
+  const { nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
+  const result = await nearbyBusinessOrigins({ parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' });
+  const origin = result.origins.find(({ id }) => id === result.default_origin);
+  console.log(JSON.stringify({ event: 'preview_nearby_business_origin', configured: result.configured,
+    origins: result.origins.length, exact_address: origin?.method === 'city-address-point', warning: result.warning }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_nearby_business_origin_failed', message: error?.message }));
+}
+
 // Exercise the same read-only query used by the feed UI, REST and MCP.
 try {
   const { listCityActivity } = await import('../search-index/city-activity.js');

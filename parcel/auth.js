@@ -128,3 +128,8 @@ export function sameOrigin(request) {
 export function pilotConfigured() {
   return configured();
 }
+
+export function pilotPreviewEnabled(env = process.env) {
+  return (env.VERCEL_ENV === "preview" && env.VERCEL_GIT_COMMIT_REF === "codex/parcel-pilot") ||
+    (!env.VERCEL_ENV && env.QUERY_DEMO_ENABLED === "true");
+}

@@ -20,6 +20,14 @@ For the invited pilot, generate one random token per person and store only its S
 
 After adding or changing Vercel variables, create a new deployment for the selected environment; an existing deployment keeps its original environment snapshot. For a branch-specific Preview pilot, scope all three values to the same Git branch.
 
+### Nearby business research
+
+In parcel results, select **Research nearby businesses** to open a map-free form. Pick a City address point, a business type, and a radius. One mile is the default. The form sends one Google Places Aggregate API count request when you choose **Count businesses**. It shows how many listings Google reports as operating, the search origin, radius, and retrieval time. Choose a smaller radius to compare proximity. Google results stay in the current view and are excluded from the parcel index.
+
+To enable live counts, enable **Places Aggregate API** in a billing-enabled Google Cloud project and create a server key restricted to that API. Save the key as a Vercel Secret named `GOOGLE_PLACES_AGGREGATE_API_KEY` for Preview branch `codex/parcel-pilot` in `new-haven-civic-data-directory`, then redeploy. The form can verify City address options while the key is pending. [Google setup guide](https://developers.google.com/maps/documentation/places-aggregate/get-api-key)
+
+The protected `GET /api/v1/nearby-business-count?parcel_id=…&objectid=…&query_address=…` returns City search origins and whether the Preview has a key. Submit `POST /api/v1/nearby-business-count` with `parcel_id`, optional `objectid` and `query_address`, a `category` from the form, and an `origin` ID from the options response. `radius_meters` accepts `402`, `805`, `1609` (default), or `3219`. If there is one verified default address point, the request can omit `origin`. Both methods use `Cache-Control: private, no-store`.
+
 For any wider rollout, add rate limits at the deployment edge and review the access terms and request budgets of each upstream source. Parcel detail lookups use bounded requests, timeouts, fixed upstream hosts, and a short cache. The separate private index refresh performs checked enumeration of supported official datasets.
 
 ## Review flow
