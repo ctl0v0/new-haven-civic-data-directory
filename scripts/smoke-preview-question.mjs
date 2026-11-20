@@ -112,8 +112,8 @@ try {
 
 // Check both sections of the wider desktop view and reconcile them to City's IDs.
 try {
-  const [{ browseParcels }, { LAYERS }, { arcgis }] = await Promise.all([
-    import('../parcel/browse.js'), import('../parcel/config.js'), import('../parcel/http.js'),
+  const [{ browseParcels }, { LAYERS }, { arcgis }, { parcelFeatureToGeoJSON }] = await Promise.all([
+    import('../parcel/browse.js'), import('../parcel/config.js'), import('../parcel/http.js'), import('../parcel/geometry.js'),
   ]);
   const before = performance.now();
   const parts = await Promise.all(['-72.952,41.292,-72.928,41.324', '-72.928,41.292,-72.904,41.324']
@@ -132,12 +132,23 @@ try {
     geometry: '-72.952,41.292,-72.904,41.324', geometryType: 'esriGeometryEnvelope', inSR: '4326',
     spatialRel: 'esriSpatialRelIntersects', returnIdsOnly: 'true',
   });
-  const missing = city.objectIds.filter((id) => !ids.has(id)).length;
-  if (ids.size <= 500 || !counts.mixed_use || parts.some((part) => part.viewport_limited) || missing)
-    throw new Error(`Wider downtown sections returned ${ids.size} outlines with ${missing} City IDs missing`);
+  const missing = city.objectIds.filter((id) => !ids.has(id));
+  let missingInside = missing.length;
+  if (missing.length && missing.length <= 200) {
+    // Compare City envelope matches using their WGS84 geometry as displayed on the map.
+    const exact = await arcgis(LAYERS.parcels, { objectIds: missing.join(','), outFields: 'objectid,parcel_id',
+      returnGeometry: 'true', outSR: '4326', resultRecordCount: String(missing.length) });
+    for (const row of exact.features) {
+      const [west, south, east, north] = parcelFeatureToGeoJSON(row).bbox;
+      if (west > -72.904 || east < -72.952 || south > 41.324 || north < 41.292) missingInside--;
+    }
+  }
   console.log(JSON.stringify({ event: 'preview_browse_zoom_15', modes: parts.map((part) => part.mode),
-    polygons: ids.size, counts, missing, milliseconds,
+    polygons: ids.size, counts, city_envelope_ids: city.objectIds.length, missing: missing.length, missing_inside: missingInside, milliseconds,
+    sections_limited: parts.map((part) => part.viewport_limited),
     section_bytes: parts.map((part) => Buffer.byteLength(JSON.stringify(part))) }));
+  if (ids.size <= 500 || !counts.mixed_use || parts.some((part) => part.viewport_limited) || missingInside)
+    throw new Error(`Wider downtown sections returned ${ids.size} outlines with ${missingInside} City IDs missing inside the display extent`);
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_browse_zoom_15_failed', name: error?.name, message: error?.message }));
 }

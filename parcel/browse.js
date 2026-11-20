@@ -35,7 +35,7 @@ const indexedViewportSql = `WITH active AS (
       ST_AsGeoJSON(p.geometry, $5::integer)::jsonb AS geometry
     FROM search_records p
     WHERE p.run_id = active.id AND p.source_id = 'parcels'
-      AND ST_Intersects(p.geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+      AND p.geometry && ST_MakeEnvelope($1, $2, $3, $4, 4326)
     LIMIT $6
   ) visible ON true`;
 

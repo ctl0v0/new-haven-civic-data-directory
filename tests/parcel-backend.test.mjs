@@ -2357,7 +2357,7 @@ test("a zoom 15 map uses one indexed viewport for parcel outlines and use colors
   const configured = () => true;
   globalThis.fetch = async () => { assert.fail("the indexed map should not call the live City layer"); };
   const data = await browseParcels(bounds, { zoom: "15", configured, query: async (sql, values) => {
-    assert.match(sql, /ST_Intersects/);
+    assert.match(sql, /geometry && ST_MakeEnvelope/);
     assert.match(sql, /r.returned_count = r.expected_count/);
     assert.deepEqual(values.slice(0, 5), [-72.96, 41.29, -72.89, 41.33, 6]);
     return rows;
