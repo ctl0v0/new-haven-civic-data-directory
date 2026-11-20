@@ -52,21 +52,42 @@ try {
 }
 
 try {
-  const { arcgis, fetchJson } = await import('../parcel/http.js');
-  const { LAYERS } = await import('../parcel/config.js');
-  const sampleIds = ['10386', '11236', '12846', '13791', '24641'];
-  const ct = new URL('https://data.ct.gov/resource/rny9-6ak2.json');
-  ct.searchParams.set('$select', 'pid,state_use,state_use_description');
-  ct.searchParams.set('$where', `upper(property_city) = 'NEW HAVEN' AND pid IN (${sampleIds.map((pid) => `'${pid}'`).join(',')})`);
-  ct.searchParams.set('$limit', '50');
-  const [city, state] = await Promise.allSettled([
-    arcgis(LAYERS.parcels, { where: `parcel_id IN (${sampleIds.join(',')})`,
-      outFields: 'parcel_id,use_code', returnGeometry: 'false' }),
-    fetchJson(ct, { timeout: 10000 }),
+  const { fetchJson } = await import('../parcel/http.js');
+  const state = new URL('https://data.ct.gov/resource/rny9-6ak2.json');
+  state.searchParams.set('$select', 'pid,state_use,state_use_description');
+  state.searchParams.set('$where', "upper(property_city) = 'NEW HAVEN' AND pid IS NOT NULL AND state_use IS NOT NULL");
+  state.searchParams.set('$limit', '50000');
+  const [cityRows, stateRows] = await Promise.all([
+    indexQuery(`SELECT fields->>'parcel_id' AS pid, fields->>'use_code' AS code
+      FROM search_records WHERE source_id = 'parcels' AND run_id =
+      (SELECT run_id FROM search_active_runs WHERE source_id = 'parcels' AND scope_key = 'all')`),
+    fetchJson(state, { maxBytes: 8_000_000, timeout: 24000 }),
   ]);
-  console.log(JSON.stringify({ event: 'preview_use_code_crosswalk_sample',
-    city: city.status === 'fulfilled' ? city.value.features?.map((feature) => feature.attributes) : city.reason?.message,
-    state: state.status === 'fulfilled' ? state.value : state.reason?.message }));
+  const stateByPid = new Map();
+  for (const row of stateRows) {
+    if (!stateByPid.has(row.pid)) stateByPid.set(row.pid, []);
+    stateByPid.get(row.pid).push(row);
+  }
+  const byCode = new Map();
+  for (const { pid, code } of cityRows) {
+    if (!code?.trim()) continue;
+    if (!byCode.has(code)) byCode.set(code, { code, city: 0, agrees: 0, conflicts: 0, labels: new Set() });
+    const group = byCode.get(code);
+    group.city++;
+    const candidates = stateByPid.get(pid);
+    if (!candidates) continue;
+    if (candidates.length !== 1 || candidates[0].state_use?.trim() !== code.trim()) {
+      group.conflicts++;
+      continue;
+    }
+    group.agrees++;
+    if (candidates[0].state_use_description?.trim()) group.labels.add(candidates[0].state_use_description.trim());
+  }
+  const summary = [...byCode.values()].sort((a,b) => b.agrees-a.agrees);
+  console.log(JSON.stringify({ event: 'preview_city_use_crosswalk_size', city: cityRows.length, state: stateRows.length }));
+  for (let i=0;i<summary.length;i+=30)
+    console.log(JSON.stringify({ event: 'preview_city_use_crosswalk', rows: summary.slice(i,i+30)
+      .map((group) => ({...group, labels:[...group.labels]})) }));
 } catch (error) {
-  console.warn(JSON.stringify({ event: 'preview_use_code_crosswalk_failed', name: error?.name }));
+  console.warn(JSON.stringify({ event: 'preview_use_code_crosswalk_failed', name: error?.name, message: error?.message }));
 }
