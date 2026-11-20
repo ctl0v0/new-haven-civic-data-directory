@@ -22,6 +22,7 @@ const app = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
     <button id="browse-tab" type="button" role="tab" aria-selected="false" aria-controls="browse-view">Browse parcel map</button>
+    <button id="activity-tab" type="button" role="tab" aria-selected="false" aria-controls="activity-view"${askHidden}>Activity</button>
     <button id="guide-tab" type="button" role="tab" aria-selected="false" aria-controls="guide-view">Data guide</button>
     <button id="ask-tab" type="button" role="tab" aria-selected="false" aria-controls="ask-view"${askHidden}>Test a question</button>
   </nav>
@@ -104,6 +105,27 @@ const app = `
         <p class="meta">Parcel boundaries and labels: New Haven GIS. Background: Esri street map or CT ECO aerial imagery. A municipal street-view or assessor building photo appears only after an exact parcel match. Images do not establish current conditions.</p>
       </aside>
       <div id="browse-map" role="region" aria-label="Browse New Haven parcel boundaries" tabindex="0"></div>
+    </div>
+  </section>
+  <section id="activity-view" role="tabpanel" aria-labelledby="activity-tab" hidden>
+    <div class="city-activity">
+      <h1>New Haven Activity</h1>
+      <form id="activity-filters">
+        <label>Neighborhood <select name="neighborhood"><option value="">All neighborhoods</option></select></label>
+        <label>From <input name="from" type="date"></label>
+        <label>Through <input name="to" type="date"></label>
+        <label>Activity type <select name="activity">
+          <option value="">All activity</option><option value="sale">Sales</option>
+          <option value="permit">Permits</option><option value="license">Licenses</option>
+          <option value="application">Applications</option><option value="review">Reviews</option>
+          <option value="inspection">Inspections</option>
+        </select></label>
+        <button type="submit">Apply filters</button>
+      </form>
+      <p id="activity-status" role="status" aria-live="polite"></p>
+      <details id="activity-coverage" hidden><summary>Source coverage</summary><ul id="activity-sources"></ul></details>
+      <div id="activity-results"></div>
+      <button id="activity-more" class="secondary" type="button" hidden>Load more activity</button>
     </div>
   </section>
   <section id="guide-view" role="tabpanel" aria-labelledby="guide-tab" hidden>

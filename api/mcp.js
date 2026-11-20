@@ -10,6 +10,7 @@ import { askParcelData } from "../search-index/parcel-question.js";
 import { queryParcelData } from "../search-index/parcel-query.js";
 import { askParcelDataSchema, parcelQueryCatalog, queryParcelDataSchema } from "../parcel/query-contract.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
+import { cityActivitySchema, listCityActivity } from "../search-index/city-activity.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
 import { auditMunicipalPermitLinks } from "../search-index/linkage-audit.js";
@@ -77,6 +78,9 @@ export function createServer() {
     version: "0.1.0",
     title: "New Haven Parcel Data Pilot",
   });
+  tool(server, "list_city_activity", "New Haven citywide parcel activity",
+    "List published, dated records with a verified New Haven parcel link. Defaults to seven local calendar days including today. Filter by official City neighborhood, inclusive date range or activity type. Review source coverage before treating results as exhaustive.",
+    cityActivitySchema, listCityActivity);
   const parcelId = z.string().regex(/^\d{1,12}$/);
   const common = {
     parcel_id: parcelId,

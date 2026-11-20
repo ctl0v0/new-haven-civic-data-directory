@@ -109,3 +109,27 @@ try {
   console.warn(JSON.stringify({ event: 'preview_parcel_use_failed', name: error?.name,
     message: error?.message }));
 }
+
+// Exercise the same read-only query used by the feed UI, REST and MCP.
+try {
+  const { listCityActivity } = await import('../search-index/city-activity.js');
+  const first = await listCityActivity({ limit: 5 });
+  const candidate = first.items.find((item) => item.neighborhoods.length);
+  const neighborhood = candidate?.neighborhoods[0];
+  const local = neighborhood ? await listCityActivity({ neighborhood, limit: 5 }) : null;
+  const second = first.next_cursor ? await listCityActivity({ limit: 5, cursor: first.next_cursor }) : null;
+  if (first.items.some(({ events, city_parcel_id, city_objectid }) => !city_parcel_id || !city_objectid ||
+      events.some(({ source_url, event_date }) => !source_url.startsWith('https://') ||
+        event_date < first.filters.from || event_date > first.filters.to)) ||
+      local?.items.some((item) => !item.neighborhoods.includes(neighborhood)) ||
+      second?.items.some((item) => first.items.some(({ id }) => id === item.id)))
+    throw new Error('Activity parcel identity, dates, neighborhood or paging verification failed');
+  console.log(JSON.stringify({ event: 'preview_city_activity', window: first.filters, status: first.coverage.status,
+    items: first.items.length, kinds: [...new Set(first.items.flatMap(({ events }) => events.map(({ activity }) => activity)))],
+    neighborhoods: first.neighborhoods.length, filtered_items: local?.items.length, next_page_items: second?.items.length,
+    checks: first.coverage.sources.map(({ source_id, status, coverage_from, coverage_to }) =>
+      [source_id, status, coverage_from, coverage_to]) }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_city_activity_failed', name: error?.name,
+    code: error?.code ?? null, message: error?.message }));
+}

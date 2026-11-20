@@ -1371,17 +1371,28 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
     return [];
   }
 }
+let cityActivityModule;
+function loadCityActivity() {
+  cityActivityModule ??= import("/city-activity.js").then(({ initCityActivity }) =>
+    initCityActivity({ api, el, link })).catch(() => {
+    cityActivityModule = null;
+    $("activity-status").textContent = "The activity feed could not load. Try opening the tab again.";
+  });
+}
 function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   const browsing = tab === "browse";
   const guiding = tab === "guide";
   const asking = tab === "ask" && !$('ask-tab').hidden;
-  maplessRecords = !browsing && !guiding && !asking && noMap;
+  const activity = tab === "activity" && !$("activity-tab").hidden;
+  const readingRecords = !browsing && !guiding && !asking && !activity;
+  maplessRecords = readingRecords && noMap;
   document.body.classList.toggle("browse-mode", browsing);
   document.body.classList.toggle("record-only-mode", maplessRecords);
   const url = new URL(location.href);
   if (browsing) url.searchParams.set("view", "map");
   else if (guiding) url.searchParams.set("view", "guide");
   else if (asking) url.searchParams.set("view", "ask");
+  else if (activity) url.searchParams.set("view", "activity");
   else if (maplessRecords) url.searchParams.set("view", "records");
   else url.searchParams.delete("view");
   if (guiding && section !== "home" &&
@@ -1389,12 +1400,15 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
     url.searchParams.set("guide", section);
   else url.searchParams.delete("guide");
   history.replaceState(null, "", `${url.pathname}${url.search}`);
-  $("records-view").hidden = browsing || guiding || asking;
+  $("records-view").hidden = !readingRecords;
   $("browse-view").hidden = !browsing;
   $("guide-view").hidden = !guiding;
   $("ask-view").hidden = !asking;
-  if (!guiding && !asking) placeRecordContent(browsing);
-  $("records-tab").setAttribute("aria-selected", String(!browsing && !guiding && !asking));
+  $("activity-view").hidden = !activity;
+  if (readingRecords || browsing) placeRecordContent(browsing);
+  $("records-tab").setAttribute("aria-selected", String(readingRecords));
+  $("activity-tab").setAttribute("aria-selected", String(activity));
+  if (activity) loadCityActivity();
   $("browse-tab").setAttribute("aria-selected", String(browsing));
   $("guide-tab").setAttribute("aria-selected", String(guiding));
   $("ask-tab").setAttribute("aria-selected", String(asking));
@@ -1406,7 +1420,7 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
       void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
     }
   });
-  else if (!guiding && !asking && !maplessRecords && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
+  else if (readingRecords && !maplessRecords && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
     if (parcelMap) parcelMap.invalidateSize();
     else void loadMap(selectedQuery(), viewVersion);
   });
@@ -2318,6 +2332,7 @@ $("search-form").addEventListener("submit", async (event) => {
 });
 $("records-tab").addEventListener("click", () => showExplorerTab("records"));
 $("browse-tab").addEventListener("click", () => showExplorerTab("browse"));
+$("activity-tab").addEventListener("click", () => showExplorerTab("activity"));
 $("guide-tab").addEventListener("click", () => showExplorerTab("guide"));
 $("ask-tab").addEventListener("click", () => showExplorerTab("ask"));
 $("browse-open-records").addEventListener("click", () => {
@@ -2807,7 +2822,7 @@ $("browse-panel-toggle").addEventListener("click", () => {
 $("records-tab").parentElement.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
-  const tabs = [$("records-tab"), $("browse-tab"), $("guide-tab"), $("ask-tab")]
+  const tabs = [$("records-tab"), $("browse-tab"), $("activity-tab"), $("guide-tab"), $("ask-tab")]
     .filter((tab) => !tab.hidden);
   const current = tabs.indexOf(document.activeElement);
   const index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
@@ -2819,6 +2834,7 @@ $("records-tab").parentElement.addEventListener("keydown", (event) => {
 const initial = new URL(location.href).searchParams;
 if (initial.get("view") === "guide") showExplorerTab("guide", { section: initial.get("guide") ?? "home" });
 if (initial.get("view") === "ask" && !$("ask-tab").hidden) showExplorerTab("ask");
+if (initial.get("view") === "activity" && !$("activity-tab").hidden) showExplorerTab("activity");
 if (initial.get("view") === "records") showExplorerTab("records", { noMap: true });
 if (initial.get("view") === "map") {
   showExplorerTab("browse");
@@ -2836,7 +2852,7 @@ if (initial.get("view") === "map") {
     }
   });
 }
-if (initial.has("parcel_id") && !["map", "guide", "ask"].includes(initial.get("view"))) {
+if (initial.has("parcel_id") && !["map", "guide", "ask", "activity"].includes(initial.get("view"))) {
   const restore = async () => {
     const startingVersion = viewVersion;
     const original = initial.get("query_address");
