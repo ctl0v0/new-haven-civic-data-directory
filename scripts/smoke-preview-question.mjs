@@ -1,4 +1,4 @@
-import { recentCalendarDates, askIndexedParcels } from '../search-index/ask.js';
+import { recentCalendarDates, askIndexedParcels, questionPermitCatalog } from '../search-index/ask.js';
 import { indexConfigured } from '../search-index/db.js';
 import { askParcelData } from '../search-index/parcel-question.js';
 import { queryParcelData } from '../search-index/parcel-query.js';
@@ -60,14 +60,32 @@ try {
 }
 
 try {
-  const result = await queryParcelData({ plan: {
-    requirements: [{ source_id: 'municity', equals: { PermitType: 'Hood - C' } }],
-    include: [{ source_id: 'municity', fields: ['PermitNo', 'PermitType'] }],
-  } });
-  console.log(JSON.stringify({ event: 'preview_hood_permit_page', status: result.status,
-    has_more: Boolean(result.next_cursor), ...sourceSummary(result) }));
+  const listed = await questionPermitCatalog();
+  const catalog = async () => listed;
+  const review = await askParcelData({ question: 'Show me all hood related permits', plan_only: true }, { catalog });
+  if (review.status !== 'planned') throw new Error('Hood-related search did not produce a plan');
+  const first = await queryParcelData({ plan: review.plan }, { catalog });
+  const permitTypes = review.plan.requirements[0]?.one_of?.PermitType;
+  console.log(JSON.stringify({ event: 'preview_hood_permit_page', status: first.status, permit_types: permitTypes,
+    has_more: Boolean(first.next_cursor), ...sourceSummary(first) }));
+  const ids = new Set();
+  const parcels = new Set();
+  let response = first;
+  for (let pages = 1; pages <= 24; pages++) {
+    for (const parcel of response.items ?? []) {
+      parcels.add(`${parcel.city_parcel_id}:${parcel.city_objectid}`);
+      for (const source of parcel.matching_sources.filter(({ source_id }) => source_id === 'municity'))
+        for (const record of source.records) ids.add(record.record_id);
+    }
+    if (!response.next_cursor || pages === 24) {
+      console.log(JSON.stringify({ event: 'preview_hood_permit_paging', pages, parcels: parcels.size,
+        permits: ids.size, has_more: Boolean(response.next_cursor), status: response.status }));
+      break;
+    }
+    response = await queryParcelData({ plan: review.plan, cursor: response.next_cursor }, { catalog });
+  }
 } catch (error) {
-  console.warn(JSON.stringify({ event: 'preview_hood_permit_page_failed', name: error?.name }));
+  console.warn(JSON.stringify({ event: 'preview_hood_permit_page_failed', name: error?.name, message: error?.message }));
 }
 
 // Read-only evidence check for the parcel use and zoning Preview.

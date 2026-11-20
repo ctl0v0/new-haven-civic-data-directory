@@ -300,14 +300,20 @@ export async function askParcelData(input, { execute = queryParcelData, interpre
   let plan = exact?.plan;
   let category = requestedUse ?? exact?.category;
   let permitCatalog;
-  if (exact?.exactType || (!plan && permitWords.test(question))) {
+  if (exact?.exactType || exact?.hoodFamily || (!plan && permitWords.test(question))) {
     try {
       const listed = await catalog();
       if (!listed.partial) permitCatalog = listed.groups.map(({ name, types }) => ({ name, types: types.map((type) => type.name) }));
     } catch { /* The interpreter can still explain scope or date limitations. */ }
   }
-  if (exact?.exactType && !permitCatalog) return { status: "unavailable", question,
+  if ((exact?.exactType || exact?.hoodFamily) && !permitCatalog) return { status: "unavailable", question,
     reason_code: "permit_catalog_unavailable", reason: "The official City permit type catalog could not be checked." };
+  if (exact?.hoodFamily) {
+    const types = [...new Set(permitCatalog.flatMap(({ types }) => types.filter((name) => /\bhood\b/i.test(name))))].sort();
+    if (!types.length) return { status: "unsupported", question,
+      reason: "The official City permit catalog returned no permit type named for hoods." };
+    plan.requirements[0].one_of = { PermitType: types };
+  }
   if (!plan) {
     let parsed;
     try {

@@ -56,7 +56,7 @@ export function parcelQueryCatalog() {
         Boolean(liveFields[source.source_id]) ||
         (official?.mode === "live" && source.search_mode !== "excluded_from_search"),
       filters: {
-        equals: exact, one_of: source.source_id === "parcels" ? ["use_code"] : [],
+        equals: exact, one_of: source.source_id === "parcels" ? ["use_code"] : source.source_id === "municity" ? ["PermitType"] : [],
         number_gte: NUMBER_FIELDS[source.source_id] ?? [],
         number_lte: NUMBER_FIELDS[source.source_id] ?? [],
         date_fields: source.source_id === PERMIT_ACTIVITY_SOURCE

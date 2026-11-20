@@ -2395,7 +2395,9 @@ function renderAskCoverage(result) {
   if (coverage?.earlier_page_incomplete)
     target.append(el("p", "Some records on earlier pages had incomplete checks.", "meta"));
   for (const check of checks) {
-    const line = el("p", `${sourceNames[check.source_id] ?? check.source_id}: ${check.status}`, "ask-source-check");
+    const permitType = check.scope_key?.startsWith("permit-type:") ? check.scope_key.slice("permit-type:".length) : null;
+    const label = [sourceNames[check.source_id] ?? check.source_id, permitType].filter(Boolean).join(" · ");
+    const line = el("p", `${label}: ${check.status}`, "ask-source-check");
     if (check.returned_count != null && Number.isFinite(Number(check.returned_count)))
       line.append(el("span", ` · ${check.returned_count} source records`));
     if (Number(check.unlinked_count) > 0)

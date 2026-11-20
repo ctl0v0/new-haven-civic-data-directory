@@ -54,12 +54,14 @@ export function parcelQueryPlanProblem(plan, entries = new Map(parcelQueryCatalo
     if (item.date && (!definition.filters.date_fields.includes(item.date.field) ||
         !(item.date.from || item.date.to) || (item.date.from && item.date.to && item.date.from > item.date.to)))
       return `Choose a published date field and a valid date bound for ${item.source_id}.`;
-    if (item.permit_group && (item.source_id !== "municity" || item.equals?.PermitType))
-      return "Use a published permit group or an exact permit type.";
-    if (item.source_id === "municity" && !(item.permit_group || item.equals?.PermitType ||
+    const permitTypes = item.one_of?.PermitType;
+    if ((item.permit_group && item.source_id !== "municity") ||
+        [item.permit_group, item.equals?.PermitType, permitTypes].filter(Boolean).length > 1)
+      return "Choose a published permit group, one exact type, or a list of exact types.";
+    if (item.source_id === "municity" && !(item.permit_group || item.equals?.PermitType || permitTypes ||
         permitNumber.test(item.equals?.PermitNo ?? "") ||
         (item.date?.from && item.date.to)))
-      return "Choose a published permit number, exact permit type, permit group, or bounded recent PermitDate range.";
+      return "Choose a published permit number, exact permit types, a permit group, or a bounded recent PermitDate range.";
     if (item.source_id === PERMIT_ACTIVITY_SOURCE) {
       const kind = normalized(item.equals?.activity_kind).toLowerCase();
       const type = normalized(item.equals?.permit_type);
@@ -394,7 +396,7 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
   if (!requirements.length && !isParcel)
     return unsupported("Choose at least one indexed source requirement for a cross-parcel query.", plan);
   const municipal = requirements.find(({ source_id }) => source_id === "municity");
-  if (municipal?.equals?.PermitNo && !municipal.equals.PermitType && !municipal.permit_group) {
+  if (municipal?.equals?.PermitNo && !municipal.equals.PermitType && !municipal.permit_group && !municipal.one_of?.PermitType) {
     if (!permitNumber.test(municipal.equals.PermitNo))
       return unsupported("Enter the published permit number or pair it with an exact permit type.", plan);
     let found;
@@ -412,13 +414,15 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
     }
   }
   let permitTypes;
-  if (municipal?.equals?.PermitType || municipal?.permit_group) {
+  if (municipal?.equals?.PermitType || municipal?.permit_group || municipal?.one_of?.PermitType) {
     let listed;
     try { listed = await catalog(); } catch { /* Report unavailable below. */ }
     if (!listed || listed.partial) return unavailable("The official City permit type catalog could not be checked.", plan);
     const known = municipal.permit_group ? listed.groups.map(({ name }) => name)
       : listed.groups.flatMap(({ types }) => types.map(({ name }) => name));
-    if (!known.some((name) => normalized(name) === normalized(municipal.permit_group ?? municipal.equals.PermitType)))
+    const selected = municipal.one_of?.PermitType ?? [municipal.permit_group ?? municipal.equals.PermitType];
+    const available = new Set(known.filter(Boolean).map(normalized));
+    if (selected.some((type) => !available.has(normalized(type))))
       return unsupported("Choose an exact type or group from the official City permit catalog.", plan);
     if (municipal.permit_group) permitTypes = [...new Set(listed.groups.filter(({ name }) =>
       normalized(name) === normalized(municipal.permit_group))

@@ -81,16 +81,18 @@ export function exactRecordQuestion(question, window) {
   const location = subject.match(/ permits? (?:pulled |dated )?in (?:the )?([a-z][a-z .'-]{1,68}?)(?: neighborhood)?$/i);
   if (location) subject = subject.slice(0, location.index) + " permits";
   subject = subject.replace(/ (?:pulled|dated)$/i, "");
+  const hoodFamily = /^(?:(?:kitchen )?hood(?:[- ]related)? permits|permits for (?:kitchen )?hoods?)$/i.test(subject);
   const trade = subject.match(/^(?:(?:(?:all )?kinds of )?(plumbing|electrical|mechanical|building) permits|permits for (plumbing|electrical|mechanical|building))$/i);
   const named = subject.match(/^permits? of (?:the )?(?:exact )?type ["“']?([^"”']{1,100}?)["”']?$/i)
     ?? subject.match(/^([a-z][a-z0-9 /()-]{1,90} - [A-Z]) permits?$/i);
-  if (!trade && !named) return null;
+  if (!trade && !named && !hoodFamily) return null;
   const requirements = [{ source_id: "municity",
-    ...(trade ? { permit_group: tradeNames[(trade[1] ?? trade[2]).toLowerCase()] } : { equals: { PermitType: named[1].trim() } }),
+    ...(trade ? { permit_group: tradeNames[(trade[1] ?? trade[2]).toLowerCase()] }
+      : named ? { equals: { PermitType: named[1].trim() } } : {}),
     ...(window ? { date: { field: "PermitDate", from: window.from, to: window.to } } : {}) }];
   const neighborhood = location?.[1] ?? prefix?.[2];
   if (location && prefix?.[2]) return null;
-  return { exactType: named?.[1].trim(), plan: { scope: neighborhood ? { kind: "neighborhood", name: neighborhood } : city,
+  return { exactType: named?.[1].trim(), hoodFamily, plan: { scope: neighborhood ? { kind: "neighborhood", name: neighborhood } : city,
     requirements, include: [permitInclude, ...(withZoning ? [{ source_id: "parcels", fields: ["use_code"] }, { source_id: "zoning" }] : [])],
     ...(use ? { parcel_use_category: categoryByPhrase[use[1].toLowerCase()] } : {}),
     ...(description ? { permit_description_terms: [description[1].replace(/^([a-z]+)[.!?]$/i, "$1")] } : {}) } };

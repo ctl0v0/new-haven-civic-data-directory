@@ -12,6 +12,9 @@ City parcel-use codes. It resolves time windows in the New Haven timezone.
 the last 30 calendar dates, including today. “This week” begins on Monday.
 Permit issuance and approval questions require published event evidence.
 The planner asks for clarification when that date cannot be established.
+Hood-related permit questions select the City’s published permit types with
+the word “Hood” in the title. The search plan lists the exact titles under
+`one_of.PermitType`, and historical source coverage is shown for each type.
 
 The **Test a question** tab is visible on the protected `codex/parcel-pilot`
 Preview branch for source review. It shows partial matches and gaps explicitly;

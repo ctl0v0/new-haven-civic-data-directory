@@ -3,6 +3,7 @@ import test from "node:test";
 import { askParcelData } from "../search-index/parcel-question.js";
 import { queryParcelData } from "../search-index/parcel-query.js";
 import { questionDates } from "../search-index/question-dates.js";
+import { searchIndexedParcels } from "../search-index/search.js";
 import { parcelQueryCatalog } from "../parcel/query-contract.js";
 
 const question = "Show me Contractor contacts who did water heater replacements in the last 30 days";
@@ -416,4 +417,41 @@ test("indexed permits keep the requested page size while live permit details use
       }, load: assert.fail });
     assert.deepEqual(result.items, []);
   }
+});
+
+test("a hood-related question searches all official hood types and tracks each historical run", async () => {
+  const types = ["Fire Suppression-Hood", "Fire Suppression-Hood - C", "Hood", "Hood - C"];
+  const catalog = async () => ({ groups: [
+    { name: "Mechanical", types: ["Hood", "Hood - C", "HVAC"].map((name) => ({ name })) },
+    { name: "Plumbing", types: types.slice(0, 2).map((name) => ({ name })) },
+  ] });
+  const review = await askParcelData({ question: "Show me all hood related permits", plan_only: true }, {
+    now, catalog, interpret: assert.fail, execute: assert.fail,
+  });
+  assert.equal(review.status, "planned");
+  assert.deepEqual(review.plan.requirements[0].one_of.PermitType, types);
+  assert.equal(review.plan.permit_description_terms, undefined);
+  const scopes = types.map((type) => `permit-type:${type.toUpperCase()}`);
+  const active = (source_id, scope_key, run_id) => ({ source_id, scope_key, run_id, status: "complete",
+    latest_attempt_status: "complete", finished_at: new Date().toISOString(), expected_count: 1, returned_count: 1,
+    ambiguous_count: 0, unlinked_count: 0 });
+  const result = await queryParcelData({ plan: review.plan }, { catalog,
+    search: (input, options) => searchIndexedParcels(input, { ...options, configured: () => true,
+      query: async (sql, values) => {
+        if (sql.includes("search_source_runs")) {
+          assert.deepEqual(values[2], scopes);
+          return [active("parcels", "all", 1), ...scopes.slice(0, 3).map((scope, i) => active("municity", scope, i + 2))];
+        }
+        assert.match(sql, /j\.run_id = ANY\(\$\d+::bigint\[\]\)/);
+        assert.ok(values.some((value) => Array.isArray(value) && value.join(",") === "2,3,4"));
+        assert.ok(values.some((value) => Array.isArray(value) && value.join(",") === types.map((type) => type.toUpperCase()).join(",")));
+        return [{ city_parcel_id: 42, city_objectid: 99, matching_sources: [{ source_id: "municity", matching_record_count: 1,
+          records: [{ record_id: "82", fields: { PermitNo: "M-22-00082", PermitType: "Hood" } }] }] }];
+      },
+    }),
+  });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.complete_for_query, false);
+  assert.deepEqual(result.coverage.source_checks.filter((item) => item.source_id === "municity").map(({ scope_key, status }) =>
+    [scope_key, status]), scopes.map((scope, i) => [scope, i === 3 ? "not_indexed" : "complete"]));
 });
