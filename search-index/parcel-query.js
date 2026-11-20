@@ -388,11 +388,13 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
     source_id !== "municity").map(({ source_id }) => source_id);
   const live = plan.contact_role || plan.permit_description_terms || plan.include.some(({ source_id }) =>
     !indexedSources.includes(source_id));
-  let result;
-  if (requirements.length) result = await search({ requirements,
-    limit: live ? Math.min(3, plan.limit) : plan.limit, cursor: state.index_cursor }, { query,
+  const filtersLive = Boolean(plan.require_contact_role || plan.permit_description_terms);
+  const searchPage = (indexCursor) => search({ requirements,
+    limit: live ? Math.min(3, plan.limit) : plan.limit, cursor: indexCursor }, { query,
     projection: { sources: indexedSources, parcel: isParcel ? location.scope : null,
       descending: plan.sort === "parcel_desc", permit_types: permitTypes } });
+  let result;
+  if (requirements.length) result = await searchPage(state.index_cursor);
   else {
     let feature;
     try { feature = await load(location.scope.parcel_id, location.scope.objectid); }
@@ -411,21 +413,33 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
 
   const items = [];
   const sourceChecks = new Map();
-  for (const row of result.items) {
-    const projected = await projectParcel(row, plan, entries, { load, records, details, photo, nearby });
-    if (projected.row) items.push(projected.row);
-    row.source_checks = [...projected.checks].map(([source_id, status]) => ({ source_id, ...status }));
-    for (const [id, check] of projected.checks) {
-      if (!sourceChecks.has(id) || !good.has(check.status)) sourceChecks.set(id, check);
+  let candidatesChecked = 0;
+  const scanDeadline = Date.now() + 20_000;
+  let nextIndexCursor;
+  do {
+    const page = await Promise.all(result.items.map(async (row) => ({ row,
+      projected: await projectParcel(row, plan, entries, { load, records, details, photo, nearby }),
+    })));
+    candidatesChecked += page.length;
+    for (const { row, projected } of page) {
+      if (projected.row) items.push(projected.row);
+      row.source_checks = [...projected.checks].map(([source_id, status]) => ({ source_id, ...status }));
+      for (const [id, check] of projected.checks) {
+        if (!sourceChecks.has(id) || !good.has(check.status)) sourceChecks.set(id, check);
+      }
     }
-  }
+    nextIndexCursor = result.next_cursor;
+    if (!filtersLive || items.length || !nextIndexCursor || candidatesChecked >= 12 ||
+        Date.now() >= scanDeadline) break;
+    result = await searchPage(nextIndexCursor);
+  } while (true);
   if (requirements.some(({ source_id }) => source_id === PERMIT_ACTIVITY_SOURCE)) sourceChecks.set(PERMIT_ACTIVITY_SOURCE,
     { status: "partial", warning: "The activity index covers a bounded parent PermitDate cohort. Matching activity on older or other permits may be outside that cohort." });
   const liveChecks = [...sourceChecks].map(([source_id, status]) => ({ source_id, ...status }));
   const pagePartial = liveChecks.some(({ status }) => !good.has(status));
   const incomplete = state.incomplete || pagePartial || Boolean(classification.warning);
-  const nextCursor = result.next_cursor ? makeSearchCursor({ v: 1, query: hash, source: sourceHash,
-    offset: state.offset + result.items.length, index_cursor: result.next_cursor,
+  const nextCursor = nextIndexCursor ? makeSearchCursor({ v: 1, query: hash, source: sourceHash,
+    offset: state.offset + candidatesChecked, index_cursor: nextIndexCursor,
     incomplete: Boolean(incomplete), expires: Date.now() + 30 * 60_000 }) : null;
   const complete = Boolean(result.complete_for_query && !incomplete);
   const coverageLimited = incomplete || ["partial", "unavailable", "unconfigured"].includes(result.coverage.index_status);
@@ -434,6 +448,7 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
     ...(plan.parcel_use_category ? { use_category: plan.parcel_use_category } : {}),
     items, next_cursor: nextCursor, complete_for_query: complete,
     coverage: { ...result.coverage, live_source_checks: liveChecks, earlier_page_incomplete: Boolean(state.incomplete),
+      ...(filtersLive ? { candidate_parcels_checked: candidatesChecked } : {}),
       ...(classification.warning ? { interpretation_warning: classification.warning } : {}),
       returned_this_page: items.length },
     retrieved_at: new Date().toISOString() };

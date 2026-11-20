@@ -57,19 +57,22 @@ export function businessLicenseQuestion(question) {
 
 export function permitContactQuestion(question) {
   const match = question.trim().replace(/\s+/g, " ").match(
-    /^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:public )?([a-z][a-z -]{1,60}?) contacts (?:who did|for|on|listed on) (.+?) (?:in|over|during) (?:the )?(?:past|last|previous) (\d{1,3}) days?[?.!]?$/i);
-  if (!match || Number(match[3]) < 1 || Number(match[3]) > 366) return null;
-  const type = match[2].replace(/\s+permits?$/i, "").trim();
+    /^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:public )?([a-z][a-z -]{1,60}?) contacts ((?:who|that) (?:did|have done|performed|have performed|completed|have completed)|for|on|listed on) (.+?) (?:in|over|during|within) (?:the )?(?:past|last|previous) (\d{1,3}) days?[?.!]?$/i);
+  if (!match || Number(match[4]) < 1 || Number(match[4]) > 366) return null;
+  const type = match[3].replace(/\s+permits?(?: (?:dated|pulled))?$/i, "").trim();
+  const trade = type.match(/^(plumbing|electrical)(?: work)?$/i)?.[1].toLowerCase();
   const replacement = /^water[ -]+heater replacements?$/i.test(type);
   return { role: match[1].trim(),
-    permitType: /^water[ -]+heater$/i.test(type) || replacement ? "Water Heater" : type,
+    ...(trade ? { permitGroup: trade === "plumbing" ? "Plumbing" : "Electrical" }
+      : { permitType: /^water[ -]+heater$/i.test(type) || replacement ? "Water Heater" : type }),
     ...(replacement ? { terms: ["replace", "replacing", "change out", "change-out"] } : {}),
-    days: Number(match[3]) };
+    listed: /^(?:for|on|listed on)$/i.test(match[2]),
+    days: Number(match[4]) };
 }
 
 export function ambiguousWorkDate(question) {
   return /\b(?:in|over|during|within)\s+/.test(question.toLowerCase()) &&
-    /\b(?:who (?:did|performed|completed|installed|replaced)|(?:did|performed|completed) (?:the )?(?:work|replacements?|installations?|repairs?))\b/i.test(question) &&
+    /\b(?:(?:who|that) (?:did|performed|completed|installed|replaced|(?:has|have) (?:done|performed|completed|installed|replaced))|(?:did|performed|completed) (?:the )?(?:work|replacements?|installations?|repairs?))\b/i.test(question) &&
     !/\b(?:permitdate|permit date|permits? (?:pulled|dated)|documented (?:job|work) completion)\b/i.test(question);
 }
 
@@ -162,6 +165,8 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
       reason: "The official municipal permit type catalog could not be checked." };
   }
   const contact = !edited && permitContactQuestion(question);
+  if (contact?.permitGroup) return { status: "unsupported", question,
+    reason: "Use ask_parcel_data to search published trade groups for listed permit contacts." };
   if (contact) {
     const permitType = canonicalType(contact.permitType, typeNames);
     if (!permitType) return { status: "clarify", question,

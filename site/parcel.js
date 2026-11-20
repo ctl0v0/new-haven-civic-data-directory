@@ -2540,6 +2540,8 @@ function displaySearchResult(result, { append = false } = {}) {
   const indexStatus = result.coverage?.index_status;
   const count = append ? $("ask-results").children.length : result.items.length;
   const noun = ["parcels", "unified"].includes(askMethod) ? "parcel" : askMethod === "contacts" ? "permit" : "record";
+  const candidates = result.coverage?.candidate_parcels_checked;
+  $("ask-more").textContent = !count && candidates != null ? "Check more candidate parcels" : "Load more results";
   let message;
   if (indexStatus === "unconfigured")
     message = "The private parcel index is not connected in this Preview.";
@@ -2547,6 +2549,9 @@ function displaySearchResult(result, { append = false } = {}) {
     message = "The private parcel index could not be queried.";
   else if (count)
     message = `${count} ${noun}${count === 1 ? "" : "s"} shown. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`;
+  else if (candidates > 0)
+    message = `No verified matches among the ${candidates} candidate parcels checked in this batch.${askCursor
+      ? " More candidate parcels are available to check." : result.complete_for_query ? "" : " Review source coverage for incomplete checks."}`;
   else message = result.complete_for_query ? `No matching ${noun}s in the checked sources.` :
     `No matching ${noun}s on this page. Source coverage is incomplete.`;
   setAskStatus(message, ["unconfigured", "unavailable"].includes(indexStatus)

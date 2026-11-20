@@ -142,3 +142,69 @@ test("school questions preserve the address and select the published NHPS names"
   assert.equal(zones[0].source_lookup_mode, "official_snapshot");
   assert.deepEqual(zones[0].fields, { k8_school: "East Rock Magnet", high_school: "Wilbur Cross" });
 });
+
+const plumbingQuestion = "Show me contractor contacts that have done plumbing work in the last 90 days";
+
+test("broad plumbing work asks about the date and then uses the official group without a keyword", async () => {
+  const fail = () => assert.fail("This question should be handled before any source or model call");
+  const initial = await askParcelData({ question: plumbingQuestion }, {
+    now, catalog: fail, execute: fail, interpret: fail,
+  });
+  assert.equal(initial.clarification.id, "work_date");
+  const answer = await askParcelData({ question: plumbingQuestion,
+    clarification: { id: "work_date", choice: "permit_date" } }, {
+    now, interpret: fail, execute: async ({ plan }) => ({ status: "ready", plan }),
+  });
+  assert.deepEqual(answer.plan.requirements[0], { source_id: "municity", permit_group: "Plumbing",
+    date: { field: "PermitDate", from: "2026-08-23", to: "2026-11-20" } });
+  assert.equal(answer.plan.permit_description_terms, undefined);
+  assert.equal(answer.plan.contact_role, "contractor");
+  assert.equal(answer.plan.require_contact_role, true);
+});
+
+test("language interpretation removes redundant trade text and respects explicitly requested description terms", async () => {
+  const interpret = async () => ({
+    intent: "search", scope: { kind: "city" },
+    requirements: [{ source_id: "municity", permit_group: "Plumbing", predicates: [],
+      date: { field: "PermitDate", days: 90 } }],
+    include: [{ source_id: "permit-contacts", fields: ["ContactRole"] }],
+    contact_role: "Contractor", require_contact_role: true,
+    permit_description_terms: ["plumbing"],
+  });
+  const dependencies = { now, catalog, interpret,
+    execute: async ({ plan }) => ({ status: "ready", plan }) };
+  const broad = await askParcelData({ question: "Find listed plumbing permit contractors from the last 90 days." }, dependencies);
+  const explicit = await askParcelData({
+    question: "Find listed plumbing permit contractors from the last 90 days when the description says plumbing.",
+  }, dependencies);
+  assert.equal(broad.plan.permit_description_terms, undefined);
+  assert.deepEqual(explicit.plan.permit_description_terms, ["plumbing"]);
+});
+
+test("a contact query scans past an empty candidate batch and returns a linked contractor", async () => {
+  const load = async (cityId, objectId) => ({ attributes: { parcel_id: cityId, objectid: objectId } });
+  const makeParcel = (id) => ({ city_parcel_id: id, city_objectid: 100 + id,
+    matching_sources: [{ source_id: "municity", matching_record_count: 1,
+      records: [{ record_id: String(id), source_url: permitUrl(id), fields: { PermitType: "Water Heater" } }] }] });
+  const search = async ({ cursor }, { projection }) => {
+    assert.deepEqual(projection.permit_types, ["WATER HEATER"]);
+    return { items: (cursor ? [4] : [1, 2, 3]).map(makeParcel),
+      next_cursor: cursor ? null : "verified-index-cursor",
+      complete_for_query: Boolean(cursor), coverage: { index_status: "connected" } };
+  };
+  const details = async (_, id) => ({ permit: { source_url: permitUrl(id),
+    attributes: { Description: "Install water heater" } },
+    warnings: id === "2" ? ["Permit Contact category was not returned."] : [],
+    items: id === "4" ? [{ category: "Contact", source_record_id: "Contact:4",
+      source_url: permitUrl(id), attributes: { ContactRole: "Contractor" } }] : [] });
+  const result = await queryParcelData({ plan: {
+    requirements: [{ source_id: "municity", permit_group: "Plumbing" }],
+    include: [{ source_id: "permit-contacts", fields: ["ContactRole"] }],
+    contact_role: "Contractor", require_contact_role: true,
+  } }, { search, catalog, load, details });
+  assert.deepEqual(result.items.map(({ city_parcel_id }) => city_parcel_id), [4]);
+  assert.equal(result.coverage.candidate_parcels_checked, 4);
+  assert.equal(result.complete_for_query, false);
+  assert.equal(result.coverage.live_source_checks[0].status, "partial");
+  assert.equal(result.next_cursor, null);
+});

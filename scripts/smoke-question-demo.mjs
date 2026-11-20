@@ -126,6 +126,39 @@ console.log(JSON.stringify({ event: "unified_parcel_query_smoke", work_date_clar
   parcel_results: pages.flatMap((page) => page.items).length, contact_rows: contacts.length,
   pages_checked: pages.length, has_more: Boolean(pages.at(-1).next_cursor),
   source_checks: pages.at(-1).coverage?.source_checks?.map(({ source_id, status }) => ({ source_id, status })) }));
+const plumbingQuestion = "Show me contractor contacts that have done plumbing work in the last 90 days";
+const plumbingChoice = await callMcp("ask_parcel_data", { question: plumbingQuestion });
+if (plumbingChoice.clarification?.id !== "work_date")
+  throw new Error("The plumbing question did not clarify its work date");
+const plumbing = await callMcp("ask_parcel_data", { question: plumbingQuestion,
+  clarification: { id: "work_date", choice: "permit_date" } });
+const plumbingPermit = plumbing.plan?.requirements[0];
+if (plumbingPermit?.permit_group !== "Plumbing" || plumbingPermit.date?.field !== "PermitDate" ||
+    plumbing.plan.permit_description_terms?.length || !plumbing.plan.require_contact_role)
+  throw new Error("The broad plumbing search did not preserve the group, date, and contractor criteria");
+const plumbingMatches = (plumbing.items ?? []).flatMap((item) => {
+  const permits = item.matching_sources.find(({ source_id }) => source_id === "municity")?.records ?? [];
+  return (item.matching_sources.find(({ source_id }) => source_id === "permit-contacts")?.records ?? [])
+    .map((contact) => {
+      if (!item.city_parcel_id || !item.city_objectid || !contact.source_url || contact.event_date !== null ||
+          !permits.some(({ record_id }) => record_id === contact.permit_id) ||
+          String(contact.published_role).trim().toLowerCase() !== "contractor")
+        throw new Error("The plumbing contact did not retain official permit, role, and parcel evidence");
+      return { parcel_id: String(item.city_parcel_id), objectid: String(item.city_objectid), permit_id: contact.permit_id };
+    });
+});
+let sampleDescriptionContainsPlumbing = null;
+if (plumbingMatches.length) {
+  const example = await callMcp("get_permit_details", plumbingMatches[0]);
+  const description = example.permit?.attributes?.Description;
+  if (typeof description === "string") sampleDescriptionContainsPlumbing = /plumbing/i.test(description);
+}
+console.log(JSON.stringify({ event: "unified_plumbing_query_smoke",
+  status: plumbing.status, reason: plumbing.reason, parcel_results: plumbing.items?.length ?? 0,
+  contacts: plumbingMatches.length, candidate_parcels_checked: plumbing.coverage?.candidate_parcels_checked,
+  has_more: Boolean(plumbing.next_cursor), sample_description_contains_plumbing: sampleDescriptionContainsPlumbing,
+  source_checks: plumbing.coverage?.source_checks?.map(({ source_id, status, scope_key }) => ({ source_id, status, scope_key })) }));
+if (!plumbing.items) throw new Error("The official Plumbing group search could not run");
 const unifiedElectrical = await callMcp("ask_parcel_data", { question:
   "Show commercial parcels with electrical permits pulled in the past 30 days" });
 if (unifiedElectrical.plan?.parcel_use_category !== "business_space" ||
