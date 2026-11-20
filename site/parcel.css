@@ -644,6 +644,16 @@ details.display-section > summary strong { margin-right: auto; }
 .query-projected-fields dt { color: #4e675b; font-family: ui-monospace, monospace; }
 .query-projected-fields dd { margin: 0; }
 .query-projected-fields dt, .query-projected-fields dd { overflow-wrap: anywhere; }
+.permit-application-list { list-style: none; margin: .75rem 0 1rem; padding: 0; }
+.permit-application-list > li { border-top: 1px solid #d2ded5; padding: .8rem 0; }
+.permit-application-list h3, .permit-application-list p { margin: .25rem 0; }
+.permit-application-detail { border-top: 0; }
+.permit-application-detail summary { overflow-wrap: anywhere; }
+.permit-application-detail h4 { margin: .75rem 0 .25rem; }
+.permit-application-detail ul { padding-left: 1.2rem; }
+.permit-application-detail li { margin: .25rem 0; }
+.permit-application-links { display: flex; flex-wrap: wrap; gap: .35rem 1rem; }
+.permit-application-type-links summary { cursor: pointer; font-size: .85rem; }
 @media (max-width: 650px) {
   .query-filter-row { grid-template-columns: minmax(0, 1fr); }
   .query-catalog-list > li { align-items: flex-start; flex-wrap: wrap; }

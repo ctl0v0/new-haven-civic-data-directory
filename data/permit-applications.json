@@ -1,0 +1,398 @@
+{
+  "reviewed_on": "2026-11-20",
+  "citysquared_menu_status": "unverified",
+  "citysquared_menu_note": "The public portal entry was checked. The current applicant menu and any sign-in-only instructions still need a permitted walkthrough.",
+  "sources": {
+    "license-center": {
+      "title": "City Permit & License Center applications",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-building-inspection-enforcement/permit-license-center-applications",
+      "kind": "city_directory"
+    },
+    "building": {
+      "title": "City Building Department applications",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-building-inspection-enforcement/building-department-applications",
+      "kind": "city_directory"
+    },
+    "contractors": {
+      "title": "City contractor permit instructions",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-building-inspection-enforcement/contractor-info",
+      "kind": "city_instructions"
+    },
+    "right-of-way": {
+      "title": "Permit & License Center services and obstruction examples",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/office-of-building-inspection-enforcement/permit-license-center-hours",
+      "kind": "city_instructions"
+    },
+    "sidewalk": {
+      "title": "Excavation and sidewalk permit requirements",
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/11842/637850121111130000",
+      "kind": "city_instructions"
+    },
+    "sidewalk-license": {
+      "title": "Excavation and sidewalk licensing requirements",
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/11836/637850119132670000",
+      "kind": "city_instructions"
+    },
+    "street-events": {
+      "title": "City special event permit requirements",
+      "url": "https://www.newhavenct.gov/home/showpublisheddocument/3316/637745951087900000",
+      "kind": "city_instructions"
+    },
+    "parks": {
+      "title": "Parks permits and applications",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/parks-department/permits-applications",
+      "kind": "city_directory"
+    },
+    "city-plan": {
+      "title": "City Plan applications folder",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/city-plan/application-fee-schedule/-folder-106",
+      "kind": "city_directory"
+    },
+    "zoning-letter": {
+      "title": "City zoning compliance letter instructions",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/city-plan/zoning-compliance-rebuild-reconstruction-letters",
+      "kind": "city_instructions"
+    },
+    "adu": {
+      "title": "City Plan ADU walkthrough for CitySquared",
+      "url": "https://www.newhavenadu.com/permitting",
+      "kind": "city_published_portal_walkthrough"
+    },
+    "lci": {
+      "title": "City residential rental licensing program",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/livable-city-initiative/housing-code-enforcement/residential-rental-licensing-program",
+      "kind": "city_directory"
+    },
+    "parking": {
+      "title": "Transportation, Traffic and Parking applications",
+      "url": "https://www.newhavenct.gov/government/departments-divisions/transportation-traffic-parking/permits-applications-and-fees",
+      "kind": "city_directory"
+    },
+    "citysquared": {
+      "title": "New Haven CitySquared entry",
+      "url": "https://www.citysquared.com/#/app/NewHavenCityCT/landing",
+      "kind": "official_portal"
+    }
+  },
+  "applications": [
+    {
+      "id": "building-permits",
+      "title": "Building Department online permitting",
+      "department": "Building Department",
+      "source": "building",
+      "route": "citysquared",
+      "shared_groups": ["Building", "Electrical", "Plumbing", "Mechanical"],
+      "shared_types": ["Building Permit", "Electrical Permit", "Plumbing Permit", "Mechanical Permit", "Water Heater", "Water Heater - C", "Roofing", "Roofing - C", "Exploratory Demolition", "Sign/Billboard"],
+      "instructions": [
+        {"source": "building", "text": "Open New Haven’s permitting portal. Building applications are filed online. Check for an obstruction permit if construction affects a City street or sidewalk."},
+        {"source": "contractors", "text": "Review the City’s contractor license, insurance or workers’ compensation documentation, plans, and agent authorization requirements as applicable."}
+      ],
+      "forms": [
+        {"title": "Connecticut workers’ compensation building permit forms", "url": "https://portal.ct.gov/wcc/knowledge-base/articles/forms/building-permit-forms", "kind": "supporting_forms"}
+      ]
+    },
+    {
+      "id": "adu-addition",
+      "title": "Addition for an accessory dwelling unit",
+      "department": "Building Department",
+      "source": "adu",
+      "route": "citysquared",
+      "permit_types": ["Addition"],
+      "scope": "This association applies to the ADU workflow documented by City Plan.",
+      "portal_selection": {"department": "Building (1 and 2 family only) - Public", "permit_type": "Addition"},
+      "instructions": [
+        {"source": "adu", "text": "Prepare the ADU documents and meet with City Plan before filing. In CitySquared, sign in, choose the documented department and permit type, and select the property address."},
+        {"source": "adu", "text": "Add contractor information as applicable, upload the required material, and complete the CitySquared certification and payment steps. The guide also calls for a recorded notarized deed restriction."}
+      ],
+      "forms": [
+        {"title": "ADU application materials and blank supporting forms", "url": "https://www.newhavenadu.com/resources", "kind": "supporting_forms"},
+        {"title": "Printable ADU checklist", "url": "https://www.newhavenadu.com/s/22_0816-ADU-Checklist.pdf", "kind": "checklist"}
+      ]
+    },
+    {
+      "id": "full-demolition",
+      "title": "Demolition of an entire structure",
+      "department": "Building Department",
+      "source": "building",
+      "route": "citysquared",
+      "shared_types": ["Demolition", "Demolition (Entire Structure)"],
+      "scope": "The City instructions cover demolition of the entire structure. The exact current CitySquared selection needs verification.",
+      "instructions": [{"source": "building", "text": "Obtain zoning approval for demolition of an entire structure and apply through the online building permit portal."}]
+    },
+    {
+      "id": "auction",
+      "title": "Auction Permit Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "permit_types": ["Auction"],
+      "form_listings": ["Auction Permit Application"]
+    },
+    {
+      "id": "auctioneer",
+      "title": "Auctioneer License Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Auctioneer License Application"]
+    },
+    {
+      "id": "amusement-license",
+      "title": "Amusement License Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "shared_types": ["Amusement"],
+      "scope": "The City lists this license for amusement businesses and activities such as bowling, game rooms, and street performance. Confirm the applicable route for an event.",
+      "form_listings": ["Amusement License Application"]
+    },
+    {
+      "id": "broker",
+      "title": "Broker License Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Broker License Application"]
+    },
+    {
+      "id": "rooming-house",
+      "title": "Rooming House License Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "forms": [{"title": "Rooming House licensing packet", "url": "https://www.newhavenct.gov/home/showpublisheddocument/25840/638889559793900000", "kind": "application_packet"}],
+      "instructions": [{"source": "license-center", "text": "Use the Rooming House packet for the license. Review its zoning, building and occupancy prerequisites for new applicants."}]
+    },
+    {
+      "id": "sales-license",
+      "title": "Sales License Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Sales License Application"]
+    },
+    {
+      "id": "vendor-yearly",
+      "title": "Food or Peddler/Hawker License Application (Yearly)",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Food or Peddler/Hawker License Application (Yearly)"]
+    },
+    {
+      "id": "vendor-daily",
+      "title": "Food or Peddler/Hawker License Application (Daily)",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Food or Peddler/Hawker License Application (Daily)"],
+      "instructions": [{"source": "license-center", "text": "The City lists this for one-day vending outside special events and directs event organizers to the Vending Umbrella application."}]
+    },
+    {
+      "id": "vending-umbrella-food",
+      "title": "Vending Umbrella License · Food Trucks",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Vending Umbrella License - Food Trucks (Special Events)", "Appendix A"],
+      "instructions": [{"source": "license-center", "text": "The event organizer applies after submitting the event permit. Check the City directory for the advance filing requirement."}]
+    },
+    {
+      "id": "vending-umbrella-hawker",
+      "title": "Vending Umbrella License · Peddler/Hawkers",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Vending Umbrella License - Peddler/Hawkers (Special Events)", "Appendix B"],
+      "instructions": [{"source": "license-center", "text": "The event organizer applies after submitting the event permit. Check the City directory for the advance filing requirement."}]
+    },
+    {
+      "id": "special-vending-district",
+      "title": "Special Vending District Application",
+      "department": "Permit & License Center · Vendor Division",
+      "source": "license-center",
+      "route": "in_person",
+      "form_listings": ["Special Vending District Application"],
+      "instructions": [{"source": "license-center", "text": "The City also lists the yearly vendor application. The reviewed City directory describes a waiting list for district spaces."}]
+    },
+    {
+      "id": "annual-utility-obstruction",
+      "title": "Annual Utility Obstruction Permit",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "shared_types": ["Annual Utility Blanket Permit", "Obstruction Work for Utility"],
+      "scope": "The City directory’s application label differs from the recorded permit type labels. Confirm the current CitySquared selection."
+    },
+    {
+      "id": "excavation-license",
+      "title": "Excavation License Application",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "directory",
+      "form_listings": ["Excavation License Application"],
+      "instructions": [{"source": "sidewalk-license", "text": "Check current licensing instructions with the Permit & License Center. The licensing sheet describes license, insurance, and bond documentation."}]
+    },
+    {
+      "id": "sidewalk-license",
+      "title": "Sidewalk License Application",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "directory",
+      "form_listings": ["Sidewalk License Application"],
+      "instructions": [{"source": "sidewalk-license", "text": "Check current licensing instructions with the Permit & License Center. The licensing sheet describes license, insurance, and bond documentation."}]
+    },
+    {
+      "id": "excavation-permit",
+      "title": "Excavation Permit Application",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "instructions": [{"source": "sidewalk", "text": "The contractor doing the work applies online. Prepare a work plan and traffic plan. The City lists additional documentation for street excavation on behalf of a utility."}]
+    },
+    {
+      "id": "sidewalk-permit",
+      "title": "Sidewalk Permit Application",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "shared_types": ["Sidewalk - New", "Sidewalk - Replace Existing", "Sidewalk and Curbs", "Sidewalk and Driveway/Apron"],
+      "instructions": [{"source": "sidewalk", "text": "The contractor doing the work applies online. Include a dimensioned work plan with cross streets and a traffic and pedestrian plan as applicable."}]
+    },
+    {
+      "id": "obstruction-permit",
+      "title": "Obstruction Permit",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "shared_types": ["Boom Lift", "Closure - Sidewalk", "Dumpster/Pod/Container", "Lift Truck", "Manhole Entry", "Obstruct Lane", "Obstruct Sidewalk", "Obstruction on Sidewalk", "Scaffolding"],
+      "instructions": [
+        {"source": "building", "text": "Check the City obstruction permit when work or equipment affects a street or sidewalk."},
+        {"source": "right-of-way", "text": "The Contractor Division lists dumpster or pod placement, manhole access, lifts and scaffolding among its obstruction examples."}
+      ]
+    },
+    {
+      "id": "outdoor-seating",
+      "title": "Outdoor Seating License Application",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "forms": [{"title": "2026 Outdoor Seating requirements and application materials", "url": "https://www.newhavenct.gov/home/showpublisheddocument/24744/639101213719800000", "kind": "application_packet"}],
+      "instructions": [{"source": "license-center", "text": "See the official Outdoor Seating application and requirements. The 2026 packet describes site plan and insurance materials for the online filing."}]
+    },
+    {
+      "id": "sandwich-board",
+      "title": "Sign in Sidewalk Permit (Sandwich Board)",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "scope": "This directory entry is for a sidewalk sandwich board."
+    },
+    {
+      "id": "special-events",
+      "title": "Special Events Permit Application",
+      "department": "Permit & License Center · Contractor Division",
+      "source": "license-center",
+      "route": "citysquared",
+      "permit_types": ["Special Event"],
+      "shared_types": ["Block Party", "Special Events Street Closures", "Outdoor Festival or Fair", "Outdoor Market", "Parade or Procession", "Prayer Vigil"],
+      "scope": "The City publishes one Special Events application route. Individual CitySquared event selections remain unverified.",
+      "instructions": [{"source": "street-events", "text": "Prepare the event layout and affected wards. Consult the City’s requirements for street closures, petitions, and food or vendor review. Confirm current filing lead time and fees with the City."}],
+      "forms": [{"title": "Street special event requirements", "url": "https://www.newhavenct.gov/home/showpublisheddocument/3316/637745951087900000", "kind": "checklist"}]
+    },
+    {
+      "id": "park-event",
+      "title": "Pavilion/Special Event Application",
+      "department": "Parks Department",
+      "source": "parks",
+      "route": "email",
+      "form_listings": ["Pavilion/Special Event Application"],
+      "instructions": [{"source": "parks", "text": "Check facility availability, then use the listed form and email the signed application to Parks. Follow the City instructions for any required site map and payment."}]
+    },
+    {
+      "id": "park-field",
+      "title": "Athletic Field Application",
+      "department": "Parks Department",
+      "source": "parks",
+      "route": "email",
+      "form_listings": ["Athletic Field Application"],
+      "instructions": [{"source": "parks", "text": "Check field availability and email the signed application using the City’s athletic field instructions."}]
+    },
+    {
+      "id": "park-field-trip",
+      "title": "Lighthouse Field Trip Request Form",
+      "department": "Parks Department",
+      "source": "parks",
+      "route": "email",
+      "form_listings": ["Field Trip Request Form"],
+      "instructions": [{"source": "parks", "text": "Check availability, then complete and email the listed Field Trip Request Form to Parks."}]
+    },
+    {
+      "id": "development",
+      "title": "Development Permit",
+      "department": "City Plan",
+      "source": "city-plan",
+      "route": "directory",
+      "permit_types": ["Development Permit"],
+      "forms": [{"title": "Development Permit application · December 2025 revision", "url": "https://www.newhavenct.gov/home/showpublisheddocument/27482/639019994036270000", "kind": "blank_form"}],
+      "instructions": [{"source": "city-plan", "text": "Use the current City Plan packet and confirm the filing route and review sections that apply to the project."}]
+    },
+    {
+      "id": "special-permit",
+      "title": "Special Permit",
+      "department": "City Plan",
+      "source": "city-plan",
+      "route": "directory",
+      "permit_types": ["Special Permit"],
+      "forms": [{"title": "Special Permit application", "url": "https://www.newhavenct.gov/home/showpublisheddocument/1434/637743181748670000", "kind": "blank_form"}],
+      "instructions": [{"source": "city-plan", "text": "Use the City Plan packet. Its application listing identifies a City Plan Commission public hearing for a Special Permit."}]
+    },
+    {
+      "id": "flood-development",
+      "title": "Flood Plain Development Permit",
+      "department": "City Plan",
+      "source": "city-plan",
+      "route": "directory",
+      "permit_types": ["Flood Plain Development Permit"],
+      "forms": [{"title": "Flood Plain Development Permit", "url": "https://www.newhavenct.gov/home/showpublisheddocument/1426/637743181733970000", "kind": "listed_form"}]
+    },
+    {
+      "id": "flood-variance",
+      "title": "Flood Plain Variance Form",
+      "department": "City Plan",
+      "source": "city-plan",
+      "route": "directory",
+      "permit_types": ["Flood Plain Variance Form"],
+      "forms": [{"title": "Flood Plain Variance Form", "url": "https://www.newhavenct.gov/home/showpublisheddocument/1428/637743181737270000", "kind": "listed_form"}]
+    },
+    {
+      "id": "letter-of-zoning-compliance",
+      "title": "Letter of Zoning Compliance",
+      "department": "City Plan",
+      "source": "zoning-letter",
+      "route": "mail",
+      "permit_types": ["Letter Of Zoning Compliance"],
+      "forms": [{"title": "Letter of Zoning Compliance request form", "url": "https://www.newhavenct.gov/home/showpublisheddocument/12352/638581155186070000", "kind": "blank_form"}],
+      "instructions": [{"source": "zoning-letter", "text": "Complete the City request form and mail it with payment using the filing address and current fee published by City Plan."}]
+    },
+    {
+      "id": "residential-rental-license",
+      "title": "Residential Rental Business License Application",
+      "department": "Livable City Initiative",
+      "source": "lci",
+      "route": "department_portal",
+      "permit_types": ["Residential License"],
+      "form_listings": ["Consent/Waiver Form", "Landlord Inspection Checklist"],
+      "instructions": [{"source": "lci", "text": "Open the application from the City's licensing page and sign in or register. Review the published licensing, inspection and exemption instructions."}]
+    },
+    {
+      "id": "meter-bag",
+      "title": "Meter Bag Application Form 2026",
+      "department": "Transportation, Traffic and Parking",
+      "source": "parking",
+      "route": "directory",
+      "permit_types": ["Meter Bag"],
+      "form_listings": ["Meter Bag Application Form 2026"]
+    }
+  ]
+}

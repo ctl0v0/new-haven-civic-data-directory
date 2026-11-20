@@ -108,7 +108,8 @@ export async function questionPermitCatalog({ query = indexQuery,
     if (run?.status === "complete" &&
         Number(run.expected_count) === Number(run.returned_count) &&
         now.getTime() - Date.parse(run.finished_at) <= 48 * 3600_000) {
-      const rows = await query(`SELECT record_id, fields->>'group' AS group_name
+      const rows = await query(`SELECT record_id, fields->>'group' AS group_name,
+        fields->'permit_type_id' AS permit_type_id, fields->'deleted_as_published' AS deleted_as_published
         FROM search_records WHERE run_id = $1 AND source_id = 'municity-permit-types'
         ORDER BY record_id`, [run.id]);
       if (rows.length === Number(run.returned_count) &&
@@ -117,7 +118,10 @@ export async function questionPermitCatalog({ query = indexQuery,
         const groups = new Map();
         for (const row of rows) {
           if (!groups.has(row.group_name)) groups.set(row.group_name, []);
-          groups.get(row.group_name).push({ name: row.record_id });
+          groups.get(row.group_name).push({ name: row.record_id,
+            ...(row.permit_type_id != null ? { permit_type_id: row.permit_type_id } : {}),
+            ...(row.deleted_as_published != null ? { deleted_as_published: row.deleted_as_published } : {}),
+          });
         }
         return { partial: false, source_url: MUNICIPAL_PERMIT_TYPES_URL,
           retrieved_at: run.finished_at, method: "verified_index", distinct_type_names: rows.length,

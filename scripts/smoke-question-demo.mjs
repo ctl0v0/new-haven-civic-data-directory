@@ -83,6 +83,34 @@ async function callMcp(name, args) {
   if (!response.ok || !result || payload.result.isError) throw new Error(`The ${name} MCP query failed`);
   return result;
 }
+const applicationArgs = { permit_type: "Addition" };
+const applications = await callMcp("list_permit_applications", applicationArgs);
+const adu = applications.items[0]?.applications.find(({ application_id }) => application_id === "adu-addition");
+const applicationCoverage = applications.coverage;
+if (applications.items.length !== 1 || !applications.items[0]?.permit_type_id ||
+    adu?.start.method !== "portal_entry" || adu.start.selection?.permit_type !== "Addition" ||
+    adu.instructions[0]?.source.kind !== "city_published_portal_walkthrough" ||
+    Object.values(applicationCoverage.type_counts ?? {}).reduce((total, count) => total + count, 0) !== applicationCoverage.permit_type_count)
+  throw new Error("The official application inventory did not reconcile to the permit catalog and documented ADU route");
+const { default: applicationRoute } = await import("../api/v1/permit-applications.js");
+const applicationUrl = "https://example.com/api/v1/permit-applications?permit_type=Addition";
+if ((await applicationRoute.fetch(new Request(applicationUrl))).status !== 401)
+  throw new Error("The application directory must require pilot access");
+const applicationResponse = await applicationRoute.fetch(new Request(applicationUrl, {
+  headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` },
+}));
+if (!applicationResponse.ok || JSON.stringify((await applicationResponse.json()).items) !== JSON.stringify(applications.items))
+  throw new Error("MCP and REST returned different application routes");
+console.log(JSON.stringify({ event: "permit_application_directory_smoke",
+  catalog: applicationCoverage.catalog.status,
+  permit_types: applicationCoverage.permit_type_count,
+  type_coverage: applicationCoverage.type_counts,
+  directory_entries: applicationCoverage.directory_entry_count,
+  directory_entries_without_type_link: applicationCoverage.directory_entries_without_type_link,
+  citysquared_menu: applicationCoverage.citysquared_menu.status,
+  adu_selection_verified_from_city_walkthrough: true,
+  source_checks: applicationCoverage.source_checks.map(({ id, status }) => ({ id, status })),
+}));
 const question = "Show me Contractor contacts who did water heater replacements in the last 30 days";
 const clarification = await callMcp("ask_parcel_data", { question });
 if (clarification.status !== "clarify" || clarification.clarification?.id !== "work_date" || clarification.items)

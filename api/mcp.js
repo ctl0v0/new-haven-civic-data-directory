@@ -4,6 +4,7 @@ import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
 import { getDataContext } from "../parcel/data-context.js";
+import { listPermitApplications, permitApplicationQuerySchema } from "../parcel/permit-applications.js";
 import { askIndexedParcels } from "../search-index/ask.js";
 import { askParcelData } from "../search-index/parcel-question.js";
 import { queryParcelData } from "../search-index/parcel-query.js";
@@ -235,6 +236,14 @@ export function createServer() {
     "Return all published fields for an application on the selected parcel and its public fee, review task, inspection, document, contact-role, communication and source-flag metadata. No permit is inferred from a shared number.",
     z.object({ ...common, application_id: z.string().regex(/^\d{1,12}$/) }),
     ({ parcel_id, objectid, application_id }) => parcelApplicationDetails(parcel_id, application_id, objectid),
+  );
+  tool(
+    server,
+    "list_permit_applications",
+    "Find official New Haven permit applications",
+    "Browse new-application routes, blank forms and published instructions by CitySquared permit type or City directory entry. Returns verified associations, shared instructions and gaps. Use this tool for how to apply for a new permit. CitySquared applicant-menu verification and source recency are reported separately.",
+    permitApplicationQuerySchema,
+    listPermitApplications,
   );
   tool(
     server,

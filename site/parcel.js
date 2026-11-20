@@ -1384,7 +1384,8 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   else if (asking) url.searchParams.set("view", "ask");
   else if (maplessRecords) url.searchParams.set("view", "records");
   else url.searchParams.delete("view");
-  if (guiding && section !== "home" && (section !== "query-explorer" || !$("ask-tab").hidden))
+  if (guiding && section !== "home" &&
+      (!["query-explorer", "permit-applications"].includes(section) || !$("ask-tab").hidden))
     url.searchParams.set("guide", section);
   else url.searchParams.delete("guide");
   history.replaceState(null, "", `${url.pathname}${url.search}`);
@@ -1446,6 +1447,14 @@ function renderGuideSection(key) {
     example.append(sidebar);
     void queryExplorer().then(({ explorer }) => explorer.renderGuide(reference, sidebar))
       .catch((error) => reference.replaceChildren(el("p", error.message, "source-warning")));
+  } else if (key === "permit-applications" && !$("ask-tab").hidden) {
+    const menu = el("div");
+    const sidebar = el("div");
+    content.append(menu);
+    example.append(sidebar);
+    void import("/permit-applications.js").then(({ renderPermitApplications }) =>
+      renderPermitApplications(menu, sidebar, { api, el, link }))
+      .catch((error) => menu.replaceChildren(el("p", error.message, "source-warning")));
   } else if (key === "home") {
     content.append(el("p", "Official source records · private preview", "eyebrow"),
       el("h2", "How to read this parcel feed"));
@@ -1538,8 +1547,9 @@ async function loadGuide(section) {
   const nav = $("guide-nav");
   nav.replaceChildren();
   const sections = [["home", "How to read the data"],
-    ...(!$("ask-tab").hidden ? [["query-explorer", "Query explorer"]] : []),
-    ...guideData.methods.map((item) => [item.id, item.title]), ["fields", "Field guide"], ["sources", "Sources and gaps"]];
+    ...(!$("ask-tab").hidden ? [["query-explorer", "Query explorer"], ["permit-applications", "Permit applications"]] : []),
+    ...guideData.methods.filter(({ id }) => id !== "permit-applications").map((item) => [item.id, item.title]),
+    ["fields", "Field guide"], ["sources", "Sources and gaps"]];
   for (const [id, title] of sections) {
     const button = el("button", title, "guide-nav-button");
     button.type = "button";

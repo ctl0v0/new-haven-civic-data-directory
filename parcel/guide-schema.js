@@ -30,6 +30,7 @@ const methods = [
   ["permit-linkage-audit", "Permit parcel-link audit", "GET /api/v1/permit-linkage-audit", "audit_municipal_permit_links", "Separate missing municipal PrintKey values from unmatched published keys for one indexed permit type. LegalAddress alone is not a parcel join.", "permit_type, sample_limit"],
   ["indexed-record", "Indexed record detail", "GET /api/v1/indexed-record", "get_indexed_record", "Read one indexed official source row with its City parcel joins and refresh coverage; full municipal work details remain available on demand.", "source_id, record_id, permit_type, include_geometry"],
   ["permit-types", "Municipal permit type catalog", "GET /api/v1/permit-types", "list_municipal_permit_types", "Return the City's live configured permit type names and groups. A catalog entry does not establish an issued permit.", "none"],
+  ["permit-applications", "Permit applications", "GET /api/v1/permit-applications", "list_permit_applications", "Browse City application routes, blank forms and instructions by permit type or application directory entry. Returns official source dates and coverage gaps.", "view, q, department, permit_type, permit_type_id, status, route, limit, cursor"],
   ["catalog", "Source catalog", "GET /api/v1/sources", "list_sources", "Explain each source's access mode, coverage and known gaps.", "none"],
 ].map(([id, title, rest, mcp, description, inputs]) => ({ id, title, rest, mcp, description, inputs }));
 
