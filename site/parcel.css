@@ -927,3 +927,73 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
 @media (max-width: 375px) {
   #activity-filters { grid-template-columns: minmax(0, 1fr); }
 }
+
+#records-view.has-parcel .search-panel {
+  padding: .65rem .9rem;
+}
+#records-view.has-parcel .search-panel h1,
+#records-view.has-parcel .search-panel .eyebrow,
+#records-view.has-parcel .search-intro,
+#records-view.has-parcel .search-examples,
+#records-view.has-parcel #status:empty {
+  display: none;
+}
+#records-view.has-parcel .search-panel form {
+  margin: 0;
+}
+#records-view.has-parcel .search-panel label {
+  font-size: .84rem;
+}
+#parcel-title {
+  scroll-margin-top: 4rem;
+}
+.parcel-match-evidence {
+  display: block;
+  font-size: .84rem;
+}
+.parcel-hero-compact h2 {
+  font-size: clamp(1.25rem, 2.5vw, 1.7rem);
+}
+.parcel-hero-compact .parcel-overview-note,
+.parcel-hero-compact .parcel-photo {
+  display: none;
+}
+.parcel-hero-compact .parcel-hero-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.parcel-hero-compact .match-note {
+  padding: .35rem .6rem;
+  margin: .4rem 0;
+  font-size: .85rem;
+}
+#snapshot-title {
+  margin: 0 0 .5rem;
+}
+.overview-known-gaps li span {
+  display: block;
+}
+#group-activity .category-index {
+  margin: .55rem 0;
+}
+.activity-date-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-bottom: .85rem;
+}
+.activity-date-presets button,
+#activity-reset {
+  padding: .38rem .65rem;
+  font-size: .88rem;
+}
+.activity-date-presets button[aria-pressed="true"] {
+  border-color: #27674f;
+  background: #dcecdf;
+}
+#activity-permit-type {
+  grid-column: 1 / -1;
+  max-width: 23rem;
+}
+#activity-filters input[name="permit_type"] {
+  font-weight: 400;
+}

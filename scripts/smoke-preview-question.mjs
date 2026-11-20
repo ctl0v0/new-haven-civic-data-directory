@@ -116,17 +116,28 @@ try {
   const first = await listCityActivity({ limit: 5 });
   const candidate = first.items.find((item) => item.neighborhoods.length);
   const neighborhood = candidate?.neighborhoods[0];
-  const local = neighborhood ? await listCityActivity({ neighborhood, limit: 5 }) : null;
-  const second = first.next_cursor ? await listCityActivity({ limit: 5, cursor: first.next_cursor }) : null;
+  const hasNeighborhoodPermit = (item) => item.neighborhoods.length &&
+    item.events.some((event) => event.activity === "permit" && event.published_type);
+  const permitItem = first.items.find(hasNeighborhoodPermit) ??
+    (await listCityActivity({ activity: "permit", limit: 10 })).items.find(hasNeighborhoodPermit);
+  const permitType = permitItem?.events.find((event) => event.activity === "permit" && event.published_type)?.published_type;
+  const [local, second, byType] = await Promise.all([
+    neighborhood ? listCityActivity({ neighborhood, limit: 5 }) : null,
+    first.next_cursor ? listCityActivity({ limit: 5, cursor: first.next_cursor }) : null,
+    permitType ? listCityActivity({ neighborhood: permitItem.neighborhoods[0], permit_type: permitType, limit: 5 }) : null,
+  ]);
   if (first.items.some(({ events, city_parcel_id, city_objectid }) => !city_parcel_id || !city_objectid ||
       events.some(({ source_url, event_date }) => !source_url.startsWith('https://') ||
         event_date < first.filters.from || event_date > first.filters.to)) ||
       local?.items.some((item) => !item.neighborhoods.includes(neighborhood)) ||
-      second?.items.some((item) => first.items.some(({ id }) => id === item.id)))
-    throw new Error('Activity parcel identity, dates, neighborhood or paging verification failed');
+      second?.items.some((item) => first.items.some(({ id }) => id === item.id)) ||
+      (byType && (!byType.items.length || byType.items.some((item) => !item.neighborhoods.includes(permitItem.neighborhoods[0]) ||
+        item.events.some((event) => event.activity !== "permit" || event.published_type?.trim().toLowerCase() !== permitType.trim().toLowerCase())))))
+    throw new Error('Activity parcel identity, dates, neighborhood, permit type or paging verification failed');
   console.log(JSON.stringify({ event: 'preview_city_activity', window: first.filters, status: first.coverage.status,
     items: first.items.length, kinds: [...new Set(first.items.flatMap(({ events }) => events.map(({ activity }) => activity)))],
     neighborhoods: first.neighborhoods.length, filtered_items: local?.items.length, next_page_items: second?.items.length,
+    exact_permit_type_items: byType?.items.length,
     checks: first.coverage.sources.map(({ source_id, status, coverage_from, coverage_to }) =>
       [source_id, status, coverage_from, coverage_to]) }));
 } catch (error) {

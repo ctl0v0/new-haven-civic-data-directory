@@ -79,7 +79,7 @@ export function createServer() {
     title: "New Haven Parcel Data Pilot",
   });
   tool(server, "list_city_activity", "New Haven citywide parcel activity",
-    "List published, dated records with a verified New Haven parcel link. Defaults to seven local calendar days including today. Filter by official City neighborhood, inclusive date range or activity type. Review source coverage before treating results as exhaustive.",
+    "List published, dated records with a verified New Haven parcel link. Defaults to seven local calendar days including today. Filter by official City neighborhood, inclusive date range, activity type, or exact published permit type. Review source coverage before treating results as exhaustive.",
     cityActivitySchema, listCityActivity);
   const parcelId = z.string().regex(/^\d{1,12}$/);
   const common = {

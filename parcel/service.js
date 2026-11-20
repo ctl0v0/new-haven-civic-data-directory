@@ -116,10 +116,12 @@ export async function parcelOverview(id, objectid = null) {
       item.source_id === "ct-child-care-licenses" ? a.name :
       item.source_id === "ct-cannabis-retail" ? a.dba ?? a.business :
       item.source_id === "zoning" ? a.zone_code ? `Zoning district ${a.zone_code}` : null :
-      item.source_id === "neighborhoods" ? a.neighborhood_name ?? a.name :
+      item.source_id === "neighborhoods" ? a.neighborhood ?? a.neighborhood_label ?? a.neighborhood_name ?? a.name :
       item.source_id === "ct-brownfields" ? a.site_name :
       item.source_id === "alders" ? a.alder_name :
       item.source_id === "cmt-contacts" ? a.district_name :
+      item.category === "Permit" ? [a.PermitType, a.PermitNo ?? a.PermitNumber].filter(Boolean).join(" · ") || "Permit" :
+      item.category === "Application" ? [a.ApplicationType, a.ApplicationNumber ?? a.ApplicaNo].filter(Boolean).join(" · ") || "Application" :
       item.category ? `${item.category} ${item.source_record_id ?? ""}`.trim() : null;
     return {
       source_id: item.source_id,
@@ -130,16 +132,30 @@ export async function parcelOverview(id, objectid = null) {
     };
   };
   const highlights = Object.fromEntries(groups.map((group) => {
-    const rows = (preferred[group.group] ?? []).flatMap((sourceId) =>
-      group.items.filter((item) => item.source_id === sourceId).slice(0, sourceId === "municity" ? 3 : 1));
+    const rows = (preferred[group.group] ?? []).flatMap((sourceId) => {
+      const matches = group.items.filter((item) => item.source_id === sourceId);
+      if (sourceId !== "municity") return matches.slice(0, 1);
+      return matches.filter((item) => item.event_date && item.category !== "Contact")
+        .sort((a, b) => b.event_date.localeCompare(a.event_date) || a.id.localeCompare(b.id))
+        .slice(0, 3);
+    });
     return [group.group, rows.slice(0, 3).map(highlight)];
   }));
+  const geography = groups.find(({ group }) => group === "geography");
+  const neighborhoodRows = geography.sources.some(({ source_id, status }) => source_id === "neighborhoods" && status === "ok")
+    ? geography.items : [];
+  const neighborhoods = neighborhoodRows
+    .filter(({ source_id }) => source_id === "neighborhoods")
+    .map(({ attributes }) => String(attributes.neighborhood ?? "").trim() ||
+      String(attributes.neighborhood_label ?? "").trim())
+    .filter(Boolean);
   return {
     parcel: {
       parcel_id: feature.attributes.parcel_id,
       objectid: feature.attributes.objectid,
       address: feature.attributes.property_address ?? null,
     },
+    neighborhoods: [...new Set(neighborhoods)].sort(),
     groups: groups.map((group) => ({
       id: group.group,
       record_count: group.items.length,

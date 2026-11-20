@@ -15,6 +15,7 @@ export const cityActivitySchema = z.strictObject({
   from: z.iso.date().optional(),
   to: z.iso.date().optional(),
   activity: z.enum(kinds).optional(),
+  permit_type: z.string().trim().min(1).max(100).optional(),
   cursor: z.string().min(1).max(3000).optional(),
   limit: z.number().int().min(1).max(50).optional(),
 });
@@ -61,6 +62,7 @@ const activitySql = `WITH dated AS (
     WHERE r.event_date BETWEEN $2::date AND $3::date
   ), wanted AS (
     SELECT * FROM dated WHERE kind = ANY($4::text[])
+      AND ($10::text IS NULL OR (kind = 'permit' AND lower(trim(published_type)) = lower($10::text)))
   ), verified AS (
     SELECT w.*, j.parcel_id, j.objectid
     FROM wanted w
@@ -167,13 +169,16 @@ export async function listCityActivity(input = {}, { query = indexQuery,
   configured = indexConfigured, now = new Date() } = {}) {
   const parsed = cityActivitySchema.safeParse(input);
   if (!parsed.success) throw new SourceError("Invalid city activity filters", 400);
-  const { activity = null, neighborhood = null, cursor, limit = 25 } = parsed.data;
+  const { permit_type, neighborhood = null, cursor, limit = 25 } = parsed.data;
+  const activity = parsed.data.activity ?? (permit_type ? "permit" : null);
+  if (permit_type && activity !== "permit")
+    throw new SourceError("A permit type can only filter permit activity", 400);
   const defaults = recentCalendarDates(7, now);
   const to = parsed.data.to ?? defaults.to;
   const from = parsed.data.from ?? (parsed.data.to
     ? new Date(Date.parse(to) - 6 * 86400_000).toISOString().slice(0, 10) : defaults.from);
   if (from > to) throw new SourceError("The start date must be on or before the through date", 400);
-  const filters = { from, to, activity, neighborhood };
+  const filters = { from, to, activity, neighborhood, ...(permit_type ? { permit_type } : {}) };
   const sourceIds = Object.keys(sources).filter((id) => !activity || sources[id].kinds.includes(activity) ||
     ["parcels", "neighborhoods"].includes(id));
   const empty = { filters, neighborhoods: [], items: [], next_cursor: null };
@@ -207,7 +212,7 @@ export async function listCityActivity(input = {}, { query = indexQuery,
   const dataRuns = sourceIds.filter((id) => id !== "neighborhoods" && (id !== "parcels" || !activity || activity === "sale") &&
     runs.has(id)).map((source_id) => ({ source_id, run_id: String(runs.get(source_id).run_id) }));
   const rows = await query(activitySql, [JSON.stringify(dataRuns), from, to, activity ? [activity] : kinds,
-    parcelRun, neighborhoodRun ?? null, neighborhood, limit + 1, offset]);
+    parcelRun, neighborhoodRun ?? null, neighborhood, limit + 1, offset, permit_type ?? null]);
   const items = rows.slice(0, limit).map((row) => ({
     id: `${row.parcel_id}:${row.objectid}:${row.project_id}`,
     city_parcel_id: row.parcel_id, city_objectid: row.objectid,

@@ -71,6 +71,24 @@ test("city activity defaults to seven New Haven dates, pins runs and pages proje
   await assert.rejects(listCityActivity({ from: "2026-11-22" }, options), { status: 400 });
 });
 
+test("city activity accepts an exact published permit type and rejects conflicting activity", async () => {
+  const options = { configured: () => true, now, query: async (sql, values) => {
+    if (sql.includes("FROM search_active_runs")) return runs;
+    if (sql.includes("SELECT DISTINCT")) return [{ name: "East Rock" }];
+    assert.match(sql, /kind = 'permit' AND lower\(trim\(published_type\)\) = lower\(\$10::text\)/);
+    assert.deepEqual(values[3], ["permit"]);
+    assert.equal(values[6], "East Rock");
+    assert.equal(values[9], "Water Heater");
+    return [];
+  } };
+  const filtered = await listCityActivity({ permit_type: " Water Heater ", neighborhood: "East Rock" }, options);
+  assert.equal(filtered.filters.activity, "permit");
+  assert.equal(filtered.filters.permit_type, "Water Heater");
+  assert.deepEqual(filtered.items, []);
+  await assert.rejects(listCityActivity({ activity: "license", permit_type: "Water Heater" }, options),
+    { status: 400 });
+});
+
 test("city activity REST and MCP share the same filters and private authentication", async (t) => {
   const env = { ...process.env, PILOT_PASSPHRASE: "city-activity-test-passphrase",
     PILOT_COOKIE_SECRET: "city-activity-test-cookie-secret", PILOT_API_TOKEN: "city-activity-test-api-token" };
@@ -78,7 +96,7 @@ test("city activity REST and MCP share the same filters and private authenticati
   const oldEnv = process.env;
   process.env = env;
   t.after(() => { process.env = oldEnv; });
-  const url = `https://example.com/api/v1/city-activity?from=${from}&to=${to}&activity=license`;
+  const url = `https://example.com/api/v1/city-activity?from=${from}&to=${to}&activity=permit&permit_type=Water+Heater`;
   assert.equal((await cityActivityRoute.fetch(new Request(url))).status, 401);
   const headers = { authorization: `Bearer ${env.PILOT_API_TOKEN}` };
   const rest = await cityActivityRoute.fetch(new Request(url, { headers }));
@@ -87,7 +105,7 @@ test("city activity REST and MCP share the same filters and private authenticati
     method: "POST", headers: { ...headers, "content-type": "application/json",
       accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call",
-      params: { name: "list_city_activity", arguments: { from, to, activity: "license" } } }),
+      params: { name: "list_city_activity", arguments: { from, to, activity: "permit", permit_type: "Water Heater" } } }),
   }));
   assert.equal(mcp.status, 200);
   const raw = await mcp.text();

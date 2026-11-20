@@ -30,7 +30,7 @@ const app = `
   <section class="search-panel" aria-labelledby="page-title">
     <p class="eyebrow">New Haven parcel explorer</p>
     <h1 id="page-title">What do city records say about this building?</h1>
-    <p>Search an address or parcel ID to review building facts, business records, permits, and a dated history. Each result links back to its source.</p>
+    <p class="search-intro">Search an address or parcel ID to review building facts, business records, permits, and a dated history. Each result links back to its source.</p>
     <form id="search-form">
       <label for="query">Address, parcel ID, MBLU, or assessor account</label>
       <div class="search-row"><input id="query" name="query" type="search" placeholder="869 Whalley Ave" maxlength="160" required><button>Explore parcel</button></div>
@@ -46,14 +46,19 @@ const app = `
   <section id="parcel-summary" class="parcel-hero" hidden>
     <div class="parcel-hero-layout"><div class="parcel-hero-copy">
       <p class="eyebrow">City parcel record</p>
-      <h2 id="parcel-title"></h2>
+      <h2 id="parcel-title" tabindex="-1"></h2>
       <p id="parcel-identifiers" class="meta"></p>
       <p id="parcel-match" class="match-note" hidden></p>
-      <p class="small">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
+      <p class="small parcel-overview-note">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
     </div><figure id="parcel-photo" class="parcel-photo" hidden>
       <img id="parcel-photo-image" alt="Verified parcel photo">
       <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>
     </figure></div>
+  </section>
+  <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
+    <h2 id="snapshot-title">At a glance</h2>
+    <div id="snapshot-grid" class="snapshot-grid"></div>
+    <div id="overview-counts"></div>
   </section>
   <section id="school-attendance-summary" class="school-attendance-summary" aria-labelledby="school-attendance-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Address-specific record</p><h2 id="school-attendance-title">School Choice attendance zones</h2></div></div>
@@ -68,11 +73,6 @@ const app = `
     <p id="parcel-map-status" class="map-status" role="status" aria-live="polite"></p>
     <div id="map-context-notes" class="map-context-notes"></div>
     <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Visual backgrounds: <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Esri street map</a> or <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. Backgrounds do not establish parcel facts or current conditions.</p>
-  </section>
-  <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
-    <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="snapshot-title">At a glance</h2></div><p>Plain-language facts from the records below.</p></div>
-    <div id="overview-counts"></div>
-    <div id="snapshot-grid" class="snapshot-grid"></div>
   </section>
   <section id="feed-section" class="timeline-section" aria-labelledby="timeline-title" hidden>
     <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. Undated contacts remain in the Activity records.</p></div>
@@ -110,6 +110,10 @@ const app = `
   <section id="activity-view" role="tabpanel" aria-labelledby="activity-tab" hidden>
     <div class="city-activity">
       <h1>New Haven Activity</h1>
+      <div class="activity-date-presets" role="group" aria-label="Quick date ranges">
+        <button class="secondary" type="button" data-activity-days="7" aria-pressed="false">Past 7 days</button>
+        <button class="secondary" type="button" data-activity-days="30" aria-pressed="false">Past 30 days</button>
+      </div>
       <form id="activity-filters">
         <label>Neighborhood <select name="neighborhood"><option value="">All neighborhoods</option></select></label>
         <label>From <input name="from" type="date"></label>
@@ -121,9 +125,14 @@ const app = `
           <option value="inspection">Inspections</option>
         </select></label>
         <button type="submit">Apply filters</button>
+        <label id="activity-permit-type" hidden>Exact permit type
+          <input name="permit_type" type="text" disabled list="activity-permit-types" maxlength="100" placeholder="Any permit type">
+          <datalist id="activity-permit-types"></datalist>
+        </label>
       </form>
       <p id="activity-status" role="status" aria-live="polite"></p>
       <details id="activity-coverage" hidden><summary>Source coverage</summary><ul id="activity-sources"></ul></details>
+      <button id="activity-reset" class="secondary" type="button" hidden>Reset filters</button>
       <div id="activity-results"></div>
       <button id="activity-more" class="secondary" type="button" hidden>Load more activity</button>
     </div>

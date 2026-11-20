@@ -1,5 +1,4 @@
 const $ = (id) => document.getElementById(id);
-const SHOW_SNAPSHOT = true;
 const groups = [
   ["property", "Building and addresses", "City parcel fields, assessor detail, address points, and address-level NHPS School Choice attendance zones."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
@@ -83,6 +82,7 @@ let askVersion = 0;
 let askCriteria = null;
 let askCursor = null;
 let overviewGroups = [];
+let parcelNeighborhoods = [];
 let timelineReturnedCount = null;
 const municipalCategoryTitles = {
   Document: "Documents",
@@ -196,6 +196,7 @@ function showDataSection(id, updateUrl = true) {
   $("parcel-map-section").hidden = id !== "overview" || maplessRecords;
   $("school-attendance-summary").hidden = id !== "overview";
   $("snapshot").hidden = id !== "overview";
+  $("parcel-summary").classList.toggle("parcel-hero-compact", id !== "overview");
   $("feed-section").hidden = id !== "timeline";
   for (const [key] of groups) {
     const section = $(`group-${key}`);
@@ -220,11 +221,30 @@ function showDataSection(id, updateUrl = true) {
     }
   }
 }
-function navigateDataSection(id) {
+function scrollToDataSection(id, focus = false) {
+  if ($("records-view").hidden) return;
+  const target = id === "overview" ? $("parcel-title") : id === "timeline" ? $("feed-section") : $(`group-${id}`);
+  if (!target || target.closest("[hidden]")) return;
+  if (focus) {
+    target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+  }
+  target.scrollIntoView({ behavior: "auto", block: "start" });
+}
+function navigateDataSection(id, focus = false) {
   showDataSection(id);
-  if (!document.body.classList.contains("browse-mode")) {
-    const target = id === "overview" ? $("parcel-summary") : id === "timeline" ? $("feed-section") : $(`group-${id}`);
-    requestAnimationFrame(() => target?.scrollIntoView({ behavior: "auto", block: "start" }));
+  requestAnimationFrame(() => scrollToDataSection(id, focus));
+}
+function updateRelatedPermitLinks(root) {
+  const neighborhood = parcelNeighborhoods.length === 1 ? parcelNeighborhoods[0] : null;
+  for (const link of root.querySelectorAll("[data-related-permit-type]")) {
+    link.hidden = !neighborhood;
+    if (!neighborhood) continue;
+    const permitType = link.dataset.relatedPermitType;
+    const params = new URLSearchParams({ view: "activity", neighborhood, activity: "permit", permit_type: permitType });
+    link.href = `/parcel?${params}`;
+    link.textContent = `More permits of this type in ${neighborhood}`;
+    link.setAttribute("aria-label", `See recent ${permitType} records in ${neighborhood}`);
   }
 }
 function updateDataNavCounts() {
@@ -278,23 +298,25 @@ async function loadOverview(qs, version) {
     const data = await api(`/api/v1/overview?${qs}`);
     if (version !== viewVersion) return;
     overviewGroups = data.groups;
+    parcelNeighborhoods = data.neighborhoods ?? [];
+    updateRelatedPermitLinks($("record-content"));
     updateDataNavCounts();
     const counts = $("overview-counts");
     counts.replaceChildren();
-    const total = data.groups.reduce((sum, group) => sum + group.record_count, 0);
-    const incompleteGroups = data.groups.filter((group) => incompleteSources(group.sources).length).length;
-    counts.append(el("p", `${total} returned rows across ${data.groups.length} groups${incompleteGroups ? ` · ${incompleteGroups} ${incompleteGroups === 1 ? "group has" : "groups have"} incomplete live checks` : ""}. Counts describe this response, and a record may appear in more than one group.`, "overview-summary"));
-    const knownGaps = data.groups.flatMap((group) =>
-      group.sources.filter((source) => ["not_integrated", "not_linked"].includes(source.status))
-        .map((source) => ({ group: group.id, source })));
-    if (knownGaps.length) {
+    const needsReview = data.groups.filter(({ sources }) => sources.some(({ status }) =>
+      ["partial", "unavailable", "not_integrated", "not_linked"].includes(status)));
+    if (needsReview.length) {
       const details = el("details", null, "overview-known-gaps");
-      details.append(el("summary", `Known coverage limits · ${knownGaps.length} ${knownGaps.length === 1 ? "source" : "sources"} not integrated or not linked`));
+      details.append(el("summary", `Source coverage · ${needsReview.length} sections with gaps`));
       const list = el("ul");
-      for (const { group, source } of knownGaps) {
+      for (const { id, sources } of needsReview) {
         const row = el("li");
-        row.append(el("strong", `${groups.find(([id]) => id === group)?.[1] ?? group} · ${sourceName(source.source_id)}: `));
-        row.append(document.createTextNode(source.warning ?? source.coverage));
+        const open = el("button", groups.find(([key]) => key === id)?.[1] ?? id, "overview-link");
+        open.type = "button";
+        open.addEventListener("click", () => navigateDataSection(id, true));
+        row.append(open, el("span", sources.filter(({ status }) =>
+          ["partial", "unavailable", "not_integrated", "not_linked"].includes(status))
+          .map((source) => `${sourceName(source.source_id)} · ${sourceIssueReason(source)}`).join(" · "), "meta"));
         list.append(row);
       }
       details.append(list);
@@ -302,31 +324,32 @@ async function loadOverview(qs, version) {
     }
     const grid = $("snapshot-grid");
     grid.replaceChildren();
-    for (const [id, title] of groups) {
+    const first = ["activity", "business", "geography", "ownership", "property", "representation", "environment"];
+    for (const id of first) {
       const group = data.groups.find((entry) => entry.id === id);
+      if (!group?.record_count) continue;
       const section = el("section", null, "overview-group");
       const heading = el("div", null, "overview-group-heading");
-      const open = el("button", title, "overview-link");
+      const open = el("button", groups.find(([key]) => key === id)[1], "overview-link");
       open.type = "button";
-      open.addEventListener("click", () => showDataSection(id));
-      heading.append(open, el("span", `${group?.record_count ?? 0} returned`, "group-count"));
+      open.addEventListener("click", () => navigateDataSection(id, true));
+      heading.append(open, el("span", `${group.record_count} returned`, "group-count"));
       section.append(heading);
-      const issues = incompleteSources(group?.sources);
-      if (issues.length)
-        section.append(el("p", `Incomplete live checks: ${sourceIssueLabels(issues)}. Open this group for details.`, "source-warning"));
       const items = data.highlights?.[id] ?? [];
       if (items.length) {
         const list = el("ul", null, "overview-highlights");
-        for (const item of items) {
+        for (const item of items.slice(0, 2)) {
           const row = el("li");
           row.append(el("span", `${item.label}${item.event_date ? ` · ${shortDate(item.event_date)}` : ""}`));
-          if (item.source_url) row.append(link(item.source_url, sourceName(item.source_id)));
+          if (item.source_url) row.append(link(item.source_url, "Source"));
           list.append(row);
         }
         section.append(list);
-      } else section.append(el("p", "No highlight row returned by the checked sources.", "meta"));
+      }
       grid.append(section);
     }
+    if (!grid.childElementCount)
+      grid.append(el("p", "No parcel records were returned. Check source coverage for details.", "meta"));
   } catch (error) {
     if (version === viewVersion) $("overview-counts").replaceChildren(el("p", `Overview unavailable: ${error.message}`, "source-warning"));
   }
@@ -939,6 +962,14 @@ function appendRecord(parent, item) {
     open.addEventListener("click", () => { void openRecordDetail(item, open); });
     actions.append(open);
   }
+  const permitType = typeof item.attributes?.PermitType === "string" ? item.attributes.PermitType.trim() : "";
+  if (workKind === "Permit" && permitType && permitType.length <= 100 && !$("activity-tab").hidden) {
+    const related = el("a", null, "related-permit-link");
+    related.dataset.relatedPermitType = permitType;
+    related.hidden = true;
+    actions.append(related);
+    updateRelatedPermitLinks(actions);
+  }
   body.append(actions);
   card.append(body);
   parent.append(card);
@@ -1008,6 +1039,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   requestedParcelKey = null;
   activeDataSection = "overview";
   overviewGroups = [];
+  parcelNeighborhoods = [];
   timelineReturnedCount = null;
   groupFilters.clear();
   groupLoadVersions.clear();
@@ -1063,7 +1095,8 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
       $("browse-record-actions").hidden = false;
     }
     $("parcel-summary").hidden = false;
-    $("snapshot").hidden = !SHOW_SNAPSHOT;
+    $("records-view").classList.add("has-parcel");
+    $("snapshot").hidden = activeDataSection !== "overview";
     $("parcel-title").textContent =
       summary.parcel.address ?? `Parcel ${summary.parcel.parcel_id}`;
     $("parcel-identifiers").textContent =
@@ -1075,11 +1108,9 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
     $("parcel-match").hidden = !searchedAddress;
     $("parcel-match").replaceChildren();
     if (searchedAddress) {
-      $("parcel-match").append(document.createTextNode(
-        alternateMatch
-          ? `Address focus: ${searchedAddress}. A City address point for this address intersects the selected parcel, which lists ${summary.parcel.address ?? "another address"}. A badge below appears only when a record's own address field matches your search.`
-          : `Address focus: ${searchedAddress}. The selected City parcel lists this address. A badge below appears only when a record's own address field matches your search.`,
-      ));
+      $("parcel-match").append(el("strong", "Searched address"), document.createTextNode(` ${searchedAddress}`));
+      if (alternateMatch)
+        $("parcel-match").append(el("span", "Matched to this parcel by a City address point.", "parcel-match-evidence"));
     }
     status("Records are loading by source.");
     const tasks = [];
@@ -1096,8 +1127,11 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
       $("groups").append(section);
     }
     renderDataNav();
+    if (!browsing) requestAnimationFrame(() => {
+      if (version === viewVersion) scrollToDataSection(activeDataSection, true);
+    });
     await Promise.allSettled(tasks);
-    if (version === viewVersion) status("Overview loaded. Choose a group to request and inspect its records.");
+    if (version === viewVersion) status("");
   } catch (error) {
     if (version === viewVersion) status(error.message);
   }
@@ -1374,7 +1408,10 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
 let cityActivityModule;
 function loadCityActivity() {
   cityActivityModule ??= import("/city-activity.js").then(({ initCityActivity }) =>
-    initCityActivity({ api, el, link })).catch(() => {
+    initCityActivity({ api, el, link }));
+  void cityActivityModule.then((open) => {
+    if (!$("activity-view").hidden) open();
+  }).catch(() => {
     cityActivityModule = null;
     $("activity-status").textContent = "The activity feed could not load. Try opening the tab again.";
   });
@@ -1928,15 +1965,14 @@ function filterChoices(parent, key, title, values, selected, label) {
 function renderFilters(id, data, qs, version) {
   const current = filterState(id);
   const container = el("div", null, "filters-area");
-  container.append(el("p", "All returned records are shown by default, including older, closed, voided and expired rows. Within each category, recent source-reported statuses appear first; each record retains its exact published status. Filter option counts are before filters.", "filter-context"));
   const quick = el("div", null, "quick-filters");
   const update = (key, value) => {
     groupFilters.set(id, { ...current, [key]: value });
     saveDataUrl();
     void loadGroup(id, $(`group-${id}`), qs, version);
   };
-  quickFilterSelect(quick, "Published record type", "All record types", data.facets?.record_type, current.record_type,
-    (value) => value, (value) => update("record_type", value));
+  if (id !== "activity") quickFilterSelect(quick, "Published record type", "All record types",
+    data.facets?.record_type, current.record_type, (value) => value, (value) => update("record_type", value));
   quickFilterSelect(quick, "Published status", "All statuses", data.facets?.source_status, current.source_status,
     (value) => value, (value) => update("source_status", value));
   quickAddressMatch(quick, current.address_match, (value) => update("address_match", value));
@@ -1998,15 +2034,6 @@ function renderFilters(id, data, qs, version) {
   }
   dates.append(el("p", `${data.facets?.undated ?? 0} returned rows have no event date; a date range excludes them.`, "meta"));
   form.append(dates);
-  if (searchedAddress) {
-    const label = el("label", null, "filter-choice");
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.name = "address_match";
-    input.checked = current.address_match;
-    label.append(input, document.createTextNode(`Source address matches ${searchedAddress}`));
-    form.append(label, el("p", "Only explicit source address fields qualify. Other parcel records remain available when this filter is off.", "meta"));
-  }
   const submit = el("button", "Apply filters");
   submit.type = "submit";
   form.append(submit);
@@ -2016,7 +2043,7 @@ function renderFilters(id, data, qs, version) {
     const filters = Object.fromEntries(["category", "record_type", "source_id", "display_group", "source_status"].map((key) => [key, values.getAll(key)]));
     filters.event_date_from = values.get("event_date_from") ?? "";
     filters.event_date_to = values.get("event_date_to") ?? "";
-    filters.address_match = values.has("address_match");
+    filters.address_match = current.address_match;
     groupFilters.set(id, filters);
     saveDataUrl();
     void loadGroup(id, $(`group-${id}`), qs, version);
@@ -2047,7 +2074,6 @@ function renderCategoryIndex(parent, id, data, qs, version) {
   if (!["activity", "business", "ownership"].includes(id)) return;
   const index = el("nav", null, "category-index");
   index.setAttribute("aria-label", `${groups.find(([key]) => key === id)?.[1] ?? id} categories`);
-  index.append(el("p", "Browse categories · counts are returned rows before filters; select a category to request its rows directly", "meta"));
   const all = el("button", "All categories", "category-button");
   all.type = "button";
   const currentSelection = filterState(id);
@@ -2152,9 +2178,9 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       heading.append(el("h2", definition[1]));
       heading.append(el("span", null, "group-count"));
       section.append(heading);
-      section.append(el("p", definition[2], "group-intro"));
-      section.append(renderFilters(id, data, qs, version));
+      if (id !== "activity") section.append(el("p", definition[2], "group-intro"));
       renderCategoryIndex(section, id, data, qs, version);
+      section.append(renderFilters(id, data, qs, version));
       const coverage = el("details", null, "sources-panel");
       const issues = incompleteSources(data.sources);
       const notIntegrated = data.sources.filter((source) => source.status === "not_integrated").length;
@@ -2164,7 +2190,6 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       for (const source of data.sources) sourceLine(sourceList, source);
       coverage.append(sourceList);
       section.append(coverage);
-      if (issues.length) section.append(el("p", `Incomplete live checks: ${sourceIssueLabels(issues)}. Returned counts may be limited; open Source coverage for the source's reason.`, "source-warning"));
       const grouped = ["activity", "business", "ownership"].includes(id);
       const records = el("div", null, grouped ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
@@ -2180,7 +2205,7 @@ async function loadGroup(id, section, qs, version, cursor = null) {
     }
     const shown = records.querySelectorAll(".record-card").length;
     const count = section.querySelector(".group-heading .group-count");
-    if (count) count.textContent = `${shown} shown of ${data.total} matching · ${data.returned_total} returned by sources`;
+    if (count) count.textContent = `Showing ${shown} of ${data.total} ${data.total === data.returned_total ? "returned records" : "matching records"}`;
     if (data.next_cursor) {
       const b = el("button", "Load more records", "load-more secondary");
       b.type = "button";
