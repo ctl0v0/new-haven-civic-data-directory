@@ -51,4 +51,4 @@ if (process.env.VERCEL_ENV === 'preview' &&
   await import('./smoke-preview-question.mjs');
 
 if (process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'codex/parcel-mixed-use-audit')
-  await import('./qa-hood-permits.mjs');
+  await import('./qa-hood-inventory.mjs');
