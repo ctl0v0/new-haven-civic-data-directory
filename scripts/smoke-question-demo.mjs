@@ -80,28 +80,68 @@ async function callMcp(name, args) {
   const text = await response.text();
   const payload = JSON.parse(text.startsWith("event:") ? text.match(/^data: (.+)$/m)?.[1] : text);
   const result = payload.result?.structuredContent;
-  if (!response.ok || !result) throw new Error(`The ${name} MCP query failed`);
+  if (!response.ok || !result || payload.result.isError) throw new Error(`The ${name} MCP query failed`);
   return result;
 }
-try {
-  const answer = await callMcp("ask_indexed_parcels", { question:
-    "Show me Contractor contacts who did water heater replacements in the last 30 days" });
-  if (answer.search_method !== "contacts" || answer.interpretation?.date_field !== "PermitDate")
-    throw new Error("The contractor question did not preserve its role or permit-date filter");
-  const result = answer.search_result;
-  const contacts = result.items.flatMap((item) => item.contacts ?? []);
-  if (contacts.some((person) => String(person.ContactRole ?? "").trim().toLowerCase() !== "contractor") ||
-      result.items.some((item) => !item.city_parcel_id || !item.permit?.source_url ||
-        !answer.criteria.permit_description_terms.some((term) =>
-          String(item.permit.Description ?? "").toLowerCase().includes(term))))
-    throw new Error("A returned replacement or contractor lacked its published evidence");
-  console.log(JSON.stringify({ event: "contractor_question_smoke", status: answer.status,
-    matched_permits: result.items.length, contact_rows: contacts.length,
-    has_more: Boolean(result.next_cursor), scanned: result.coverage?.cumulative?.scanned ?? 0,
-    unavailable_details: result.coverage?.cumulative?.detail_failed ?? 0 }));
-} catch (error) {
-  console.warn(JSON.stringify({ event: "contractor_question_unavailable", warning: error.message }));
-}
+const question = "Show me Contractor contacts who did water heater replacements in the last 30 days";
+const clarification = await callMcp("ask_parcel_data", { question });
+if (clarification.status !== "clarify" || clarification.clarification?.id !== "work_date" || clarification.items)
+  throw new Error("The contractor question must clarify the work date before returning records");
+const { default: askRoute } = await import("../api/v1/ask-parcel-data.js");
+const plainLanguageUrl = "https://example.com/api/v1/ask-parcel-data";
+const request = (body, authenticated) => new Request(plainLanguageUrl, { method: "POST",
+  headers: { "content-type": "application/json",
+    ...(authenticated ? { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` } : {}) },
+  body: JSON.stringify(body) });
+if ((await askRoute.fetch(request({ question }, false))).status !== 401)
+  throw new Error("Natural-language REST searches must require pilot access");
+const rest = await (await askRoute.fetch(request({ question }, true))).json();
+if (JSON.stringify(rest.clarification) !== JSON.stringify(clarification.clarification))
+  throw new Error("REST and MCP returned different work-date choices");
+const completion = await callMcp("ask_parcel_data", { question,
+  clarification: { id: "work_date", choice: "completion_date" } });
+if (completion.status !== "unsupported" || completion.items)
+  throw new Error("The query inferred a completion date without an official field");
+
+const projected = await callMcp("ask_parcel_data", { question,
+  clarification: { id: "work_date", choice: "permit_date" } });
+if (projected.plan?.requirements[0]?.date?.field !== "PermitDate" || !projected.items)
+  throw new Error("The contractor question did not retain the published permit-date criteria");
+const pages = [projected];
+while (pages.at(-1).next_cursor && pages.length < 4 && !pages.some((page) => page.items.length))
+  pages.push(await callMcp("query_parcel_data", { plan: projected.plan, cursor: pages.at(-1).next_cursor }));
+const contacts = pages.flatMap((page) => page.items.flatMap((item) => {
+  const permitted = item.matching_sources.find(({ source_id }) => source_id === "municity")?.records ?? [];
+  const people = item.matching_sources.find(({ source_id }) => source_id === "permit-contacts")?.records ?? [];
+  if (!item.city_parcel_id || !item.city_objectid || people.some((person) =>
+    String(person.published_role).trim().toLowerCase() !== "contractor" || person.event_date !== null ||
+    !person.source_url || !permitted.some(({ record_id }) => record_id === person.permit_id) ||
+    !projected.plan.permit_description_terms.some((term) =>
+      person.permit_description_as_published?.toLowerCase().includes(term))))
+    throw new Error("A projected contractor lacked exact permit and parcel evidence");
+  return people;
+}));
+console.log(JSON.stringify({ event: "unified_parcel_query_smoke", work_date_clarified: true,
+  completion_rejected: true, status: pages.at(-1).status,
+  parcel_results: pages.flatMap((page) => page.items).length, contact_rows: contacts.length,
+  pages_checked: pages.length, has_more: Boolean(pages.at(-1).next_cursor),
+  source_checks: pages.at(-1).coverage?.source_checks?.map(({ source_id, status }) => ({ source_id, status })) }));
+const unifiedElectrical = await callMcp("ask_parcel_data", { question:
+  "Show commercial parcels with electrical permits pulled in the past 30 days" });
+if (unifiedElectrical.plan?.parcel_use_category !== "business_space" ||
+    unifiedElectrical.plan?.requirements[0]?.permit_group !== "Electrical" || !unifiedElectrical.items)
+  throw new Error("The commercial electrical query did not preserve its official group and parcel use");
+console.log(JSON.stringify({ event: "unified_electrical_query_smoke",
+  status: unifiedElectrical.status, parcel_results: unifiedElectrical.items.length,
+  has_more: Boolean(unifiedElectrical.next_cursor) }));
+const eastRock = await callMcp("ask_parcel_data", { question:
+  "Show me new business licenses in East Rock neighborhood in the last 30 days" });
+if (eastRock.plan?.scope?.name !== "East Rock" || eastRock.plan?.requirements[0]?.date?.field !== "IssueDate" ||
+    eastRock.items?.some((item) => !item.city_parcel_id || !item.city_objectid))
+  throw new Error("The City business license question did not preserve East Rock, IssueDate, and exact links");
+console.log(JSON.stringify({ event: "unified_license_query_smoke",
+  status: eastRock.status, parcel_results: eastRock.items?.length ?? 0 }));
+
 const recent = await checkRecentPermitWindows({ search: (args) => callMcp("search_indexed_permits", args) });
 for (const item of recent.windows)
   console.log(JSON.stringify({ event: "recent_permits_mcp_smoke", ...item }));

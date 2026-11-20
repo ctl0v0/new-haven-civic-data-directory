@@ -7,6 +7,7 @@ import { STATE_ROSTERS } from "./socrata.js";
 import { recentPermitRun, RECENT_PERMIT_SCOPES } from "./municity.js";
 import { MUNICIPAL_LICENSE_FIELDS, MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 import { filteredPermitLinkGaps } from "./parcel-only-permits.js";
+import { PERMIT_ACTIVITY_SOURCE } from "./permit-activity-source.js";
 
 // Only published, indexed columns may be used as cross-source predicates.
 // A source can be listed here before its first validated import; readiness is
@@ -29,6 +30,14 @@ export const SEARCH_FIELDS = Object.freeze({
   municity: ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
     "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
     "LegalAddress"],
+});
+// The unified query contract checks the activity cohort and date semantics
+// before passing this physical index source to the shared SQL.
+export const PARCEL_QUERY_FIELDS = Object.freeze({ ...SEARCH_FIELDS,
+  [PERMIT_ACTIVITY_SOURCE]: ["activity_kind", "permit_type", "permit_status", "permit_number",
+    "permit_id", "application_id", "Application_ID", "ApplicationType",
+    "PermitApplicationStatus", "ApplicationStatus", "ApplicationNumber", "Department",
+    "Task_ID", "TaskType", "ApprovalStatus", "Inspection_ID", "InspType", "Status", "Results"],
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", "ct-liquor-permits",
   "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance", MUNICIPAL_LICENSE_SOURCE]);
@@ -77,18 +86,18 @@ const checkedDate = (value, key) => {
   return value;
 };
 
-function checkedRequirements(input) {
+function checkedRequirements(input, fields = SEARCH_FIELDS) {
   if (!Array.isArray(input) || !input.length || input.length > 5)
     throw new SourceError("Provide 1–5 indexed source requirements", 400);
   return input.map((item) => {
     const sourceId = String(item?.source_id ?? "");
-    if (!SEARCH_FIELDS[sourceId]) throw new SourceError(`Source ${sourceId} is not supported for indexed cross-search`, 400);
+    if (!Object.hasOwn(fields, sourceId)) throw new SourceError(`Source ${sourceId} is not supported for indexed cross-search`, 400);
     const equals = item.equals ?? {};
     if (!equals || typeof equals !== "object" || Array.isArray(equals) ||
         Object.keys(equals).length > 5)
       throw new SourceError("Each source requirement needs at most five exact field filters", 400);
     for (const [key, value] of Object.entries(equals)) {
-      if (!SEARCH_FIELDS[sourceId].includes(key) ||
+      if (!fields[sourceId].includes(key) ||
           !["string", "number"].includes(typeof value) ||
           !String(value).trim() || String(value).length > 160)
         throw new SourceError(`Unsupported ${sourceId} exact field filter`, 400);
@@ -163,13 +172,39 @@ function conditions(requirement, alias, add) {
   return parts;
 }
 
-export function buildIndexedSearchQuery(requirements, runs, offset, limit) {
+export function buildIndexedSearchQuery(requirements, runs, offset, limit, projection = null) {
   const values = [];
   const add = (value) => { values.push(value); return `$${values.length}`; };
   const parcelRun = add(runs.parcels);
+  const permitRequirement = requirements.find(({ source_id }) => source_id === "municity");
+  const activityRequirement = requirements.find(({ source_id }) => source_id === PERMIT_ACTIVITY_SOURCE);
+  const permitTypes = permitRequirement?.permit_group && projection?.permit_types;
+  function sourceConditions(requirement, alias) {
+    const filters = conditions(requirement, alias, add);
+    if (requirement.source_id === "municity" && permitTypes?.length)
+      filters.push(`upper(trim(${alias}.published_type)) = ANY(${add(permitTypes)}::text[])`);
+    return filters;
+  }
+  function rowConditions(requirement, alias) {
+    const filters = sourceConditions(requirement, alias);
+    if (!projection || !permitRequirement || !activityRequirement ||
+        !["municity", PERMIT_ACTIVITY_SOURCE].includes(requirement.source_id)) return filters;
+    const isPermit = requirement.source_id === "municity";
+    const related = isPermit ? activityRequirement : permitRequirement;
+    const relatedFilters = sourceConditions(related, "related");
+    filters.push(`EXISTS (SELECT 1 FROM search_records related
+      JOIN search_record_parcels link USING (run_id, source_id, record_id)
+      WHERE related.run_id = ${add(runs[related.source_id])} AND related.source_id = ${add(related.source_id)}
+        AND link.city_parcel_id = (p.fields->>'parcel_id')::bigint
+        AND link.city_objectid = (p.fields->>'objectid')::bigint AND link.join_status = 'exact'
+        AND ${isPermit ? `related.fields->>'permit_id' = ${alias}.record_id`
+          : `related.record_id = ${alias}.fields->>'permit_id'`}
+        ${relatedFilters.length ? `AND ${relatedFilters.join(" AND ")}` : ""})`);
+    return filters;
+  }
   const checks = requirements.map((requirement) => {
     const sourceRun = add(runs[requirement.source_id]);
-    const filters = conditions(requirement, "r", add);
+    const filters = rowConditions(requirement, "r");
     return `EXISTS (SELECT 1 FROM search_record_parcels j
       JOIN search_records r ON r.run_id = j.run_id AND r.source_id = j.source_id
         AND r.record_id = j.record_id
@@ -178,11 +213,36 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit) {
         AND j.city_objectid = (p.fields->>'objectid')::bigint
         AND j.join_status = 'exact'${filters.length ? ` AND ${filters.join(" AND ")}` : ""})`;
   });
+  if (projection?.parcel) {
+    checks.push(`p.fields->>'parcel_id' = ${add(projection.parcel.parcel_id)}
+      AND p.record_id = ${add(projection.parcel.objectid)}`);
+  }
   // A source can have several matching records. The result is one parcel,
   // with one official record link per requirement and an exact match count.
-  const evidence = requirements.map((requirement) => {
+  const evidenceRequirements = projection
+    ? [...requirements, ...projection.sources.filter((id) => runs[id] != null &&
+      !requirements.some((item) => item.source_id === id))
+      .map((source_id) => ({ source_id, equals: {} }))]
+    : requirements;
+  const evidence = evidenceRequirements.map((requirement) => {
     const sourceRun = add(runs[requirement.source_id]);
-    const filters = conditions(requirement, "r", add);
+    const filters = rowConditions(requirement, "r");
+    if (projection) {
+      const source = add(requirement.source_id);
+      return `(SELECT jsonb_build_object('source_id', ${source}::text,
+        'matching_record_count', coalesce(max(m.total), 0),
+        'records', coalesce(jsonb_agg(to_jsonb(m) - 'total' ORDER BY m.record_id), '[]'::jsonb))
+        FROM (SELECT r.record_id, r.source_url, r.published_type, r.published_status,
+            r.event_date, r.fields, array_agg(DISTINCT j.match_method ORDER BY j.match_method) AS match_methods,
+            array_agg(DISTINCT j.city_address_objectid ORDER BY j.city_address_objectid) FILTER (WHERE j.city_address_objectid IS NOT NULL)
+              AS city_address_objectids, count(*) OVER () AS total
+          FROM search_record_parcels j JOIN search_records r USING (run_id, source_id, record_id)
+          WHERE j.run_id = ${sourceRun} AND j.source_id = ${source}
+            AND j.city_parcel_id = (p.fields->>'parcel_id')::bigint
+            AND j.city_objectid = (p.fields->>'objectid')::bigint AND j.join_status = 'exact'
+            ${filters.length ? `AND ${filters.join(" AND ")}` : ""}
+          GROUP BY r.run_id, r.source_id, r.record_id ORDER BY r.record_id LIMIT 50) m)`;
+    }
     return `(SELECT jsonb_build_object('source_id', ${add(requirement.source_id)}::text,
       'matching_record_count', count(DISTINCT r.record_id),
       'example_record', (jsonb_agg(jsonb_build_object(
@@ -205,37 +265,44 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit) {
     jsonb_build_array(${evidence.join(", ")}) AS matching_sources
     FROM search_records p WHERE p.run_id = ${parcelRun} AND p.source_id = 'parcels'
       AND ${checks.join(" AND ")}
-    ORDER BY (p.fields->>'parcel_id')::bigint, (p.fields->>'objectid')::bigint
+    ORDER BY (p.fields->>'parcel_id')::bigint ${projection?.descending ? "DESC" : "ASC"},
+      (p.fields->>'objectid')::bigint ${projection?.descending ? "DESC" : "ASC"}
     OFFSET ${add(offset)} LIMIT ${add(limit + 1)}`;
   return { query, values };
 }
 
-export async function searchIndexedParcels(input = {}, { query = indexQuery } = {}) {
-  const requirements = checkedRequirements(input.requirements);
+export async function searchIndexedParcels(input = {}, { query = indexQuery,
+  configured = indexConfigured, projection = null } = {}) {
+  const requirements = checkedRequirements(input.requirements, projection ? PARCEL_QUERY_FIELDS : SEARCH_FIELDS);
   const municipalRequirements = requirements.filter((item) => item.source_id === "municity");
   if (municipalRequirements.length > 1)
     throw new SourceError("Use one municipal permit type or group requirement per cross-source query", 400);
   const municipalType = municipalRequirements[0]?.equals?.PermitType;
   const municipalGroup = municipalRequirements[0]?.permit_group;
+  const boundedAllTypes = projection && municipalRequirements[0]?.event_date_from &&
+    municipalRequirements[0]?.event_date_to && !municipalType && !municipalGroup;
   if (municipalRequirements.length &&
-      ((municipalType && municipalGroup) || (!municipalType && !municipalGroup) ||
+      ((municipalType && municipalGroup) || (!municipalType && !municipalGroup && !boundedAllTypes) ||
        (municipalType && (typeof municipalType !== "string" ||
          !municipalType.trim() || municipalType.length > 100))))
     throw new SourceError("Municipal search requires one exact PermitType or published permit group", 400);
   let municipalScope = municipalType ? `permit-type:${municipalType.trim().toUpperCase()}`
-    : municipalGroup ? `permit-group:${municipalGroup.toUpperCase()}` : null;
+    : municipalGroup ? `permit-group:${municipalGroup.toUpperCase()}` : boundedAllTypes ? "permit-window:90" : null;
   const permit = municipalRequirements[0];
-  const windowScopes = municipalType && permit.event_date_from && permit.event_date_to
+  const windowScopes = (municipalType || boundedAllTypes || (municipalGroup && projection?.permit_types?.length)) &&
+    permit.event_date_from && permit.event_date_to
     ? RECENT_PERMIT_SCOPES : [];
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new SourceError("limit must be 1–100", 400);
   const requiredSources = [...new Set(["parcels", ...requirements.map((item) => item.source_id),
     ...(requirements.some((item) => ADDRESS_DEPENDENT.has(item.source_id)) ? ["addresses"] : [])])];
-  const criteria = { requirements };
-  if (!indexConfigured()) return { criteria, items: [], next_cursor: null,
+  const wantedSources = [...new Set([...requiredSources, ...(projection?.sources ?? []),
+    ...(projection?.sources.some((id) => ADDRESS_DEPENDENT.has(id)) ? ["addresses"] : [])])];
+  const criteria = { requirements, ...(projection ? { projection } : {}) };
+  if (!configured()) return { criteria, items: [], next_cursor: null,
     complete_for_query: false, coverage: { index_status: "unconfigured",
-      source_checks: requiredSources.map((source_id) => ({ source_id, status: "unconfigured" })) } };
+      source_checks: wantedSources.map((source_id) => ({ source_id, status: "unconfigured" })) } };
   let active;
   try {
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status, r.finished_at,
@@ -249,19 +316,20 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
         OR (a.source_id = 'municity' AND (a.scope_key = $2 OR a.scope_key = ANY($3::text[])))`,
-    [requiredSources, municipalScope, windowScopes]);
+    [wantedSources, municipalScope, windowScopes]);
   } catch (error) {
     console.warn(JSON.stringify({ event: "indexed_search_failed", stage: "active_runs",
       code: error?.code ?? null, name: error?.name ?? null }));
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
-      coverage: { index_status: "unavailable", source_checks: requiredSources.map((source_id) =>
+      coverage: { index_status: "unavailable", source_checks: wantedSources.map((source_id) =>
         ({ source_id, status: "unavailable" })) } };
   }
   const byId = new Map(active.filter((row) => row.scope_key === "all")
     .map((row) => [row.source_id, row]));
   if (municipalScope) {
     const recent = windowScopes.length ? recentPermitRun(active, permit.event_date_from, permit.event_date_to) : null;
-    const municipal = recent ?? active.find((row) => row.source_id === "municity" && row.scope_key === municipalScope);
+    const municipal = recent ?? (!boundedAllTypes
+      ? active.find((row) => row.source_id === "municity" && row.scope_key === municipalScope) : null);
     if (recent) municipalScope = recent.scope_key;
     if (municipal) byId.set("municity", municipal);
   }
@@ -269,7 +337,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
     ? await missingAttempt("municity", municipalScope, query) : null;
   const absentLicenses = requiredSources.includes(MUNICIPAL_LICENSE_SOURCE) && !byId.has(MUNICIPAL_LICENSE_SOURCE)
     ? await missingAttempt(MUNICIPAL_LICENSE_SOURCE, "all", query) : null;
-  const sourceChecks = requiredSources.map((source_id) => {
+  const sourceChecks = wantedSources.map((source_id) => {
     const run = byId.get(source_id);
     if (!run) return { source_id, status: "not_indexed",
       ...(source_id === "municity" ? { scope_key: municipalScope,
@@ -278,7 +346,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const dateCovered = dateCoverage(run, requirements.find((item) => item.source_id === source_id));
     const gaps = source_id === "municity" ? filteredPermitLinkGaps(run.metadata, {
-      types: municipalType ? [municipalType.trim().toUpperCase()] : [],
+      types: municipalType ? [municipalType.trim().toUpperCase()] : projection?.permit_types ?? [],
       status: permit?.equals?.PermStatus, from: permit?.event_date_from, to: permit?.event_date_to,
     }) : null;
     const complete = run.status === "complete" && fresh && run.latest_attempt_status !== "failed" &&
@@ -329,7 +397,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
       }
     } catch { /* Unknown scope stays partial. */ }
   }
-  if (sourceChecks.some((check) => check.status === "not_indexed"))
+  if (sourceChecks.some((check) => check.status === "not_indexed" && requiredSources.includes(check.source_id)))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: sourceChecks,
         note: "A required source has no validated indexed run. No cross-source result was asserted." } };
@@ -337,7 +405,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
   const runs = Object.fromEntries(sourceChecks.map((check) => [check.source_id, check.run_id]));
   const sourceHash = fingerprint(runs);
   const cursor = readSearchCursor(input.cursor, fingerprint(criteria), sourceHash);
-  const { query: statement, values } = buildIndexedSearchQuery(requirements, runs, cursor.offset, limit);
+  const { query: statement, values } = buildIndexedSearchQuery(requirements, runs, cursor.offset, limit, projection);
   let rows;
   try { rows = await query(statement, values); }
   catch (error) {

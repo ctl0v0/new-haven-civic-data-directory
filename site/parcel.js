@@ -51,6 +51,15 @@ const sourceNames = {
   alders: "Board of Alders",
   cmt: "CMT districts",
   "cmt-contacts": "CMT contacts",
+  "municity-permit-activity": "Indexed permit activity",
+  "permit-contacts": "Permit contacts",
+  "permit-applications": "Linked applications",
+  "permit-reviews": "Permit reviews",
+  "permit-inspections": "Permit inspections",
+  "permit-fees": "Permit fees",
+  "permit-documents": "Public permit documents",
+  "permit-communications": "Permit communication metadata",
+  "permit-flags": "Permit flags",
 };
 let selected = null;
 let maplessRecords = false;
@@ -2368,10 +2377,13 @@ function renderAskCoverage(result) {
   const target = $("ask-coverage");
   target.replaceChildren();
   const coverage = result?.coverage;
-  const checks = coverage?.source_checks ?? [];
-  target.hidden = !checks.length && !coverage?.note;
+  const checks = [...(coverage?.source_checks ?? []), ...(coverage?.live_source_checks ?? [])];
+  target.hidden = !checks.length && !coverage?.note && !coverage?.interpretation_warning;
   if (target.hidden) return;
   target.append(el("h2", "Source coverage"));
+  if (coverage?.interpretation_warning) target.append(el("p", coverage.interpretation_warning, "source-warning"));
+  if (coverage?.earlier_page_incomplete)
+    target.append(el("p", "Some records on earlier pages had incomplete checks.", "meta"));
   for (const check of checks) {
     const line = el("p", `${sourceNames[check.source_id] ?? check.source_id}: ${check.status}`, "ask-source-check");
     if (check.returned_count != null && Number.isFinite(Number(check.returned_count)))
@@ -2399,7 +2411,47 @@ function renderAskCoverage(result) {
   if (coverage?.note || result.note) target.append(el("p", coverage?.note ?? result.note, "meta"));
   target.append(el("p", result.complete_for_query
     ? "All required source checks are complete through the last result page."
-    : "This is not a complete citywide answer. Follow every page and review incomplete source checks.", "meta"));
+    : "Review incomplete source checks and any remaining pages before relying on the result.", "meta"));
+}
+function appendProjectedRecords(parent, match) {
+  const group = el("details", null, "query-projected-group");
+  if (match.source_id === "permit-contacts" || match.matching_record_count <= 3) group.open = true;
+  group.append(el("summary", `${sourceNames[match.source_id] ?? match.source_id} · ${match.matching_record_count} returned`));
+  const list = el("ul", null, "query-projected-records");
+  for (const record of match.records) {
+    const row = el("li");
+    const fields = record.fields ?? {};
+    const title = fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
+      fields.PermitNo ?? record.permit_number ?? record.published_type ?? `Record ${record.record_id}`;
+    const head = el("p");
+    head.append(el("strong", title));
+    for (const value of [record.published_role, record.published_type, record.published_status]
+      .filter((value) => value && value !== title)) head.append(document.createTextNode(` · ${value}`));
+    if (record.event_date) head.append(el("strong",
+      ` · ${record.date_field ? `${record.date_field} ` : ""}${String(record.event_date).slice(0, 10)}`, "ask-date"));
+    row.append(head);
+    const values = Object.entries(fields).filter(([, value]) => value != null && value !== "");
+    if (values.length) {
+      const dl = el("dl", null, "query-projected-fields");
+      for (const [field, value] of values) dl.append(el("dt", field), el("dd",
+        typeof value === "object" ? JSON.stringify(value) : value));
+      row.append(dl);
+    }
+    if (record.permit_description_as_published)
+      row.append(el("p", record.permit_description_as_published, "meta"));
+    const evidence = el("p", null, "meta");
+    if (record.source_url) evidence.append(link(record.source_url, "Official record"));
+    if (record.permit_source_url && record.permit_source_url !== record.source_url)
+      evidence.append(document.createTextNode(" · "), link(record.permit_source_url, "Linked permit"));
+    if (record.match || record.match_methods?.length) evidence.append(document.createTextNode(
+      ` · ${record.match?.method ?? record.match_methods.join(", ")}`));
+    if (record.address_evidence?.matches_query) evidence.append(document.createTextNode(" · Exact searched address"));
+    if (evidence.textContent) row.append(evidence);
+    list.append(row);
+  }
+  if (!match.records.length) group.append(el("p", "No records returned for this parcel.", "meta"));
+  else group.append(list);
+  parent.append(group);
 }
 function appendAskItems(items = []) {
   for (const item of items) {
@@ -2411,6 +2463,7 @@ function appendAskItems(items = []) {
     parcelLink.href = `${page.pathname}${page.search}`;
     li.append(parcelLink, el("p", `City parcel ${item.city_parcel_id} · feature ${item.city_objectid}`, "meta"));
     for (const match of item.matching_sources ?? []) {
+      if (match.records) { appendProjectedRecords(li, match); continue; }
       const example = match.example_record;
       const row = el("p", `${sourceNames[match.source_id] ?? match.source_id}: ${match.matching_record_count} matching official record${Number(match.matching_record_count) === 1 ? "" : "s"}`);
       if (example?.published_type) row.append(el("span", ` · ${example.published_type}`));
@@ -2468,6 +2521,8 @@ function clearAskResult() {
   $("ask-filter-form").hidden = true;
   $("ask-more").hidden = true;
   $("ask-context").hidden = true;
+  $("ask-clarification").replaceChildren();
+  $("ask-clarification").hidden = true;
   askCriteria = null;
   askCursor = null;
 }
@@ -2478,7 +2533,7 @@ function displaySearchResult(result, { append = false } = {}) {
   $("ask-more").hidden = !askCursor;
   const indexStatus = result.coverage?.index_status;
   const count = append ? $("ask-results").children.length : result.items.length;
-  const noun = askMethod === "parcels" ? "parcel" : askMethod === "contacts" ? "permit" : "record";
+  const noun = ["parcels", "unified"].includes(askMethod) ? "parcel" : askMethod === "contacts" ? "permit" : "record";
   let message;
   if (indexStatus === "unconfigured")
     message = "The private parcel index is not connected in this Preview.";
@@ -2499,6 +2554,10 @@ async function runFieldSearch(method, args) {
     const { indexedQueryRequest, indexedQueryTool } = await queryExplorer();
     const result = await api(...indexedQueryRequest(method, args));
     if (version !== askVersion) return;
+    if (method === "unified") {
+      renderUnifiedAnswer(result, null, version);
+      return;
+    }
     const target = $("ask-interpretation");
     const request = el("details", null, "query-result-detail");
     request.append(el("summary", "MCP request"),
@@ -2512,7 +2571,82 @@ async function runFieldSearch(method, args) {
     if (version === askVersion) setAskStatus(error.message, "unavailable");
   }
 }
-async function runAsk(question, filters = null) {
+function renderUnifiedAnswer(response, question, version) {
+  const plan = response.plan;
+  if (plan) {
+    const target = $("ask-interpretation");
+    target.replaceChildren(el("h2", "Search plan"));
+    const scope = plan.scope;
+    if (scope?.kind && scope.kind !== "city") target.append(el("p", [
+      scope.kind === "neighborhood" ? "City neighborhood" : scope.kind === "ward" ? "City ward" :
+        scope.kind === "parcel" ? "City parcel" : "Searched address",
+      scope.name ?? scope.ward ?? scope.parcel_id ?? scope.address,
+    ].join(" · ")));
+    for (const requirement of plan.requirements ?? []) {
+      const filters = [requirement.permit_group,
+        ...Object.entries(requirement.equals ?? {}).map(([field, value]) => `${field} = ${value}`),
+        ...Object.entries(requirement.number_gte ?? {}).map(([field, value]) => `${field} ≥ ${value}`),
+        ...Object.entries(requirement.number_lte ?? {}).map(([field, value]) => `${field} ≤ ${value}`),
+        ...(requirement.one_of?.use_code ? [response.use_category
+          ? `${response.use_category.replaceAll("_", " ")} · reviewed City use codes`
+          : `${requirement.one_of.use_code.length} selected use codes`] : []),
+        requirement.date ? [requirement.date.field, requirement.date.from, requirement.date.to].filter(Boolean).join(" · ") : null,
+      ].filter(Boolean);
+      target.append(el("p", [sourceNames[requirement.source_id] ?? requirement.source_id, ...filters].join(" · ")));
+    }
+    if (plan.parcel_use_category) target.append(el("p",
+      `Recorded parcel use · ${plan.parcel_use_category.replaceAll("_", " ")}`));
+    if (plan.contact_role) target.append(el("p", `Listed contact role · ${plan.contact_role}`));
+    if (plan.permit_description_terms?.length) target.append(el("p",
+      `Published permit description contains any of · ${plan.permit_description_terms.join(", ")}`));
+    if (plan.include?.length) target.append(el("p", `Returns · ${plan.include.map(({ source_id, fields }) =>
+      `${sourceNames[source_id] ?? source_id}${fields ? ` (${fields.join(", ")})` : ""}`).join(" · ")}`));
+    const detail = el("details", null, "query-result-detail");
+    detail.append(el("summary", "View or edit MCP request"));
+    const form = el("form", null, "query-plan-editor");
+    const label = el("label", "Query plan JSON");
+    const input = el("textarea");
+    input.rows = 10;
+    input.value = JSON.stringify(plan, null, 2);
+    label.append(input);
+    const submit = el("button", "Run this plan", "secondary");
+    submit.type = "submit";
+    form.append(label, submit);
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      try { void runFieldSearch("unified", { plan: JSON.parse(input.value) }); }
+      catch { setAskStatus("Enter valid query plan JSON.", "unsupported"); }
+    };
+    detail.append(form);
+    target.append(detail);
+    target.hidden = false;
+  }
+  renderAskContext(response.context);
+  if (response.clarification) {
+    const clarification = response.clarification;
+    setAskStatus(clarification.question, "clarify");
+    const target = $("ask-clarification");
+    for (const choice of clarification.options) {
+      const button = el("button", choice.label, "secondary");
+      button.type = "button";
+      button.onclick = () => {
+        if (version !== askVersion) return;
+        if (plan && clarification.id === "parcel") {
+          const [parcel_id, objectid] = choice.id.split(":");
+          void runFieldSearch("unified", { plan: { ...plan, scope: { ...plan.scope, parcel_id, objectid } } });
+        } else if (question) void runAsk(question, null, { id: clarification.id, choice: choice.id });
+      };
+      target.append(button);
+    }
+    target.hidden = !target.childElementCount;
+    return;
+  }
+  if (!response.items) { setAskStatus(response.reason ?? "No validated search result was returned.", response.status); return; }
+  askMethod = "unified";
+  askCriteria = { plan };
+  displaySearchResult(response);
+}
+async function runAsk(question, filters = null, clarification = null) {
   const version = ++askVersion;
   clearAskResult();
   if (filters) $("ask-question").value = "";
@@ -2522,10 +2656,11 @@ async function runAsk(question, filters = null) {
   setAskStatus(filters ? "Checking edited filters against indexed sources…" :
     "Interpreting the question and checking indexed sources…", "loading");
   try {
-    const response = await api("/api/v1/ask-parcels", { method: "POST",
+    const response = await api(filters ? "/api/v1/ask-parcels" : "/api/v1/ask-parcel-data", { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(filters ? { filters } : { question }) });
+      body: JSON.stringify(filters ? { filters } : { question, ...(clarification ? { clarification } : {}) }) });
     if (version !== askVersion) return;
+    if (!filters) { renderUnifiedAnswer(response, question, version); return; }
     const parsed = response.interpretation;
     if (parsed) {
       const target = $("ask-interpretation");

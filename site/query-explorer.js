@@ -5,6 +5,7 @@ const methods = {
   activity: { title: "Applications, reviews and inspections", path: "/api/v1/search-indexed-permit-activity" },
   contacts: { title: "Permit contacts", path: "/api/v1/search-parcel-permits" },
 };
+const planMethod = { path: "/api/v1/query-parcel-data", post: true };
 const operators = { equals: "Equals", number_gte: "At least", number_lte: "At most", one_of: "Any of" };
 const examples = [
   ["Electrical permits in the past 30 days", "Show parcels with electrical permits pulled in the past 30 days"],
@@ -23,7 +24,7 @@ const recent = () => {
 };
 
 export function indexedQueryRequest(method, args, cursor = null) {
-  const spec = methods[method];
+  const spec = method === "unified" ? planMethod : methods[method];
   if (!spec) throw new Error("Choose an indexed search method.");
   const body = cursor ? { ...args, cursor } : args;
   if (spec.post) return [spec.path, { method: "POST",
@@ -40,7 +41,7 @@ export function indexedQueryRequest(method, args, cursor = null) {
 export function indexedQueryTool(method) {
   return { records: "search_indexed_records", parcels: "search_indexed_parcels",
     permits: "search_indexed_permits", activity: "search_indexed_permit_activity",
-    contacts: "search_parcel_permits" }[method];
+    contacts: "search_parcel_permits", unified: "query_parcel_data" }[method];
 }
 
 export function createQueryExplorer({ api, el, link, schema, openTest, openQuestion, run }) {
@@ -128,9 +129,14 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
     parent.append(el("h2", "Query explorer"),
       el("p", "Find published permit types, browse source fields, and send a filter to the test workbench."));
     const browseTarget = el("div", null, "query-catalog");
-    const modes = [["permits", "Permit catalog"], ["fields", "Source fields"], ["examples", "Question examples"]];
+    const modes = [["permits", "Permit catalog"], ["fields", "Indexed filters"],
+      ["projections", "Return sources and fields"], ["examples", "Question examples"]];
     const controls = el("div", null, "query-grid");
-    const browseBy = select(browser.mode, modes, (mode) => { browser.mode = mode; void refresh(); });
+    const browseBy = select(browser.mode, modes, (mode) => {
+      browser.mode = mode;
+      browser.source = "all";
+      void refresh();
+    });
     const search = el("input");
     search.type = "search";
     search.value = browser.term;
@@ -156,7 +162,7 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
     let version = 0;
     async function refresh() {
       const current = ++version;
-      sourceLabel.hidden = browser.mode !== "fields";
+      sourceLabel.hidden = !["fields", "projections"].includes(browser.mode);
       search.disabled = browser.mode === "examples";
       browseTarget.replaceChildren(el("p", "Loading query reference…", "meta"));
       try {
@@ -170,6 +176,15 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
           groupedSources(sourceSelect, schemaData, Object.keys(capabilities.indexed_source_fields));
           sourceSelect.value = browser.source;
           renderFields(browseTarget, capabilities, schemaData);
+        } else if (browser.mode === "projections") {
+          const [capabilities] = await load();
+          if (current !== version) return;
+          const sources = capabilities.query_catalog.sources.filter((source) => source.projectable);
+          sourceSelect.replaceChildren(option("all", "All return sources"),
+            ...sources.map((source) => option(source.source_id, source.title)));
+          if (!sources.some(({ source_id }) => source_id === browser.source)) browser.source = "all";
+          sourceSelect.value = browser.source;
+          renderProjections(browseTarget, sources);
         } else renderExamples(browseTarget);
       } catch (error) {
         if (current !== version) return;
@@ -177,6 +192,31 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
       }
     }
     await refresh();
+  }
+
+  function renderProjections(target, sources) {
+    target.replaceChildren();
+    for (const source of sources) {
+      if (browser.source !== "all" && browser.source !== source.source_id) continue;
+      const fields = source.return_fields.filter((field) => matches(field, source.title, source.source_id));
+      if (!fields.length && !matches(source.title, source.source_id)) continue;
+      const group = el("details", null, "query-catalog-group");
+      group.open = browser.source !== "all" || Boolean(browser.term.trim());
+      group.append(el("summary", source.title), el("p", source.source_id, "meta"));
+      if (source.source_url) group.append(link(source.source_url, "Official source"));
+      if (source.coverage) group.append(el("p", source.coverage, "meta"));
+      if (fields.length) {
+        const list = el("ul", null, "query-catalog-list");
+        for (const field of fields) {
+          const item = el("li");
+          item.append(el("code", field));
+          list.append(item);
+        }
+        group.append(list);
+      } else group.append(el("p", "Request the source to return its published fields together.", "meta"));
+      target.append(group);
+    }
+    if (!target.childElementCount) target.append(el("p", "No return sources match that search.", "meta"));
   }
 
   function renderPermitTypes(target, catalog) {

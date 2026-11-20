@@ -17,7 +17,7 @@ The index is available to the private Preview API only when its read-only `SEARC
 | CT liquor, child care and cannabis location rosters | Official Socrata row ID, count, schema and page checks; unique City address-point join | Credentials can repeat and are never used as row IDs. Rows without one exact parcel remain unlinked. |
 | NHPS attendance table | Validated official snapshot under 30 days; published ranges joined to City address points | School Choice preference, not guaranteed enrollment. Ambiguous or unmapped addresses remain unresolved. |
 | Municity permit catalog and permits | A daily `PermitDate` scan verifies all published types over the last 90 New Haven calendar dates. Each date is checked twice against the published total, IDs and fields. Historical per-type runs have a separate schedule. | The index retains permits with one verified parcel link. Coverage keeps aggregate counts of excluded rows. A failed check leaves the last validated run active. |
-| Municity permit activity | Published applications, review tasks and inspections linked to Water Heater and Hood - C permits in the verified 90-day parent `PermitDate` window. | The application date, review completion date and inspection close date are separate fields. Activity on older permits falls outside the window. |
+| Municity permit activity | Published applications, review tasks and inspections linked to Water Heater, Hood - C, or Roofing permits in the 90-day parent `PermitDate` window. | Check the active run for each type. The application date, review completion date and inspection close date are separate fields. Activity on older permits falls outside the window. |
 | Municity named business licenses | Hourly and daily refreshes select up to 80 due City parcels with unique published MBLUs. The index preserves verified results across batches and checks each published legal address against City GIS. | Coverage distinguishes parcels attempted, responses with an explicit License list, and omitted categories. Issuance queries use published `IssueDate`. |
 | Vision assessor cards, LCI property cases, State business registry | Live parcel-only checks | No verified complete citywide enumeration. Their absence from cross-parcel results does not imply no matching record. |
 | City LCI managed lots | Full official 500-ID inventory and point geometry batches; exact published `mbp` to current City `mblu` | The [validated import and read-only search check](https://github.com/ctl0v0/new-haven-civic-data-directory/actions/runs/44617130457) returned 494 exact parcel links, six unmatched rows, and no ambiguous links. Unmatched rows keep the source incomplete for citywide no-match claims. Raw status codes and a July 3, 2025 layer edit date do not establish current vacancy or availability. |
@@ -51,6 +51,28 @@ npm run index:prune
 The municipal sweep discovers type names directly from the official catalog. The hourly runner selects one stable type group with `npm run index:refresh:all -- hourly`; types are refreshed within 24 hours when scheduled runs succeed. The daily runner refreshes City GIS sources in dependency order, then State rosters, NHPS, and the municipal catalog. Each source records a failed attempt without replacing its last validated active run. A failed latest attempt, stale run, ambiguous join or unlinked row makes a completeness claim false. The pruning command deletes nonactive runs older than 30 days; active runs and published historical source rows stay available. GitHub Actions schedules the hourly and daily jobs because Vercel Preview Cron does not run on the preview branch.
 
 ## Private tools
+
+- `ask_parcel_data` takes a question and returns either a validated plan with parcel matches or a clarification. Resend the question with the returned choice when selecting a date. Use `query_parcel_data` with the returned plan and cursor for later pages.
+- `query_parcel_data` accepts a typed `plan`. The requirements filter official indexed records, and `include` selects which sources and fields to return. It groups matches by the City parcel ID and object ID and retains individual official links. Permit contact roles and other public child records are read live on the exact matched work record.
+- `list_parcel_query_catalog` lists supported filters, dates and return fields. The same catalog is available under `newhaven://parcel/query-catalog` and in the private workbench.
+
+For contractor contacts listed on Water Heater permits dated during a defined period, a plan can request only the desired published fields:
+
+```json
+{
+  "plan": {
+    "scope": {"kind": "city"},
+    "requirements": [{
+      "source_id": "municity",
+      "equals": {"PermitType": "Water Heater"},
+      "date": {"field": "PermitDate", "from": "2026-10-22", "to": "2026-11-20"}
+    }],
+    "contact_role": "Contractor",
+    "require_contact_role": true,
+    "include": [{"source_id": "permit-contacts", "fields": ["Fullname", "ContactRole", "Phone", "Email"]}]
+  }
+}
+```
 
 - `get_parcel_manifest` reports the checked status, returned count and count certainty for every source on one parcel.
 - `get_search_coverage` reports active index runs, freshness, failed refresh attempts, join gaps and parcel-only sources. `municipal_recent_permits` lists the verified bounds, returned and linked counts, and latest attempt for each all-type window.

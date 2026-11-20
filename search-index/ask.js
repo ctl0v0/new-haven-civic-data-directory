@@ -49,13 +49,13 @@ export function interpretBaselineQuestion(question) {
     permit_days: days, neighborhood: null, clarification: null };
 }
 
-function businessLicenseQuestion(question) {
+export function businessLicenseQuestion(question) {
   const match = question.match(/^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:new|recent|issued) (?:city |municipal )?business licenses (?:issued )?in (?:the )?([a-z][a-z .'-]{1,70}?)(?: neighborhood)? in (?:the )?(?:past|last|previous) (\d{1,3}) days?[?.!]?$/i);
   if (!match || Number(match[2]) < 1 || Number(match[2]) > 366) return null;
   return { neighborhood: match[1].trim(), days: Number(match[2]) };
 }
 
-function permitContactQuestion(question) {
+export function permitContactQuestion(question) {
   const match = question.trim().replace(/\s+/g, " ").match(
     /^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:public )?([a-z][a-z -]{1,60}?) contacts (?:who did|for|on|listed on) (.+?) (?:in|over|during) (?:the )?(?:past|last|previous) (\d{1,3}) days?[?.!]?$/i);
   if (!match || Number(match[3]) < 1 || Number(match[3]) > 366) return null;
@@ -65,6 +65,12 @@ function permitContactQuestion(question) {
     permitType: /^water[ -]+heater$/i.test(type) || replacement ? "Water Heater" : type,
     ...(replacement ? { terms: ["replace", "replacing", "change out", "change-out"] } : {}),
     days: Number(match[3]) };
+}
+
+export function ambiguousWorkDate(question) {
+  return /\b(?:in|over|during|within)\s+/.test(question.toLowerCase()) &&
+    /\b(?:who (?:did|performed|completed|installed|replaced)|(?:did|performed|completed) (?:the )?(?:work|replacements?|installations?|repairs?))\b/i.test(question) &&
+    !/\b(?:permitdate|permit date|permits? (?:pulled|dated)|documented (?:job|work) completion)\b/i.test(question);
 }
 
 export async function interpretQuestion(question, typeNames, groupNames) {
@@ -129,6 +135,8 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
   const question = edited ? "Edited search filters" : String(input.question ?? "").trim();
   if (!question || question.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(question))
     throw new SourceError("Question must be 1–500 characters", 400);
+  if (!edited && ambiguousWorkDate(question)) return { status: "clarify", question,
+    clarification: "Should the date filter use the published permit date or documented work completion? Use ask_parcel_data to choose." };
   const license = !edited && businessLicenseQuestion(question.replace(/\s+/g, " "));
   if (license) {
     const window = recentCalendarDates(license.days, now);

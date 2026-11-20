@@ -1,6 +1,7 @@
 import { LAYERS, SOURCES } from "../parcel/config.js";
 import { MAP_LAYERS, MAP_SOURCE_GAPS } from "../parcel/map-context.js";
 import { MUNICIPAL_PERMIT_TYPES_URL } from "../parcel/permit-types.js";
+import { PERMIT_ACTIVITY_TYPES } from "./permit-activity-source.js";
 
 // One physical import may serve several source records shown on a parcel.
 const alias = {
@@ -40,7 +41,7 @@ export const INDEX_DATASETS = Object.freeze({
   municity: { id: "municity", kind: "municipal-type", cadence: "daily",
     gate: "Permit parent rows with exact City parcel links are indexed in verified 30- and 90-day PermitDate windows. Historical per-type runs and the Electrical group are tracked separately. A 10,000-row full-type response cannot establish historical completeness." },
   "municity-permit-activity": { cadence: "daily",
-    gate: "Application, review and inspection rows linked through exact City parcel permits of the published types Water Heater and Hood - C in the 90-day PermitDate window." },
+    gate: `Application, review and inspection rows linked through exact City parcels in the 90-day parent PermitDate window. Configured permit types: ${PERMIT_ACTIVITY_TYPES.join(", ")}. Check the active run for coverage.` },
   "municipal-business-licenses": { cadence: "daily",
     gate: "The citywide sweep indexes named licenses from verified municipal parcels in batches. A legal address is linked to a City address point when it agrees with the parcel. Issuance queries use the City's IssueDate field." },
   "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",

@@ -61,7 +61,7 @@ test("license export keeps Government date meanings and protects spreadsheet fie
 
 test("water heater replacement questions check the official permit role, dates and replacement wording", async () => {
   const answer = await askIndexedParcels({ question:
-    "Show me Contractor contacts who did water heater replacements in the last 30 days" }, {
+    "Show me Contractor contacts listed on water heater replacements in the last 30 days" }, {
     now: new Date("2026-11-20T17:00:00Z"),
     catalog: async () => ({ groups: [{ name: "Plumbing", types: [{ name: "Water Heater" }] }] }),
     interpret: async () => assert.fail("The checked question does not need an AI interpretation"),

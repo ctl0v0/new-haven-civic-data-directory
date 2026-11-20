@@ -583,7 +583,8 @@ details.display-section > summary strong { margin-right: auto; }
 #ask-form { padding: 1.5rem 0 1rem; }
 #ask-status { min-height: 1.5rem; font-weight: 650; }
 #ask-status[data-state="blocked"], #ask-status[data-state="coverage_limited"],
-#ask-status[data-state="unavailable"] { padding: .75rem .9rem; background: #fff5dd; border-left: 3px solid #9c6415; }
+#ask-status[data-state="unavailable"], #ask-status[data-state="unsupported"],
+#ask-status[data-state="clarify"] { padding: .75rem .9rem; background: #fff5dd; border-left: 3px solid #9c6415; }
 #ask-status[data-state="ready"] { padding: .75rem .9rem; background: #e4f2e7; border-left: 3px solid #216c43; }
 .ask-examples { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .65rem; margin: 0 0 1.2rem; font-size: .82rem; color: #4e675b; }
 .ask-examples button { width: auto; padding: .25rem .45rem; background: transparent; color: #175b42; border: 1px solid #b9d3c1; border-radius: .25rem; font-size: .8rem; }
@@ -631,6 +632,18 @@ details.display-section > summary strong { margin-right: auto; }
 .query-result-detail pre { overflow: auto; padding: .6rem; background: #e8efe9; }
 .query-contact-list { margin: .5rem 0; padding-left: 1.2rem; }
 .query-contact-list li { margin: .25rem 0; }
+#ask-clarification { margin: 0 0 1rem; }
+.query-plan-editor { display: grid; gap: .65rem; margin-top: .65rem; }
+.query-plan-editor button { justify-self: start; }
+.query-plan-editor textarea { display: block; width: 100%; padding: .55rem; margin-top: .2rem; font: .85rem ui-monospace, monospace; }
+.query-projected-group { margin-top: .5rem; border-top: 1px solid #e1e9e2; }
+.query-projected-group summary { cursor: pointer; padding: .45rem 0; font-weight: 650; }
+.query-projected-records { list-style: none; padding-left: 1rem; margin: 0; }
+.query-projected-records li + li { border-top: 1px solid #e1e9e2; padding-top: .4rem; }
+.query-projected-fields { display: grid; grid-template-columns: minmax(0, 13rem) minmax(0, 1fr); gap: .2rem .6rem; margin: .35rem 0; font-size: .85rem; }
+.query-projected-fields dt { color: #4e675b; font-family: ui-monospace, monospace; }
+.query-projected-fields dd { margin: 0; }
+.query-projected-fields dt, .query-projected-fields dd { overflow-wrap: anywhere; }
 @media (max-width: 650px) {
   .query-filter-row { grid-template-columns: minmax(0, 1fr); }
   .query-catalog-list > li { align-items: flex-start; flex-wrap: wrap; }

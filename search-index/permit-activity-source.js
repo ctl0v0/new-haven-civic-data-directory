@@ -1,7 +1,7 @@
 import { municipalDate, municipalEntityRow, municipalWorkChildren } from "./municity.js";
 
 export const PERMIT_ACTIVITY_SOURCE = "municity-permit-activity";
-export const PERMIT_ACTIVITY_TYPES = Object.freeze(["Water Heater", "Hood - C"]);
+export const PERMIT_ACTIVITY_TYPES = Object.freeze(["Water Heater", "Hood - C", "Roofing"]);
 export const PERMIT_ACTIVITY_KINDS = Object.freeze({
   application: { id: "Application_ID", type: "ApplicationType", status: "PermitApplicationStatus",
     statusFallback: "ApplicationStatus", date: "ApplicationDate",

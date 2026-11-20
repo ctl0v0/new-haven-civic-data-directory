@@ -6,6 +6,7 @@ import { PERMIT_ACTIVITY_TYPES } from "../search-index/permit-activity-source.js
 import { STATE_ROSTERS } from "../search-index/socrata.js";
 import { indexConfigured, indexQuery } from "../search-index/db.js";
 import { SourceError } from "./http.js";
+import { parcelQueryCatalog } from "./query-contract.js";
 
 const eventFields = { parcels: "sale_date", municity: "PermitDate",
   [MUNICIPAL_LICENSE_SOURCE]: "IssueDate",
@@ -40,7 +41,8 @@ export async function indexedQueryValues(source, field, { query = indexQuery, co
 
 export function searchCapabilities() {
   return {
-    version: 2,
+    version: 3,
+    query_catalog: parcelQueryCatalog(),
     available: [
       {
         tool: "search_parcel_permits",
@@ -172,10 +174,23 @@ export function searchCapabilities() {
         filter_fields: { term: "Optional text", source_id: "Optional source", field: "Optional published field" },
         completeness: "Only reviewed entries are returned; City use-code definitions are withheld until an official dictionary is reviewed.",
       },
+      { tool: "ask_parcel_data", rest: "POST /api/v1/ask-parcel-data",
+        sources: ["Parcel query catalog"], scopes: ["city", "parcel", "address", "neighborhood", "ward"],
+        filter_fields: { question: "Natural-language question", clarification: "Optional returned clarification ID and selected option ID" },
+        paging: "Use query_parcel_data with the returned plan and next_cursor.",
+        completeness: "The interpreter supplies criteria. Official record coverage controls completeness.",
+        follow_up_tools: ["list_parcel_query_catalog", "query_parcel_data", "get_search_coverage"] },
+      { tool: "query_parcel_data", rest: "POST /api/v1/query-parcel-data",
+        sources: ["Parcel query catalog"], scopes: ["city", "parcel", "address", "neighborhood", "ward"],
+        filter_fields: { requirements: "Indexed source predicates and published date bounds",
+          include: "Return sources and selected fields", contact_role: "Published permit contact role" },
+        paging: "Use the same plan with next_cursor until the last page.",
+        completeness: "Partial index and live checks are reported. Every match is grouped by exact City parcel ID and object ID.",
+        follow_up_tools: ["list_parcel_query_catalog", "get_search_coverage", "get_parcel_manifest"] },
     ],
     not_yet_available: [
       "Indexed citywide permit fees and contact roles; live permit searches can check published contact roles",
-      "Indexed citywide applications, review tasks, and inspections outside the first two permit types",
+      "Indexed citywide applications, review tasks, and inspections outside the configured permit types and parent PermitDate window",
       "Cross-parcel municipal occupant searches; City license issuance searches depend on published IssueDate coverage",
       "Citywide assessor ownership and valuation history, building subareas and outbuildings; exact-PID card detail is available per parcel",
       "Cross-parcel State LLC principal and agent search; the verified owner-LLC registry join is available per parcel",

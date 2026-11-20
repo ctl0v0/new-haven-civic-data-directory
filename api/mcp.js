@@ -5,6 +5,9 @@ import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
 import { getDataContext } from "../parcel/data-context.js";
 import { askIndexedParcels } from "../search-index/ask.js";
+import { askParcelData } from "../search-index/parcel-question.js";
+import { queryParcelData } from "../search-index/parcel-query.js";
+import { askParcelDataSchema, parcelQueryCatalog, queryParcelDataSchema } from "../parcel/query-contract.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
 import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
@@ -327,6 +330,30 @@ export function createServer() {
   );
   tool(
     server,
+    "ask_parcel_data",
+    "Ask about New Haven parcel records",
+    "Translate a natural-language question to a validated search plan, then return parcels grouped by City parcel ID and object ID, selected official records and coverage. A clarification can be answered by resending the question with the returned clarification ID and option ID. Use query_parcel_data with the returned plan and cursor for the next page.",
+    askParcelDataSchema,
+    askParcelData,
+  );
+  tool(
+    server,
+    "query_parcel_data",
+    "Query and project New Haven parcel records",
+    "Apply exact source filters and date fields in a validated parcel query plan. Use include to select returned material and fields independently from requirements. Permit contacts retain their exact permit or verified application links. Continue with the same plan and returned cursor.",
+    queryParcelDataSchema,
+    queryParcelData,
+  );
+  tool(
+    server,
+    "list_parcel_query_catalog",
+    "List parcel query sources and fields",
+    "Find the indexed filters, supported event date fields, and selectable return sources and fields. Consult get_search_coverage for actual refresh coverage.",
+    z.object({}),
+    () => parcelQueryCatalog(),
+  );
+  tool(
+    server,
     "ask_indexed_parcels",
     "Ask a bounded parcel search question",
     "Interpret a City parcel, municipal permit, or recent City business license question. Return exact parcel links and official source coverage.",
@@ -364,7 +391,7 @@ export function createServer() {
     server,
     "search_indexed_permit_activity",
     "Search parcel-linked permit activity",
-    "Cross-filter applications, review tasks, or inspections linked to Water Heater and Hood - C permits in the indexed 90-day PermitDate window. Filter activity type, published status, City neighborhood, and separate permit and activity dates. Activity date is ApplicationDate, DateCompleted, or CloseDate by kind.",
+    `Cross-filter applications, review tasks, or inspections for ${PERMIT_ACTIVITY_TYPES.join(", ")} permits in the indexed 90-day PermitDate window. Filter activity type, published status, City neighborhood, and separate permit and activity dates. Activity date is ApplicationDate, DateCompleted, or CloseDate by kind.`,
     z.object({
       activity_kind: z.enum(["application", "review", "inspection"]),
       permit_type: z.enum(PERMIT_ACTIVITY_TYPES),
@@ -451,6 +478,14 @@ export function createServer() {
     "Return live, curated, paused, and unavailable source status and limitations.",
     z.object({}),
     () => sourceCoverage(),
+  );
+  server.registerResource(
+    "parcel-query-catalog",
+    "newhaven://parcel/query-catalog",
+    { title: "New Haven parcel query catalog", description: "Source filters, projections, and published date fields",
+      mimeType: "application/json" },
+    async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json",
+      text: JSON.stringify(parcelQueryCatalog()) }] }),
   );
   server.registerResource(
     "parcel-schema",
