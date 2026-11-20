@@ -12,6 +12,7 @@ const examples = [
   ["Commercial parcels with electrical permits", "Show commercial parcels with electrical permits pulled in the past 30 days"],
   ["City business licenses issued in East Rock", "Show me new business licenses in East Rock neighborhood in the last 30 days"],
   ["Water Heater contractor contacts", "Show me Contractor contacts who did water heater replacements in the last 30 days"],
+  ["NHPS attendance zones for an address", "What school would 20 Eld St go to?"],
 ];
 const neighborhoods = "Exact published City neighborhood";
 const requirement = (source_id = "parcels") => ({ source_id, filters: [],

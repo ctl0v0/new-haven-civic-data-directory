@@ -2422,7 +2422,7 @@ function appendProjectedRecords(parent, match) {
     const row = el("li");
     const fields = record.fields ?? {};
     const title = fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
-      fields.PermitNo ?? record.permit_number ?? record.published_type ?? `Record ${record.record_id}`;
+      fields.PermitNo ?? record.permit_number ?? record.published_type ?? record.address ?? `Record ${record.record_id}`;
     const head = el("p");
     head.append(el("strong", title));
     for (const value of [record.published_role, record.published_type, record.published_status]
@@ -2433,8 +2433,12 @@ function appendProjectedRecords(parent, match) {
     const values = Object.entries(fields).filter(([, value]) => value != null && value !== "");
     if (values.length) {
       const dl = el("dl", null, "query-projected-fields");
-      for (const [field, value] of values) dl.append(el("dt", field), el("dd",
-        typeof value === "object" ? JSON.stringify(value) : value));
+      for (const [field, value] of values) {
+        const label = match.source_id === "school-attendance" ? {
+          k8_school: "K–8 attendance zone", high_school: "High-school attendance zone",
+        }[field] : null;
+        dl.append(el("dt", label ?? field), el("dd", typeof value === "object" ? JSON.stringify(value) : value));
+      }
       row.append(dl);
     }
     if (record.permit_description_as_published)
@@ -2446,6 +2450,8 @@ function appendProjectedRecords(parent, match) {
     if (record.match || record.match_methods?.length) evidence.append(document.createTextNode(
       ` · ${record.match?.method ?? record.match_methods.join(", ")}`));
     if (record.address_evidence?.matches_query) evidence.append(document.createTextNode(" · Exact searched address"));
+    if (record.source_snapshot_retrieved_at) evidence.append(document.createTextNode(
+      ` · Official snapshot ${record.source_snapshot_retrieved_at.slice(0, 10)}`));
     if (evidence.textContent) row.append(evidence);
     list.append(row);
   }

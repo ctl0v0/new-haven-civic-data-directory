@@ -109,3 +109,36 @@ test("typed queries reject unsupported date and return fields before asking any 
   assert.equal(refused.status, "unsupported");
   assert.ok(parcelQueryCatalog().sources.find(({ source_id }) => source_id === "assessor-owner").return_fields.includes("co_owner_name"));
 });
+
+test("school questions preserve the address and select the published NHPS names", async () => {
+  const address = "20 Eld St";
+  const source = "https://www.newhavenmagnetschools.com/index.php/enrollment/find-schools-in-your-attendance-zone";
+  const feature = { attributes: { parcel_id: 11236, objectid: 979, property_address: address } };
+  const resolve = async (value) => {
+    assert.equal(value, address);
+    return { candidates: [{ parcel_id: 11236, objectid: 979, address,
+      match: { method: "parcel-address" } }] };
+  };
+  const records = async (sourceId) => {
+    assert.equal(sourceId, "school-attendance");
+    return { status: "ok", items: [
+      { source_id: sourceId, source_record_id: "20 ELD ST:245", source_url: source,
+        attributes: { address: "20 ELD ST", k8_attendance_zone_school: "East Rock Magnet",
+          high_school_attendance_zone_school: "Wilbur Cross", street_name_as_published: "ELD ST",
+          source_lookup_mode: "official_snapshot", source_snapshot_retrieved_at: "2026-11-19T13:20:40+00:00" } },
+      { source_id: sourceId, source_record_id: "2 SIDE STREET:999", source_url: source,
+        attributes: { address: "2 SIDE ST", k8_attendance_zone_school: "Fixture School" } },
+    ] };
+  };
+  const answer = await askParcelData({ question: "What school would 20 Eld St go to?" }, {
+    execute: (input) => queryParcelData(input, { resolve, load: async () => feature, records }),
+    interpret: () => assert.fail("A simple school query should not need a gateway"),
+  });
+  assert.equal(answer.status, "ready");
+  assert.equal(answer.items[0].city_objectid, 979);
+  const zones = answer.items[0].matching_sources[0].records;
+  assert.equal(zones.length, 1);
+  assert.equal(zones[0].address_evidence.matches_query, true);
+  assert.equal(zones[0].source_lookup_mode, "official_snapshot");
+  assert.deepEqual(zones[0].fields, { k8_school: "East Rock Magnet", high_school: "Wilbur Cross" });
+});

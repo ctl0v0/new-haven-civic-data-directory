@@ -103,6 +103,18 @@ function exactQuestion(question, now, permitDateSelected) {
       include: [{ source_id: "municity", fields: permitFields }, { source_id: "permit-contacts", fields: contactFields }],
       contact_role: contact.role, require_contact_role: true, permit_description_terms: contact.terms } };
   }
+  const school = question.replace(/[?.!]$/, "").match(
+    /^(?:(?:what|which) ((?:high |k[-–]8 )?schools?) (?:would|does|is) (.+?) (?:go to|attend|(?:be )?zoned for)|(?:what|which) ((?:high |k[-–]8 )?schools?) (?:serves?|for|is assigned to|are assigned to) (.+))$/i);
+  if (school) {
+    const target = school[2] ?? school[4];
+    const parcelId = target.match(/^(?:city )?parcel(?: id)? (\d{1,12})$/i)?.[1];
+    if (parcelId || /^\d{1,6} [^?!.]{2,143}$/.test(target)) {
+      const level = (school[1] ?? school[3]).toLowerCase();
+      const fields = level.startsWith("high ") ? ["high_school"] : level.startsWith("k") ? ["k8_school"] : ["k8_school", "high_school"];
+      return { plan: { scope: parcelId ? { kind: "parcel", parcel_id: parcelId } : { kind: "address", address: target },
+        requirements: [], include: [{ source_id: "school-attendance", fields }] } };
+    }
+  }
   const parcel = question.match(/^(?:show(?: me)?|find|list|what (?:is|are)) (?:the )?(co-owner|ownership history|zoning|trash pickup day|schools?|community management team|building subareas|municipal records|business licenses) (?:for|at|of) (\d{1,6} [^?!.]{2,143})[?!.]?$/i);
   if (parcel) {
     const sources = { "co-owner": { source_id: "assessor-owner", fields: ["owner_name", "co_owner_name"] },

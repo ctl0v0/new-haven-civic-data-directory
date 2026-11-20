@@ -8,6 +8,7 @@ import { permitDetails } from "../parcel/permit-details.js";
 import { parcelPhoto } from "../parcel/photo.js";
 import { parcelQueryCatalog, queryDateFields, queryParcelDataSchema, relatedPermitFields } from "../parcel/query-contract.js";
 import { loadParcel, resolveParcel } from "../parcel/resolve.js";
+import { schoolAddress } from "../parcel/school-attendance.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { indexQuery } from "./db.js";
 import { questionPermitCatalog } from "./ask.js";
@@ -178,12 +179,28 @@ async function liveSource(sourceId, wanted, feature, plan, dependencies) {
           source_record_id: sourceId === "parcel-photo" ? String(parcel_id) : String(objectid) }, wanted)] };
   }
   const result = await records(sourceId, feature);
-  return { ...result, items: result.items.map((item) => {
-    const dateField = sourceId === "assessor-sales" ? "sale_date" :
-      sourceId === "municity" ? (item.category === "Permit" ? "PermitDate" : null) : queryDateFields[sourceId];
-    const evidence = plan.scope.kind === "address" ? addressEvidence(item, plan.scope.address) : null;
-    return { ...liveRecord(item, wanted, dateField), ...(evidence ? { address_evidence: evidence } : {}) };
-  }) };
+  const schoolFocus = sourceId === "school-attendance" && plan.scope.kind === "address"
+    ? schoolAddress(plan.scope.address) : null;
+  const selected = schoolFocus ? result.items.filter((item) =>
+    schoolAddress(item.attributes.address)?.address === schoolFocus.address) : result.items;
+  return { ...result,
+    ...(schoolFocus && !selected.length && good.has(result.status) ? { status: "not_linked",
+      warning: "No official NHPS attendance-zone row could be linked to the exact searched address." } : {}),
+    items: selected.map((item) => {
+      const school = sourceId === "school-attendance";
+      const attributes = school ? { ...item.attributes,
+        street_name: item.attributes.street_name_as_published,
+        k8_school: item.attributes.k8_attendance_zone_school,
+        high_school: item.attributes.high_school_attendance_zone_school,
+      } : item.attributes;
+      const dateField = sourceId === "assessor-sales" ? "sale_date" :
+        sourceId === "municity" ? (item.category === "Permit" ? "PermitDate" : null) : queryDateFields[sourceId];
+      const evidence = plan.scope.kind === "address" ? addressEvidence(item, plan.scope.address) : null;
+      return { ...liveRecord({ ...item, attributes }, wanted, dateField),
+        ...(school ? { address: attributes.address, source_lookup_mode: attributes.source_lookup_mode,
+          source_snapshot_retrieved_at: attributes.source_snapshot_retrieved_at } : {}),
+        ...(evidence ? { address_evidence: evidence } : {}) };
+    }) };
 }
 
 function detailsIncomplete(work, category) {
