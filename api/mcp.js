@@ -341,7 +341,7 @@ export function createServer() {
     server,
     "ask_parcel_data",
     "Ask about New Haven parcel records",
-    "Translate a natural-language question to a validated search plan, then return parcels grouped by City parcel ID and object ID, selected official records and coverage. A clarification can be answered by resending the question with the returned clarification ID and option ID. Use query_parcel_data with the returned plan and cursor for the next page.",
+    "Translate a natural-language question into a search plan. Set plan_only to true to present the plan for confirmation before searching parcel records. Execute the returned plan with query_parcel_data. Without plan_only the tool also returns parcels, official records and coverage. To answer a clarification, resend the question, plan_only setting, and returned clarification ID and option ID.",
     askParcelDataSchema,
     askParcelData,
   );

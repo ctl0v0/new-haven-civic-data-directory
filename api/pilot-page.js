@@ -117,7 +117,7 @@ const app = `
         <button id="ask-fields-mode" type="button" class="secondary" aria-pressed="false">Field filters</button>
       </div><a id="ask-query-guide" href="/parcel?view=guide&amp;guide=query-explorer">Browse fields and permit types</a></div>
       <div id="ask-language">
-      <form id="ask-form"><label for="ask-question">Question</label><div class="ask-form-row"><input id="ask-question" type="search" maxlength="1000" required placeholder="Show commercial parcels with electrical permits pulled in the past 30 days"><button type="submit">Search records</button></div></form>
+      <form id="ask-form"><label for="ask-question">Question</label><div class="ask-form-row"><input id="ask-question" type="search" maxlength="1000" required placeholder="Show commercial parcels with electrical permits pulled in the past 30 days"><button type="submit">Preview search</button></div></form>
       <div class="ask-examples"><span>Examples</span><button type="button" data-ask-example="Show parcels with electrical permits pulled in the past 30 days">Electrical permits · 30 days</button><button type="button" data-ask-example="Show commercial parcels with electrical permits pulled in the past 30 days">Commercial + electrical</button><button type="button" data-ask-example="Show me new business licenses in East Rock neighborhood in the last 30 days">East Rock license issuance</button><button type="button" data-ask-example="Show me Contractor contacts who did water heater replacements in the last 30 days">Water Heater contractors</button></div>
       </div>
       <div id="ask-structured" hidden></div>

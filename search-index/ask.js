@@ -34,18 +34,20 @@ export function recentCalendarDates(days, now = new Date()) {
   return { from, to, meaning: `${days} New Haven calendar dates including today` };
 }
 
-// A small exact grammar makes the first spoken example testable without an AI
-// gateway. Other phrasing still goes through the constrained interpreter.
+// A small exact grammar handles common trade searches without an AI gateway.
+// Other phrasing still goes through the constrained interpreter.
 // Unrecognized words never get silently discarded from the question.
 export function interpretBaselineQuestion(question) {
   const text = String(question ?? "").trim().toLowerCase().replace(/[?.!]$/, "")
     .replace(/\s+/g, " ");
-  const match = text.match(/^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:parcels,? )?(commercial )?parcels (?:that )?(?:have had|had|have|with) electrical permits (?:pulled )?in (?:the )?(?:past|last|previous) (\d{1,3}) days?$/);
-  if (!match) return null;
-  const days = Number(match[2]);
+  const parcels = text.match(/^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:parcels,? )?(commercial )?parcels (?:that )?(?:have had|had|have|with) (plumbing|electrical) permits (?:pulled )?in (?:the )?(?:past|last|previous) (\d{1,3}) days?$/);
+  const permits = text.match(/^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:(plumbing|electrical) permits|permits for (plumbing|electrical)) (?:pulled )?(?:in|over|during|within) (?:the )?(?:past|last|previous) (\d{1,3}) days?$/);
+  if (!parcels && !permits) return null;
+  const days = Number((parcels ?? permits)[3]);
   if (days < 1 || days > 366) return null;
-  return { intent: "search", commercial: Boolean(match[1]),
-    permit_type: null, permit_group: "Electrical", permit_status: null,
+  const trade = parcels?.[2] ?? permits[1] ?? permits[2];
+  return { intent: "search", commercial: Boolean(parcels?.[1]),
+    permit_type: null, permit_group: trade === "plumbing" ? "Plumbing" : "Electrical", permit_status: null,
     permit_days: days, neighborhood: null, clarification: null };
 }
 
@@ -78,7 +80,7 @@ export function ambiguousWorkDate(question) {
 
 export async function interpretQuestion(question, typeNames, groupNames) {
   const baseline = interpretBaselineQuestion(question);
-  if (baseline && groupNames.includes("Electrical")) return baseline;
+  if (baseline && groupNames.includes(baseline.permit_group)) return baseline;
   const context = getDataContext().entries.filter((entry) => ["city-use-code",
     "municipal-permit-type", "municipal-permit-group", "municipal-permit-date", "municipal-permit-status",
     "city-neighborhood", "search-coverage"].includes(entry.id));

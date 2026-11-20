@@ -145,6 +145,39 @@ test("school questions preserve the address and select the published NHPS names"
 
 const plumbingQuestion = "Show me contractor contacts that have done plumbing work in the last 90 days";
 
+test("permits for plumbing searches the full published group by PermitDate", async () => {
+  const tradeCatalog = async () => ({ groups: [
+    { name: "Plumbing", types: [{ name: "Plumbing Permit" }, { name: "Water Heater" }] },
+    { name: "Electrical", types: [{ name: "Electrical Permit" }] },
+  ] });
+  const review = await askParcelData({ question: "show me permits for plumbing in the last 30 days", plan_only: true }, {
+    now, interpret: () => assert.fail("The plain trade query should not require model interpretation"),
+    execute: () => assert.fail("No parcel search should run before confirmation"),
+  });
+  assert.equal(review.status, "planned");
+  assert.equal(review.items, undefined);
+  assert.deepEqual(review.plan.requirements[0], { source_id: "municity", permit_group: "Plumbing",
+    date: { field: "PermitDate", from: "2026-10-22", to: "2026-11-20" } });
+  assert.equal(review.plan.permit_description_terms, undefined);
+
+  const answer = await queryParcelData({ plan: review.plan }, { catalog: tradeCatalog,
+    search: async ({ requirements }, { projection }) => {
+      assert.equal(requirements[0].equals, undefined);
+      assert.deepEqual(projection.permit_types, ["PLUMBING PERMIT", "WATER HEATER"]);
+      assert.deepEqual([requirements[0].event_date_from, requirements[0].event_date_to],
+        ["2026-10-22", "2026-11-20"]);
+      return { complete_for_query: true, coverage: { index_status: "connected" }, items: [
+        { city_parcel_id: 42, city_objectid: 99, matching_sources: [{ source_id: "municity", matching_record_count: 1,
+          records: [{ record_id: "8", source_url: permitUrl("8"), event_date: "2026-11-03",
+            fields: { PermitType: "Water Heater", PermitDate: "11/3/2026" } }] }] },
+      ] };
+    },
+  });
+  assert.equal(answer.status, "ready");
+  assert.deepEqual(answer.plan, review.plan);
+  assert.equal(answer.items[0].matching_sources[0].records[0].fields.PermitType, "Water Heater");
+});
+
 test("broad plumbing work asks about the date and then uses the official group without a keyword", async () => {
   const fail = () => assert.fail("This question should be handled before any source or model call");
   const initial = await askParcelData({ question: plumbingQuestion }, {
@@ -165,7 +198,7 @@ test("broad plumbing work asks about the date and then uses the official group w
 test("language interpretation removes redundant trade text and respects explicitly requested description terms", async () => {
   const interpret = async () => ({
     intent: "search", scope: { kind: "city" },
-    requirements: [{ source_id: "municity", permit_group: "Plumbing", predicates: [],
+    requirements: [{ source_id: "municity", permit_selection: { kind: "group", name: "Plumbing" }, predicates: [],
       date: { field: "PermitDate", days: 90 } }],
     include: [{ source_id: "permit-contacts", fields: ["ContactRole"] }],
     contact_role: "Contractor", require_contact_role: true,
@@ -179,6 +212,26 @@ test("language interpretation removes redundant trade text and respects explicit
   }, dependencies);
   assert.equal(broad.plan.permit_description_terms, undefined);
   assert.deepEqual(explicit.plan.permit_description_terms, ["plumbing"]);
+});
+
+test("a model plan keeps an exact permit type and rejects an extra type predicate", async () => {
+  const question = 'Show permits of type "Water Heater" from the last 30 days';
+  const requirement = { source_id: "municity", permit_selection: { kind: "type", name: "Water Heater" },
+    predicates: [], date: { field: "PermitDate", days: 30 } };
+  const interpret = async () => ({ intent: "search", scope: { kind: "city" }, requirements: [requirement],
+    include: [], permit_description_terms: [] });
+  const dependencies = { now, catalog, interpret,
+    execute: () => assert.fail("No parcel search should run before confirmation") };
+  const review = await askParcelData({ question, plan_only: true }, dependencies);
+  assert.equal(review.status, "planned");
+  assert.deepEqual(review.plan.requirements[0].equals, { PermitType: "Water Heater" });
+  assert.equal(review.plan.requirements[0].permit_group, undefined);
+
+  requirement.permit_selection = { kind: "group", name: "Plumbing" };
+  requirement.predicates = [{ field: "PermitType", operator: "equals", value: "Water Heater" }];
+  const invalid = await askParcelData({ question, plan_only: true }, dependencies);
+  assert.equal(invalid.status, "unavailable");
+  assert.equal(invalid.plan, undefined);
 });
 
 test("a contact query scans past an empty candidate batch and returns a linked contractor", async () => {

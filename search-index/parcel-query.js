@@ -35,13 +35,15 @@ const fieldsFor = (fields, wanted) => wanted
 const workId = (value) => /^[1-9]\d{0,11}$/.test(String(value ?? "")) ? String(value) : null;
 const pair = (value) => [value.parcel_id, value.objectid].map(String).join(":");
 
-function validate(plan, entries) {
+export function parcelQueryPlanProblem(plan, entries = new Map(parcelQueryCatalog().sources.map((source) => [source.source_id, source]))) {
   if (plan.scope.kind === "address") checkedQueryAddress(plan.scope.address);
   const requirementIds = plan.requirements.map(({ source_id }) => source_id);
   if (new Set(requirementIds).size !== requirementIds.length)
     return "Combine filters for a source into one requirement so they apply to the same record.";
   if (new Set(plan.include.map(({ source_id }) => source_id)).size !== plan.include.length)
     return "List each return source once.";
+  if (plan.scope.kind === "city" && !plan.requirements.length && !plan.parcel_use_category)
+    return "Choose at least one indexed source requirement for a citywide query.";
   for (const item of plan.requirements) {
     const definition = entries.get(item.source_id);
     if (!definition?.queryable) return `${item.source_id} is not available as an indexed parcel filter.`;
@@ -335,7 +337,7 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
   const { plan, cursor } = parsed.data;
   const registry = parcelQueryCatalog();
   const entries = new Map(registry.sources.map((source) => [source.source_id, source]));
-  const invalid = validate(plan, entries);
+  const invalid = parcelQueryPlanProblem(plan, entries);
   if (invalid) return unsupported(invalid, plan);
 
   const location = await exactScope(plan.scope, resolve);

@@ -127,6 +127,7 @@ export const queryParcelDataSchema = z.strictObject({
 });
 export const askParcelDataSchema = z.strictObject({
   question: z.string().trim().min(1).max(1000),
+  plan_only: z.boolean().optional(),
   clarification: z.strictObject({
     id: z.enum(["work_date", "parcel"]), choice: label,
   }).optional(),

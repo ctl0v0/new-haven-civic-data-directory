@@ -591,6 +591,9 @@ details.display-section > summary strong { margin-right: auto; }
 #ask-interpretation, #ask-coverage, #ask-context { border-top: 1px solid #d2ded5; padding: 1.1rem 0; }
 #ask-interpretation h2, #ask-coverage h2, #ask-context h2 { margin: 0 0 .7rem; }
 #ask-interpretation p, #ask-coverage p { margin: .3rem 0; }
+.query-plan-summary { display: grid; grid-template-columns: minmax(0, min(12rem, 35%)) minmax(0, 1fr); gap: .55rem 1rem; margin: 0 0 1rem; }
+.query-plan-summary dt { font-weight: 650; }
+.query-plan-summary dd { margin: 0; overflow-wrap: anywhere; }
 .ask-source-check strong { color: #704c0d; }
 .ask-filter-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem 1.1rem; padding: 1rem 0; border-top: 1px solid #d2ded5; }
 .ask-filter-form .eyebrow { grid-column: 1 / -1; margin: 0; }

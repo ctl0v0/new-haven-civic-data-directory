@@ -2567,7 +2567,7 @@ function displaySearchResult(result, { append = false } = {}) {
   setAskStatus(message, ["unconfigured", "unavailable"].includes(indexStatus)
     ? "unavailable" : result.complete_for_query ? "ready" : "coverage_limited");
 }
-async function runFieldSearch(method, args) {
+async function runFieldSearch(method, args, context) {
   const version = ++askVersion;
   clearAskResult();
   setAskStatus("Checking indexed sources…", "loading");
@@ -2576,7 +2576,7 @@ async function runFieldSearch(method, args) {
     const result = await api(...indexedQueryRequest(method, args));
     if (version !== askVersion) return;
     if (method === "unified") {
-      renderUnifiedAnswer(result, null, version);
+      renderUnifiedAnswer({ ...result, context }, null, version);
       return;
     }
     const target = $("ask-interpretation");
@@ -2596,32 +2596,43 @@ function renderUnifiedAnswer(response, question, version) {
   const plan = response.plan;
   if (plan) {
     const target = $("ask-interpretation");
-    target.replaceChildren(el("h2", "Search plan"));
+    const pending = response.status === "planned";
+    const run = (selectedPlan) => {
+      if (version === askVersion) void runFieldSearch("unified", { plan: selectedPlan }, response.context);
+    };
+    const summary = el("dl", null, "query-plan-summary");
+    const line = (label, value) => summary.append(el("dt", label), el("dd", value));
+    target.replaceChildren(el("h2", "Search plan"), summary);
     const scope = plan.scope;
-    if (scope?.kind && scope.kind !== "city") target.append(el("p", [
+    line("Search area", scope.kind === "city" ? "Citywide · New Haven" : [
       scope.kind === "neighborhood" ? "City neighborhood" : scope.kind === "ward" ? "City ward" :
         scope.kind === "parcel" ? "City parcel" : "Searched address",
       scope.name ?? scope.ward ?? scope.parcel_id ?? scope.address,
-    ].join(" · ")));
+    ].join(" · "));
     for (const requirement of plan.requirements ?? []) {
-      const filters = [requirement.permit_group,
+      const date = requirement.date;
+      const filters = [requirement.permit_group ? `Permit group ${requirement.permit_group}` : null,
         ...Object.entries(requirement.equals ?? {}).map(([field, value]) => `${field} = ${value}`),
         ...Object.entries(requirement.number_gte ?? {}).map(([field, value]) => `${field} ≥ ${value}`),
         ...Object.entries(requirement.number_lte ?? {}).map(([field, value]) => `${field} ≤ ${value}`),
-        ...(requirement.one_of?.use_code ? [response.use_category
-          ? `${response.use_category.replaceAll("_", " ")} · reviewed City use codes`
-          : `${requirement.one_of.use_code.length} selected use codes`] : []),
-        requirement.date ? [requirement.date.field, requirement.date.from, requirement.date.to].filter(Boolean).join(" · ") : null,
+        ...Object.entries(requirement.one_of ?? {}).map(([field, values]) =>
+          `${field} matches any of ${values.join(", ")}`),
+        date ? [date.field, date.from && `from ${date.from}`, date.to && `through ${date.to}`].filter(Boolean).join(" ") : null,
       ].filter(Boolean);
-      target.append(el("p", [sourceNames[requirement.source_id] ?? requirement.source_id, ...filters].join(" · ")));
+      line(sourceNames[requirement.source_id] ?? requirement.source_id, filters.join(" · ") || "Any matching record");
     }
-    if (plan.parcel_use_category) target.append(el("p",
-      `Recorded parcel use · ${plan.parcel_use_category.replaceAll("_", " ")}`));
-    if (plan.contact_role) target.append(el("p", `Listed contact role · ${plan.contact_role}`));
-    if (plan.permit_description_terms?.length) target.append(el("p",
-      `Published permit description contains any of · ${plan.permit_description_terms.join(", ")}`));
-    if (plan.include?.length) target.append(el("p", `Returns · ${plan.include.map(({ source_id, fields }) =>
-      `${sourceNames[source_id] ?? source_id}${fields ? ` (${fields.join(", ")})` : ""}`).join(" · ")}`));
+    if (plan.parcel_use_category) line("Recorded parcel use", response.use_category ?? plan.parcel_use_category.replaceAll("_", " "));
+    if (plan.contact_role) line(plan.require_contact_role ? "Required contact role" : "Returned contact role", plan.contact_role);
+    if (plan.permit_description_terms?.length) line("Permit description contains any of", plan.permit_description_terms.join(", "));
+    if (plan.radius_meters) line("Search radius", `${plan.radius_meters} meters`);
+    if (plan.include?.length) line("Return fields", plan.include.map(({ source_id, fields }) =>
+      `${sourceNames[source_id] ?? source_id}${fields ? ` (${fields.join(", ")})` : ""}`).join(" · "));
+    if (pending) {
+      const confirm = el("button", "Run search");
+      confirm.type = "button";
+      confirm.onclick = () => run(plan);
+      target.append(confirm);
+    }
     const detail = el("details", null, "query-result-detail");
     detail.append(el("summary", "View or edit MCP request"));
     const form = el("form", null, "query-plan-editor");
@@ -2630,12 +2641,12 @@ function renderUnifiedAnswer(response, question, version) {
     input.rows = 10;
     input.value = JSON.stringify(plan, null, 2);
     label.append(input);
-    const submit = el("button", "Run this plan", "secondary");
+    const submit = el("button", "Run edited plan", "secondary");
     submit.type = "submit";
     form.append(label, submit);
     form.onsubmit = (event) => {
       event.preventDefault();
-      try { void runFieldSearch("unified", { plan: JSON.parse(input.value) }); }
+      try { run(JSON.parse(input.value)); }
       catch { setAskStatus("Enter valid query plan JSON.", "unsupported"); }
     };
     detail.append(form);
@@ -2654,12 +2665,16 @@ function renderUnifiedAnswer(response, question, version) {
         if (version !== askVersion) return;
         if (plan && clarification.id === "parcel") {
           const [parcel_id, objectid] = choice.id.split(":");
-          void runFieldSearch("unified", { plan: { ...plan, scope: { ...plan.scope, parcel_id, objectid } } });
+          void runFieldSearch("unified", { plan: { ...plan, scope: { ...plan.scope, parcel_id, objectid } } }, response.context);
         } else if (question) void runAsk(question, null, { id: clarification.id, choice: choice.id });
       };
       target.append(button);
     }
     target.hidden = !target.childElementCount;
+    return;
+  }
+  if (response.status === "planned") {
+    setAskStatus("Review the search plan below. No parcel records have been searched yet.", "planned");
     return;
   }
   if (!response.items) { setAskStatus(response.reason ?? "No validated search result was returned.", response.status); return; }
@@ -2671,15 +2686,16 @@ async function runAsk(question, filters = null, clarification = null) {
   const version = ++askVersion;
   clearAskResult();
   if (filters) $("ask-question").value = "";
-  $("ask-run-mode").textContent = filters ? "This result uses the applied filters below." :
-    "This result uses the question shown above.";
-  $("ask-run-mode").hidden = false;
+  if (filters) {
+    $("ask-run-mode").textContent = "This result uses the applied filters below.";
+    $("ask-run-mode").hidden = false;
+  }
   setAskStatus(filters ? "Checking edited filters against indexed sources…" :
-    "Interpreting the question and checking indexed sources…", "loading");
+    "Preparing the search plan…", "loading");
   try {
     const response = await api(filters ? "/api/v1/ask-parcels" : "/api/v1/ask-parcel-data", { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(filters ? { filters } : { question, ...(clarification ? { clarification } : {}) }) });
+      body: JSON.stringify(filters ? { filters } : { question, plan_only: true, ...(clarification ? { clarification } : {}) }) });
     if (version !== askVersion) return;
     if (!filters) { renderUnifiedAnswer(response, question, version); return; }
     const parsed = response.interpretation;
@@ -2739,6 +2755,11 @@ for (const button of document.querySelectorAll("[data-ask-example]")) {
 $("ask-form").addEventListener("submit", (event) => {
   event.preventDefault();
   void runAsk($("ask-question").value.trim());
+});
+$("ask-question").addEventListener("input", () => {
+  askVersion++;
+  clearAskResult();
+  setAskStatus("");
 });
 $("ask-filter-form").addEventListener("submit", (event) => {
   event.preventDefault();
