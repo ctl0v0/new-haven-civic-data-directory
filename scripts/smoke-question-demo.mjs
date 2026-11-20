@@ -114,6 +114,27 @@ console.log(JSON.stringify({ event: "municipal_license_geography_smoke",
   examples: cityLicenses.items.map((row) => ({ parcel_id: row.city_parcel_id,
     address: row.city_address, date: row.event_date, source_url: row.source_url })),
   sources: cityLicenses.coverage.source_checks }));
+const citywideLicenses = await callMcp("search_indexed_records", {
+  source_id: "municipal-business-licenses", limit: 50,
+});
+const addressedLicense = citywideLicenses.items.find((row) =>
+  row.fields.LegalAddress && row.city_address_points?.length);
+if (addressedLicense) {
+  const evidence = await callMcp("search_indexed_records", {
+    source_id: "municipal-business-licenses", site_address: addressedLicense.fields.LegalAddress,
+    equals: { License_ID: addressedLicense.record_id }, limit: 5,
+  });
+  if (!evidence.items.some((row) => row.record_id === addressedLicense.record_id &&
+    row.city_parcel_id === addressedLicense.city_parcel_id && row.city_address_points?.length))
+    throw new Error("The same City license did not resolve by its verified site address");
+}
+console.log(JSON.stringify({ event: "municipal_license_citywide_smoke",
+  retained_page_count: citywideLicenses.items.length,
+  address_verified: Boolean(addressedLicense),
+  verified_address: addressedLicense?.fields.LegalAddress ?? null,
+  verified_parcel_id: addressedLicense?.city_parcel_id ?? null,
+  verified_source_url: addressedLicense?.source_url ?? null,
+  source: citywideLicenses.coverage.source_checks.find((row) => row.source_id === "municipal-business-licenses") }));
 for (const source_id of ["ct-liquor-permits", "ct-child-care-licenses"]) {
   const answer = await callMcp("search_indexed_records", { source_id, neighborhood: "East Rock",
     event_date_from: window.from, event_date_to: window.to, limit: 5 });

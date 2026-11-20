@@ -56,6 +56,8 @@ DROP INDEX IF EXISTS search_records_fields;
 CREATE INDEX IF NOT EXISTS search_records_geometry ON search_records USING gist (geometry);
 CREATE INDEX IF NOT EXISTS search_records_type_date
   ON search_records (source_id, published_type, published_status, event_date);
+CREATE INDEX IF NOT EXISTS search_records_city_address_normalized
+  ON search_records (run_id, (fields->>'normalized_address')) WHERE source_id = 'addresses';
 
 CREATE TABLE IF NOT EXISTS search_record_parcels (
   run_id bigint NOT NULL,
@@ -75,6 +77,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS search_record_parcels_unique
     city_objectid, COALESCE(city_address_objectid, -1));
 CREATE INDEX IF NOT EXISTS search_record_parcels_parcel
   ON search_record_parcels (city_parcel_id, city_objectid, run_id, source_id);
+
+-- Writer checkpoint for the City license sweep. The API reads the aggregate
+-- coverage on the active run and does not require access to this table.
+CREATE TABLE IF NOT EXISTS search_city_license_checks (
+  city_objectid bigint PRIMARY KEY,
+  city_parcel_id bigint NOT NULL,
+  mblu text NOT NULL,
+  outcome text NOT NULL CHECK (outcome IN
+    ('confirmed', 'category_missing', 'category_capped', 'row_conflict', 'parcel_unverified', 'upstream_error', 'rate_limited')),
+  last_checked_at timestamptz NOT NULL,
+  next_check_at timestamptz NOT NULL
+);
 
 -- Old run rows are retained for a bounded audit period, but only the run named
 -- in search_active_runs is a current search source. Published historical rows

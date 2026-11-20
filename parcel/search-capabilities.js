@@ -104,7 +104,7 @@ export function searchCapabilities() {
         tool: "search_indexed_records",
         rest: "POST /api/v1/search-indexed-records",
         sources: Object.keys(SEARCH_FIELDS),
-        scopes: ["all exact parcel-linked records in one indexed source", "one City parcel ID and object ID", "City neighborhood"],
+        scopes: ["all exact parcel-linked records in one indexed source", "one City parcel ID and object ID", "City neighborhood", "verified license site address"],
         filter_fields: {
           source_id: "One indexed official source; municipal rows require one exact PermitType",
           equals: "Exact published fields from indexed_source_fields",
@@ -115,6 +115,7 @@ export function searchCapabilities() {
           city_parcel_id: "Optional exact City parcel ID, paired with city_objectid",
           city_objectid: "Optional exact City feature ID, paired with city_parcel_id",
           neighborhood: "Exact City neighborhood name or label",
+          site_address: "For indexed City and State licenses, match the published address through an exact City address point on the linked parcel",
         },
         paging: "1–50 matching source record and parcel-link pairs per page; continue next_cursor",
         completeness: "Requires fresh validated source and City parcel runs, exact joins, no source row gaps and the last result page. It does not include source rows without an exact parcel link. Address-linked sources include City address-point fields for each exact address join.",
@@ -141,7 +142,7 @@ export function searchCapabilities() {
     ],
     not_yet_available: [
       "Citywide permit fees and contact roles, and citywide applications, review tasks, and inspections outside the first two indexed permit types",
-      "Cross-parcel searches over municipal occupants and City licenses outside the verified IssueDate coverage window",
+      "Cross-parcel municipal occupant searches; City license issuance searches depend on published IssueDate coverage",
       "Citywide assessor ownership and valuation history, building subareas and outbuildings; exact-PID card detail is available per parcel",
       "Cross-parcel State LLC principal and agent search; the verified owner-LLC registry join is available per parcel",
       "Citywide LCI case search and official marketed-space availability search",

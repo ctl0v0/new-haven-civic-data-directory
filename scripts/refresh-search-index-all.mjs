@@ -7,22 +7,38 @@ import { importMunicipalPermitActivity } from "../search-index/import-permit-act
 import { importMunicipalBusinessLicenses } from "../search-index/import-municipal-licenses.js";
 
 const mode = process.argv[2] ?? "daily";
-if (!["daily", "hourly", "municipal"].includes(mode))
-  throw new Error("Choose daily, hourly, or municipal refresh mode");
+if (!["daily", "hourly", "municipal", "licenses"].includes(mode))
+  throw new Error("Choose daily, hourly, municipal, or licenses refresh mode");
 if (!process.env.SEARCH_DATABASE_WRITE_URL)
   throw new Error("SEARCH_DATABASE_WRITE_URL is required for index refresh");
 
-const jobs = mode === "daily" ? [
+const cityLicenses = ["municipal-business-licenses", () => importMunicipalBusinessLicenses()];
+const stateLicenses = ["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].map((id) =>
+  [id, () => importStateRoster(id)]);
+const results = [];
+async function refreshSource([sourceId, refresh]) {
+  try {
+    const result = await refresh();
+    results.push({ source_id: sourceId, status: "complete", ...result });
+  } catch (error) {
+    results.push({ source_id: sourceId,
+      status: ["MUNICIPAL_TYPE_CAP", "MUNICIPAL_LICENSE_UNVERIFIED"].includes(error?.code) ? "blocked" : "failed",
+      warning: String(error?.message ?? error).slice(0, 300) });
+  }
+  console.log(JSON.stringify({ event: "source_refresh", ...results.at(-1) }));
+}
+
+if (mode === "hourly") await refreshSource(cityLicenses);
+const jobs = mode === "licenses" ? [cityLicenses, ...stateLicenses] : mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
+  cityLicenses,
   ["municity:all-permit-types:recent-windows", () => importMunicipalPermitWindows()],
   ["municity-permit-activity", () => importMunicipalPermitActivity()],
   ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup", "managed-lots",
     "ct-brownfields", "metered-parking-spaces", "transit-stops"].map((id) =>
     [id, () => importArcgisSource(id)]),
-  ["municipal-business-licenses", () => importMunicipalBusinessLicenses()],
-  ...["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].map((id) =>
-    [id, () => importStateRoster(id)]),
+  ...stateLicenses,
   ["school-attendance", () => importSchoolAttendance()],
   ["municity-permit-types", () => importMunicipalPermitCatalog()],
 ] : await (async () => {
@@ -44,18 +60,7 @@ const jobs = mode === "daily" ? [
   ];
 })();
 
-const results = [];
-for (const [sourceId, refresh] of jobs) {
-  try {
-    const result = await refresh();
-    results.push({ source_id: sourceId, status: "complete", ...result });
-  } catch (error) {
-    results.push({ source_id: sourceId,
-      status: ["MUNICIPAL_TYPE_CAP", "MUNICIPAL_LICENSE_UNVERIFIED"].includes(error?.code) ? "blocked" : "failed",
-      warning: String(error?.message ?? error).slice(0, 300) });
-  }
-  console.log(JSON.stringify({ event: "source_refresh", ...results.at(-1) }));
-}
+for (const job of jobs) await refreshSource(job);
 console.log(JSON.stringify({ mode,
   completed: results.filter((item) => item.status === "complete").length,
   partial: results.filter((item) => item.status === "partial").map(({ source_id }) => source_id),

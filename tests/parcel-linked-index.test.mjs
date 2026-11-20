@@ -7,6 +7,43 @@ import { filteredPermitLinkGaps } from "../search-index/parcel-only-permits.js";
 import { collectPermitActivity } from "../search-index/permit-activity-source.js";
 import { searchIndexedRecords } from "../search-index/search.js";
 import { reviewedSubparcelEvidence } from "../search-index/subparcel-parents.js";
+import { scanCityLicenseParcels } from "../search-index/scan-city-licenses.js";
+import { reconcileCityLicenses } from "../search-index/import-municipal-licenses.js";
+
+test("the City sweep distinguishes an omitted license list from an empty list and stops on a rate limit", async () => {
+  const input = ["1", "2", "3", "4"].map((id) => ({ objectid: id, parcel_id: id, mblu: id }));
+  const timestamp = Date.parse("2026-11-20T17:00:00Z");
+  const scan = await scanCityLicenseParcels(input, {
+    lookup: async (id) => ({ Parcel_ID: id }),
+    children: async (_kind, id) => {
+      if (id === "1") return { License: [] };
+      if (id === "2") return {};
+      if (id === "3") throw Object.assign(new Error("rate limited"), { upstreamStatus: 429, retryAfter: "3600" });
+      assert.fail("The sweep must stop sending requests after a rate limit");
+    },
+    now: () => timestamp, requestSpacingMs: 0,
+  });
+  assert.deepEqual(scan.updates.map(({ outcome }) => outcome), ["confirmed", "category_missing", "rate_limited"]);
+  assert.equal(scan.rate_limited_until, "2026-11-20T18:00:00.000Z");
+});
+
+test("the sweep keeps earlier verified licenses after a source gap and excludes conflicting parcel links", () => {
+  const history = [
+    { record_id: "1", objectid: "10", parcel_id: "11", fields: { LegalAddress: "3 Edwards Street" } },
+    { record_id: "2", objectid: "20", parcel_id: "21", fields: {} },
+    { record_id: "3", objectid: "30", parcel_id: "31", fields: {} },
+  ];
+  const batch = [
+    { outcome: "category_missing", parcel: { objectid: "10" }, records: [], conflictingIds: [] },
+    { outcome: "confirmed", parcel: { objectid: "20" }, records: [], conflictingIds: [] },
+    { outcome: "confirmed", parcel: { objectid: "40", parcel_id: "41" },
+      records: [{ record_id: "3", fields: {} }], conflictingIds: [] },
+  ];
+  const result = reconcileCityLicenses(history, batch);
+  assert.deepEqual(result.records.map(({ record }) => record.record_id), ["1"]);
+  assert.equal(result.records[0].record.fields.NormalizedLegalAddress, "3 EDWARDS ST");
+  assert.equal(result.conflicts, 1);
+});
 
 test("reviewed municipal subparcel evidence requires the published child, parent and address", () => {
   const permit = { Parcel_ID: 27404, PrintKey: "263 0135 00101", LegalAddress: "1 Example St" };
@@ -124,4 +161,30 @@ test("State license searches cross-filter using the exact City neighborhood of t
   } });
   assert.deepEqual(result.items, [{ city_parcel_id: 123, record_id: "row-123" }]);
   assert.equal(result.complete_for_query, true);
+});
+
+test("a City license address filter requires current parcel and recorded legal address agreement", async (t) => {
+  const oldURL = process.env.SEARCH_DATABASE_URL;
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  t.after(() => {
+    if (oldURL == null) delete process.env.SEARCH_DATABASE_URL;
+    else process.env.SEARCH_DATABASE_URL = oldURL;
+  });
+  const sourceId = "municipal-business-licenses";
+  const result = await searchIndexedRecords({ source_id: sourceId, site_address: "3 Edwards Street",
+    event_date_from: "2026-10-22" }, { query: async (sql, parameters) => {
+    if (sql.includes("search_active_runs")) return parameters[0].map((source_id, index) => ({
+      source_id, scope_key: "all", run_id: index + 1, status: "complete", finished_at: new Date(),
+      latest_attempt_status: "complete", expected_count: 1, returned_count: 1,
+      ambiguous_count: 0, unlinked_count: 0,
+      ...(source_id === sourceId ? { metadata: { named_licenses_without_issue_date: 1 } } : {}),
+    }));
+    assert.ok(parameters.includes("3 EDWARDS ST"));
+    assert.match(sql, /a\.fields->>'normalized_address' = r\.fields->>'NormalizedLegalAddress'/);
+    assert.match(sql, /ap\.join_status = 'exact' AND ap\.city_parcel_id = j\.city_parcel_id/);
+    assert.match(sql, /op\.city_objectid IS DISTINCT FROM j\.city_objectid/);
+    return [];
+  } });
+  assert.equal(result.coverage.source_checks.find(({ source_id }) => source_id === sourceId).date_covered, false);
+  assert.equal(result.complete_for_query, false);
 });

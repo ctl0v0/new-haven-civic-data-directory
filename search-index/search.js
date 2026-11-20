@@ -1,4 +1,5 @@
 import { SourceError } from "../parcel/http.js";
+import { normalizeAddress } from "../parcel/resolve.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { GIS_INDEX_FIELDS } from "./arcgis.js";
 import { indexConfigured, indexQuery } from "./db.js";
@@ -30,7 +31,7 @@ export const SEARCH_FIELDS = Object.freeze({
     "LegalAddress"],
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", "ct-liquor-permits",
-  "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance"]);
+  "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance", MUNICIPAL_LICENSE_SOURCE]);
 const ONE_OF_FIELDS = Object.freeze({ parcels: ["use_code"] });
 export const NUMBER_FIELDS = Object.freeze({
   parcels: ["units_commercial", "units_residential", "units_condo",
@@ -44,11 +45,14 @@ export const NUMBER_FIELDS = Object.freeze({
 const sourceAge = () => 48 * 3600_000;
 const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
   : String(value ?? "").slice(0, 10);
-const dateCoverage = (run, requirement) => (!run.coverage_date_from && !run.coverage_date_to) ||
-  Boolean(requirement?.event_date_from && requirement?.event_date_to &&
+function dateCoverage(run, requirement) {
+  if ((requirement?.event_date_from || requirement?.event_date_to) &&
+      run.metadata?.named_licenses_without_issue_date) return false;
+  if (!run.coverage_date_from && !run.coverage_date_to) return true;
+  return Boolean(requirement?.event_date_from && requirement?.event_date_to &&
     requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
-    requirement.event_date_to <= dateOnly(run.coverage_date_to) &&
-    !run.metadata?.named_licenses_without_issue_date);
+    requirement.event_date_to <= dateOnly(run.coverage_date_to));
+}
 async function missingAttempt(sourceId, scopeKey, query) {
   if (!scopeKey) return null;
   try {
@@ -283,13 +287,14 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
       Number(gaps?.unlinked_count ?? run.unlinked_count) === 0 && dateCovered;
     return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
       status: complete ? "complete" : "partial",
-      ...(run.coverage_date_from || source_id === "municity" ? { date_covered: dateCovered,
+      ...(run.coverage_date_from || ["municity", MUNICIPAL_LICENSE_SOURCE].includes(source_id) ? { date_covered: dateCovered,
         coverage_date_from: run.coverage_date_from ? dateOnly(run.coverage_date_from) : null,
         coverage_date_to: run.coverage_date_to ? dateOnly(run.coverage_date_to) : null } : {}),
       run_id: Number(run.run_id), fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count), ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
       ...(gaps ? { filtered_parcel_link_gaps: gaps } : {}),
+      ...(source_id === MUNICIPAL_LICENSE_SOURCE ? { inventory: run.metadata } : {}),
       warning: run.warning ?? null,
       latest_attempt_status: run.latest_attempt_status === "failed" &&
         run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
@@ -379,6 +384,12 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   const neighborhood = input.neighborhood == null ? null : String(input.neighborhood).trim();
   if (neighborhood != null && (!neighborhood || neighborhood.length > 80 ||
       /[\x00-\x1f]/.test(neighborhood))) throw new SourceError("Invalid City neighborhood", 400);
+  const licenseAddress = sourceId === MUNICIPAL_LICENSE_SOURCE || Object.hasOwn(STATE_ROSTERS, sourceId);
+  const rawAddress = input.site_address;
+  const siteAddress = rawAddress == null ? null : normalizeAddress(rawAddress);
+  if (rawAddress != null && (!licenseAddress || typeof rawAddress !== "string" || rawAddress.length > 160 ||
+      /[\x00-\x1f]/.test(rawAddress) || !/^\d+ [A-Z0-9]/.test(siteAddress)))
+    throw new SourceError("Provide a street address for a City or State license source", 400);
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
     throw new SourceError("limit must be 1–50", 400);
@@ -386,7 +397,8 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     ...(neighborhood ? ["neighborhoods"] : []),
     ...(ADDRESS_DEPENDENT.has(sourceId) ? ["addresses"] : [])])];
   const criteria = { ...requirement, city_parcel_id: parcelId,
-    city_objectid: objectId, ...(neighborhood ? { neighborhood } : {}) };
+    city_objectid: objectId, ...(neighborhood ? { neighborhood } : {}),
+    ...(siteAddress ? { site_address: siteAddress } : {}) };
   if (!indexConfigured()) return { criteria, items: [], next_cursor: null,
     complete_for_query: false, coverage: { index_status: "unconfigured",
       source_checks: requiredSources.map((source_id) => ({ source_id, status: "unconfigured" })) } };
@@ -442,7 +454,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
       Number(gaps?.unlinked_count ?? run.unlinked_count) === 0 && dateCovered;
     return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
       status: complete ? "complete" : "partial", run_id: Number(run.run_id),
-      ...(run.coverage_date_from || source_id === "municity" ? { date_covered: dateCovered,
+      ...(run.coverage_date_from || ["municity", MUNICIPAL_LICENSE_SOURCE].includes(source_id) ? { date_covered: dateCovered,
         coverage_date_from: run.coverage_date_from ? dateOnly(run.coverage_date_from) : null,
         coverage_date_to: run.coverage_date_to ? dateOnly(run.coverage_date_to) : null } : {}),
       fresh, expected_count: Number(run.expected_count),
@@ -485,10 +497,29 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   }
   const parcelRun = add(runs.parcels);
   const addressRun = ADDRESS_DEPENDENT.has(sourceId) ? add(runs.addresses) : null;
+  const publishedAddressField = sourceId === MUNICIPAL_LICENSE_SOURCE
+    ? "NormalizedLegalAddress" : "normalized_site_address";
+  const validLicensePoint = licenseAddress ? `
+        AND a.fields->>'normalized_address' = r.fields->>'${publishedAddressField}'
+        AND EXISTS (SELECT 1 FROM search_record_parcels ap
+          WHERE ap.run_id = a.run_id AND ap.source_id = a.source_id AND ap.record_id = a.record_id
+            AND ap.join_status = 'exact' AND ap.city_parcel_id = j.city_parcel_id
+            AND ap.city_objectid = j.city_objectid)
+        AND NOT EXISTS (SELECT 1 FROM search_records other
+          LEFT JOIN search_record_parcels op USING (run_id, source_id, record_id)
+          WHERE other.run_id = a.run_id AND other.source_id = 'addresses'
+            AND other.fields->>'normalized_address' = a.fields->>'normalized_address'
+            AND (op.join_status IS DISTINCT FROM 'exact'
+              OR op.city_parcel_id IS DISTINCT FROM j.city_parcel_id
+              OR op.city_objectid IS DISTINCT FROM j.city_objectid))` : "";
+  if (siteAddress) filters.push(`EXISTS (SELECT 1 FROM search_records a
+      WHERE a.run_id = ${addressRun} AND a.source_id = 'addresses'
+        AND a.record_id = j.city_address_objectid::text
+        AND a.fields->>'normalized_address' = ${add(siteAddress)}${validLicensePoint})`);
   const addressJoin = addressRun == null ? "" : `
       LEFT JOIN search_records a ON a.run_id = ${addressRun}
         AND a.source_id = 'addresses'
-        AND a.record_id = j.city_address_objectid::text`;
+        AND a.record_id = j.city_address_objectid::text${validLicensePoint}`;
   const addressEvidence = addressRun == null ? "'[]'::jsonb" : `COALESCE(
         jsonb_agg(DISTINCT jsonb_build_object(
           'objectid', a.record_id, 'house_number', a.fields->>'house_number',
@@ -517,7 +548,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
       AND p.fields->>'objectid' = page.city_objectid::text
     LEFT JOIN LATERAL (
       SELECT array_agg(DISTINCT j.city_address_objectid)
-        FILTER (WHERE j.city_address_objectid IS NOT NULL) AS city_address_objectids,
+        FILTER (WHERE ${licenseAddress ? "a.record_id" : "j.city_address_objectid"} IS NOT NULL) AS city_address_objectids,
         ${addressEvidence} AS city_address_points,
         array_agg(DISTINCT j.match_method) AS match_methods
       FROM search_record_parcels j${addressJoin} WHERE j.run_id = ${recordRun}

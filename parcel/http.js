@@ -36,6 +36,7 @@ export async function fetchBounded(
     const error = new SourceError(`Upstream returned HTTP ${response.status}`);
     error.upstreamStatus = response.status;
     error.upstreamLocation = response.headers.get("location");
+    error.retryAfter = response.headers.get("retry-after");
     throw error;
   }
   if (Number(response.headers.get("content-length") || 0) > maxBytes)

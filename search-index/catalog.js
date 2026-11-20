@@ -42,7 +42,7 @@ export const INDEX_DATASETS = Object.freeze({
   "municity-permit-activity": { cadence: "daily",
     gate: "Application, review and inspection rows linked through exact City parcel permits of the published types Water Heater and Hood - C in the 90-day PermitDate window." },
   "municipal-business-licenses": { cadence: "daily",
-    gate: "Named City business licenses with a verified parcel link. The date-bounded index uses the City's IssueDate field." },
+    gate: "The citywide sweep indexes named licenses from verified municipal parcels in batches. A legal address is linked to a City address point when it agrees with the parcel. Issuance queries use the City's IssueDate field." },
   "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",
     cadence: "daily" },
   ...Object.fromEntries([...stateLocations].map((id) => [id,

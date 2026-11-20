@@ -4,14 +4,14 @@ name: Refresh private parcel search index
 on:
   push:
     branches: [main, codex/parcel-pilot]
-    paths: [.github/workflows/refresh-search-index.yml, scripts/refresh-search-index-all.mjs, scripts/smoke-question-demo.mjs, search-index/import.js, search-index/municity.js, search-index/schema.sql]
+    paths: [.github/workflows/refresh-search-index.yml, scripts/refresh-search-index-all.mjs, scripts/smoke-question-demo.mjs, search-index/import.js, search-index/municity.js, search-index/schema.sql, search-index/*licenses.js]
   workflow_dispatch:
     inputs:
       mode:
         description: Which official source refresh to run
         required: true
         type: choice
-        options: [daily, hourly, municipal]
+        options: [daily, hourly, municipal, licenses]
   schedule:
     - cron: '17 * * * *'
     - cron: '47 7 * * *'
@@ -60,7 +60,7 @@ jobs:
           else
             mode="$REQUESTED_MODE"
           fi
-          case "$mode" in daily|hourly|municipal) ;; *) exit 1 ;; esac
+          case "$mode" in daily|hourly|municipal|licenses) ;; *) exit 1 ;; esac
           echo "value=$mode" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:

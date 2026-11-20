@@ -1,6 +1,7 @@
 import { indexConfigured, indexQuery } from "./db.js";
 import { indexSourceCatalog } from "./catalog.js";
 import { RECENT_PERMIT_SCOPES, RECENT_PERMIT_WINDOWS } from "./municity.js";
+import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 
 const maxAgeMs = (cadence) => cadence === "hourly" ? 2 * 3600_000 : 48 * 3600_000;
 
@@ -150,6 +151,7 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
             ...(run.coverage_date_from ? { coverage_date_from: run.coverage_date_from,
               coverage_date_to: run.coverage_date_to } : {}),
             ...(source.source_id === "municity-permit-activity" ? { type_inventory: run.metadata?.by_type } : {}),
+            ...(source.source_id === MUNICIPAL_LICENSE_SOURCE ? { license_inventory: run.metadata } : {}),
             last_successful_refresh: run.finished_at, warning: run.warning,
             latest_attempt_status: run.latest_attempt_status,
             latest_attempt_started_at: run.latest_attempt_started_at,

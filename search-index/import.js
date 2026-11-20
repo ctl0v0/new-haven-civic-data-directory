@@ -231,7 +231,7 @@ async function linkStateAddresses(runId, sourceId) {
 }
 
 export async function finishRun(runId, sourceId, expectedCount,
-  { sourceWarning = null, partial = false, metadata = {} } = {}) {
+  { sourceWarning = null, partial = false, metadata = {}, licenseChecks = null, previousRunId = null } = {}) {
   const count = await write(`SELECT COUNT(*)::integer AS n FROM search_records WHERE run_id = $1`, [runId]);
   const returned = Number(count[0].n);
   if (returned !== expectedCount) throw new Error(`Source count ${expectedCount} differs from indexed count ${returned}`);
@@ -265,16 +265,36 @@ export async function finishRun(runId, sourceId, expectedCount,
   const warning = [sourceId === "parcels" && unlinked > 0
     ? `${unlinked} official City parcel features lack a published parcel ID`
     : null, sourceWarning].filter(Boolean).join("; ") || null;
-  await write(`WITH finished AS (
+  const checkpoint = licenseChecks ? `, saved AS (
+    INSERT INTO search_city_license_checks
+      (city_objectid, city_parcel_id, mblu, outcome, last_checked_at, next_check_at)
+    SELECT c.city_objectid, c.city_parcel_id, c.mblu, c.outcome, c.last_checked_at, c.next_check_at
+    FROM activated CROSS JOIN jsonb_to_recordset($10::jsonb) AS c(
+      city_objectid bigint, city_parcel_id bigint, mblu text, outcome text,
+      last_checked_at timestamptz, next_check_at timestamptz)
+    ON CONFLICT (city_objectid) DO UPDATE SET city_parcel_id = EXCLUDED.city_parcel_id,
+      mblu = EXCLUDED.mblu, outcome = EXCLUDED.outcome,
+      last_checked_at = EXCLUDED.last_checked_at, next_check_at = EXCLUDED.next_check_at
+  )` : "";
+  const activated = await write(`WITH finished AS (
     UPDATE search_source_runs SET status = $7, finished_at = now(),
       returned_count = $2, linked_count = $3, ambiguous_count = $4,
       unlinked_count = $5, warning = $6, metadata = metadata || $8::jsonb
-    WHERE id = $1 AND status = 'running' RETURNING id, source_id, scope_key
-  )
-  INSERT INTO search_active_runs (source_id, scope_key, run_id)
-  SELECT source_id, scope_key, id FROM finished
-  ON CONFLICT (source_id, scope_key) DO UPDATE SET run_id = EXCLUDED.run_id`,
-  [runId, returned, linked, ambiguous, unlinked, warning, partial ? "partial" : "complete", JSON.stringify(metadata)]);
+    WHERE id = $1 AND status = 'running'${licenseChecks ? `
+      AND (SELECT run_id FROM search_active_runs a WHERE a.source_id = search_source_runs.source_id
+        AND a.scope_key = search_source_runs.scope_key) IS NOT DISTINCT FROM $9::bigint` : ""}
+    RETURNING id, source_id, scope_key
+  ), activated AS (
+    INSERT INTO search_active_runs (source_id, scope_key, run_id)
+    SELECT source_id, scope_key, id FROM finished
+    ON CONFLICT (source_id, scope_key) DO UPDATE SET run_id = EXCLUDED.run_id
+      ${licenseChecks ? "WHERE search_active_runs.run_id = $9::bigint" : ""}
+    RETURNING run_id
+  )${checkpoint} SELECT run_id FROM activated`,
+  [runId, returned, linked, ambiguous, unlinked, warning, partial ? "partial" : "complete",
+    JSON.stringify(metadata), ...(licenseChecks ? [previousRunId, JSON.stringify(licenseChecks)] : [])]);
+  if (licenseChecks && !activated.length)
+    throw new Error("The City license index changed while this batch was running; its checkpoints were not applied");
   return { run_id: runId, returned, linked, ambiguous, unlinked };
 }
 
