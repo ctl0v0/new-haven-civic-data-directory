@@ -49,3 +49,6 @@ console.log('Validated and built '+entries.length+' source entries.');
 if (process.env.VERCEL_ENV === 'preview' &&
     process.env.VERCEL_GIT_COMMIT_REF === 'codex/parcel-pilot')
   await import('./smoke-preview-question.mjs');
+
+if (process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'codex/parcel-mixed-use-audit')
+  await import('./qa-mixed-use.mjs');
