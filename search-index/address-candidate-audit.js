@@ -57,7 +57,8 @@ export async function auditMunicipalAddressCandidates(permitTypes, { query = ind
   const results = [];
   for (const permitType of permitTypes) {
     const scope = `permit-type:${permitType.toUpperCase()}`;
-    const [run] = await query(`SELECT r.id, r.status, r.returned_count, r.finished_at
+    const [run] = await query(`SELECT r.id, r.status, r.returned_count, r.finished_at,
+      to_jsonb(r)->'metadata' AS metadata
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       WHERE a.source_id = 'municity' AND a.scope_key = $1`, [scope]);
     if (!run || run.status !== "complete") {
@@ -76,7 +77,7 @@ export async function auditMunicipalAddressCandidates(permitTypes, { query = ind
         AND j.record_id = r.record_id
       WHERE r.run_id = $1 AND r.source_id = 'municity'
       GROUP BY r.record_id, r.fields ORDER BY r.record_id::bigint`, [run.id]);
-    if (rows.length !== Number(run.returned_count))
+    if (rows.length !== Number(run.metadata?.indexed_count ?? run.returned_count))
       throw new Error(`Municipal address audit did not read all ${permitType} records`);
     const counts = { indexed_records: rows.length, with_legal_address: 0,
       with_exact_city_address_candidate: 0, missing_city_address_point: 0,

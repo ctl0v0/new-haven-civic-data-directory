@@ -16,11 +16,17 @@ const [identity] = await indexQuery(`SELECT current_user AS role,
 if (identity?.role !== role || !identity.can_read || identity.can_insert)
   throw new Error("Parent-key audit requires the read-only index role");
 
-const [permitRun] = await indexQuery(`SELECT run_id FROM search_active_runs
-  WHERE source_id = 'municity' AND scope_key = 'permit-group:ELECTRICAL'`);
+const [permitRun] = await indexQuery(`SELECT a.run_id, to_jsonb(r)->'metadata' AS metadata
+  FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
+  WHERE a.source_id = 'municity' AND a.scope_key = 'permit-group:ELECTRICAL'`);
 const [cityRun] = await indexQuery(`SELECT run_id FROM search_active_runs
   WHERE source_id = 'parcels' AND scope_key = 'all'`);
 if (!permitRun || !cityRun) throw new Error("Validated permit and City parcel runs are required");
+if (permitRun.metadata?.parcel_only) {
+  console.log(JSON.stringify({ event: "recent_electrical_parent_key_audit_summary",
+    run_id: permitRun.run_id, ...permitRun.metadata.parcel_link_summary }));
+  process.exit(0);
+}
 const unlinked = await indexQuery(`SELECT r.record_id, r.fields->>'Parcel_ID' AS vendor_parcel_id,
     r.fields->>'PrintKey' AS print_key, r.fields->>'LegalAddress' AS legal_address
   FROM search_records r WHERE r.run_id = $1 AND r.source_id = 'municity'

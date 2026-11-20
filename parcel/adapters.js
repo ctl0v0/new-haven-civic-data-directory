@@ -1508,7 +1508,7 @@ async function municityRecords(parcel) {
     ["Contact", "Contact_ID", []],
     ["Permit", "Permit_ID", ["PermitDate", "CreatedDate"]],
     ["Application", "Application_ID", ["ApplicationDate", "CreatedDate"]],
-    ["License", "License_ID", ["IssueDate", "CreatedDate"]],
+    ["License", "License_ID", ["IssueDate"]],
     ["Occupant", "Occupant_ID", ["CreatedDate"]],
     ["Certificate", "Certificate_ID", ["CertificateDate", "CreatedDate"]],
   ]) {
@@ -1614,6 +1614,7 @@ async function municipalBusinessRecords(parcel) {
     )
     .map((item) => {
       const a = item.attributes;
+      const issueDate = date(a.IssueDate);
       return record(
         item.source_record_id,
         "municipal-business-licenses",
@@ -1622,12 +1623,13 @@ async function municipalBusinessRecords(parcel) {
           license_number: text(a.LicenseNumber),
           license_type: text(a.LicenseType),
           status: text(a.Status),
+          issue_date: issueDate,
           recorded_address: text(a.LegalAddress ?? a.Addr1),
           recorded_address_field: a.LegalAddress ? "LegalAddress" : a.Addr1 ? "Addr1" : null,
           expiration_date: date(a.ExpirationDate),
         },
         {
-          eventDate: item.event_date,
+          eventDate: issueDate,
           match: item.match,
           sourceUrl: item.source_url,
           note: "Municipal license linked by verified parcel MBLU. Its recorded address and status do not prove where or whether the business currently operates.",

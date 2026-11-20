@@ -15,6 +15,9 @@ const formats = [
   { fieldtype: "date", encoding: "iso" }, { fieldtype: "text", encoding: "us_short" },
 ];
 const blocked = (message) => Object.assign(new Error(message), { code: "MUNICIPAL_LICENSE_UNVERIFIED" });
+export const licensePrintKey = (value) => text(value).replace(/[/\s]+/g, " ").trim().toUpperCase();
+export const isNamedBusinessLicense = (row) => Boolean(text(row?.BusinessName)) &&
+  ![true, 1, "true", "1"].includes(row.Deleted);
 
 // Reproduce a known city-issued license from the City's own parcel children.
 // An empty date result is meaningful only after this check passes.
@@ -78,8 +81,7 @@ export function normalizedBusinessLicenses(rows) {
     }
     byId.set(recordId, existing);
   }
-  return [...byId].filter(([, row]) => text(row.BusinessName) &&
-    ![true, 1, "true", "1"].includes(row.Deleted)).map(([record_id, row]) => {
+  return [...byId].filter(([, row]) => isNamedBusinessLicense(row)).map(([record_id, row]) => {
     const { Deleted, ...fields } = row;
     return { record_id, fields,
       source_url: `${WEB}/Parcel/${id(row.Parcel_ID)}`,

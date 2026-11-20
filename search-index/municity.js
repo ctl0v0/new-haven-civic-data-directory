@@ -269,17 +269,31 @@ async function checkedPermitDay(day, format, dateRows) {
 
 const workOptions = { headers: { SourceId: "2" }, timeout: 10000, maxBytes: 10_000_000 };
 
-export async function municipalEntityRow(entity, entityId, { get = fetchJson } = {}) {
-  if (!["Parcel", "Application"].includes(entity) || !/^\d{1,12}$/.test(String(entityId ?? ""))) return null;
+async function exactMunicipalRow(entity, field, value, get) {
   const url = new URL(VENDOR);
   for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT",
     entity, entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
-    module: "", numrecs: "5", operator: "=", pid: "", searchfield: `${entity}_ID`,
-    section: "", value: String(entityId) })) url.searchParams.set(key, value);
+    module: "", numrecs: "5", operator: "=", pid: "", searchfield: field,
+    section: "", value })) url.searchParams.set(key, value);
   const data = await get(url, workOptions);
-  if (Number(data.total) !== 1 || !Array.isArray(data.rows) || data.rows.length !== 1 ||
-      String(data.rows[0][`${entity}_ID`]) !== String(entityId)) return null;
+  if (Number(data.total) !== 1 || !Array.isArray(data.rows) || data.rows.length !== 1) return null;
   return data.rows[0];
+}
+
+export async function municipalEntityRow(entity, entityId, { get = fetchJson } = {}) {
+  if (!["Parcel", "Application"].includes(entity) || !/^\d{1,12}$/.test(String(entityId ?? ""))) return null;
+  const field = `${entity}_ID`;
+  const row = await exactMunicipalRow(entity, field, String(entityId), get);
+  return String(row?.[field]) === String(entityId) ? row : null;
+}
+
+export async function municipalParcelByPrintKey(printKey, { get = fetchJson } = {}) {
+  const normalize = (value) => String(value ?? "").replace(/[/\s]+/g, " ").trim().toUpperCase();
+  const value = normalize(printKey);
+  if (!value || value.length > 80) return null;
+  const row = await exactMunicipalRow("Parcel", "PrintKey", value, get);
+  return normalize(row?.PrintKey) === value && /^[1-9]\d{0,11}$/.test(String(row.Parcel_ID))
+    ? row : null;
 }
 
 export const municipalParcelRow = (id, options) => municipalEntityRow("Parcel", id, options);

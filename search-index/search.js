@@ -48,16 +48,16 @@ const dateCoverage = (run, requirement) => (!run.coverage_date_from && !run.cove
   Boolean(requirement?.event_date_from && requirement?.event_date_to &&
     requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
     requirement.event_date_to <= dateOnly(run.coverage_date_to));
-async function missingMunicipalAttempt(scopeKey, query) {
+async function missingAttempt(sourceId, scopeKey, query) {
   if (!scopeKey) return null;
   try {
     const rows = await query(`SELECT status, warning, started_at
-      FROM search_source_runs WHERE source_id = 'municity' AND scope_key = $1
-      ORDER BY started_at DESC, id DESC LIMIT 1`, [scopeKey]);
+      FROM search_source_runs WHERE scope_key = $1 AND source_id = $2
+      ORDER BY started_at DESC, id DESC LIMIT 1`, [scopeKey, sourceId]);
     const latest = rows[0];
     return latest ? {
       latest_attempt_status: latest.status === "failed" &&
-        latest.warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : latest.status,
+        /^MUNICIPAL_(?:TYPE_CAP|LICENSE_UNVERIFIED):/.test(latest.warning ?? "") ? "blocked" : latest.status,
       latest_attempt_warning: latest.warning ?? null,
       latest_attempt_started_at: latest.started_at,
     } : null;
@@ -261,12 +261,14 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
     if (municipal) byId.set("municity", municipal);
   }
   const absentMunicipal = municipalScope && !byId.has("municity")
-    ? await missingMunicipalAttempt(municipalScope, query) : null;
+    ? await missingAttempt("municity", municipalScope, query) : null;
+  const absentLicenses = requiredSources.includes(MUNICIPAL_LICENSE_SOURCE) && !byId.has(MUNICIPAL_LICENSE_SOURCE)
+    ? await missingAttempt(MUNICIPAL_LICENSE_SOURCE, "all", query) : null;
   const sourceChecks = requiredSources.map((source_id) => {
     const run = byId.get(source_id);
     if (!run) return { source_id, status: "not_indexed",
       ...(source_id === "municity" ? { scope_key: municipalScope,
-        ...absentMunicipal } : {}) };
+        ...absentMunicipal } : source_id === MUNICIPAL_LICENSE_SOURCE ? absentLicenses : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const dateCovered = dateCoverage(run, requirements.find((item) => item.source_id === source_id));
@@ -417,12 +419,14 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     if (municipal) byId.set("municity", municipal);
   }
   const absentMunicipal = municipalScope && !byId.has("municity")
-    ? await missingMunicipalAttempt(municipalScope, query) : null;
+    ? await missingAttempt("municity", municipalScope, query) : null;
+  const absentLicenses = sourceId === MUNICIPAL_LICENSE_SOURCE && !byId.has(MUNICIPAL_LICENSE_SOURCE)
+    ? await missingAttempt(MUNICIPAL_LICENSE_SOURCE, "all", query) : null;
   const sourceChecks = requiredSources.map((source_id) => {
     const run = byId.get(source_id);
     if (!run) return { source_id, status: "not_indexed",
       ...(source_id === "municity" ? { scope_key: municipalScope,
-        ...absentMunicipal } : {}) };
+        ...absentMunicipal } : source_id === MUNICIPAL_LICENSE_SOURCE ? absentLicenses : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const dateCovered = dateCoverage(run, source_id === sourceId ? requirement : null);

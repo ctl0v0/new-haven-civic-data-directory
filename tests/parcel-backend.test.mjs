@@ -686,6 +686,7 @@ test("named municipal license appears in business records with historical status
   assert.equal(out.items.length, 1);
   assert.equal(out.items[0].attributes.business_name, "Weary Hobo LLC aka Bar August");
   assert.equal(out.items[0].attributes.status, "Void");
+  assert.equal(out.items[0].event_date, null);
   assert.equal(out.items[0].attributes.recorded_address, "990 STATE ST");
   assert.equal(out.items[0].attributes.recorded_address_field, "LegalAddress");
   assert.doesNotMatch(JSON.stringify(out), /Unrelated vendor detail/);

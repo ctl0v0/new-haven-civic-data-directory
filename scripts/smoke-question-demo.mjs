@@ -101,6 +101,13 @@ if (license.interpretation?.date_field !== "IssueDate" ||
 console.log(JSON.stringify({ event: "municipal_business_license_mcp_smoke",
   status: license.status, count: licenseRows.length, criteria: license.criteria,
   sources: license.search_result?.coverage?.source_checks }));
+for (const source_id of ["ct-liquor-permits", "ct-child-care-licenses"]) {
+  const answer = await callMcp("search_indexed_records", { source_id, neighborhood: "East Rock",
+    event_date_from: window.from, event_date_to: window.to, limit: 5 });
+  console.log(JSON.stringify({ event: "state_license_mcp_smoke", source_id,
+    count: answer.items.length, complete_for_query: answer.complete_for_query,
+    sources: answer.coverage.source_checks }));
+}
 for (const permit_type of ["Water Heater", "Hood - C"]) {
   for (const activity_kind of ["application", "review", "inspection"]) {
     const activity = await callMcp("search_indexed_permit_activity", { permit_type, activity_kind, limit: 5 });

@@ -4,11 +4,12 @@ export const PERMIT_ACTIVITY_SOURCE = "municity-permit-activity";
 export const PERMIT_ACTIVITY_TYPES = Object.freeze(["Water Heater", "Hood - C"]);
 export const PERMIT_ACTIVITY_KINDS = Object.freeze({
   application: { id: "Application_ID", type: "ApplicationType", status: "PermitApplicationStatus",
-    date: "ApplicationDate", fields: ["ApplicationNumber", "ApplicaNo", "Status", "ApplicationStatus", "Department"] },
+    statusFallback: "ApplicationStatus", date: "ApplicationDate",
+    fields: ["ApplicationNumber", "ApplicaNo", "Status", "ApplicationStatus", "Department"] },
   review: { category: "Task", id: "Task_ID", type: "TaskType", status: "ApprovalStatus",
-    date: "DateCompleted", fields: ["Entity", "Entity_ID"] },
+    date: "DateCompleted", fields: ["Entity", "Entity_ID", "Department"] },
   inspection: { category: "Inspection", id: "Inspection_ID", type: "InspType", status: "Status",
-    date: "CloseDate", fields: ["SchedDate", "Department", "PermitNo"] },
+    date: "CloseDate", fields: ["SchedDate", "Department", "PermitNo", "Results"] },
 });
 
 const WEB = "https://www.municityconnect.com/#/app/NewHavenCityCT/entity";
@@ -39,6 +40,9 @@ export async function collectPermitActivity(permit, {
     const linkedFrom = { entity: parent.kind, entity_id: parent.id, source_url: sourceUrl };
     const published = Object.fromEntries([definition.id, definition.type, definition.status, definition.date,
       ...definition.fields].filter((field) => text(row[field])).map((field) => [field, row[field]]));
+    const statusField = text(row[definition.status]) ? definition.status :
+      definition.statusFallback && text(row[definition.statusFallback]) ? definition.statusFallback : null;
+    const status = statusField ? text(row[statusField]) : null;
     const existing = records.get(recordId);
     if (existing) {
       if (Object.entries(published).some(([field, value]) => conflicts(value, existing.fields[field]))) {
@@ -49,15 +53,19 @@ export async function collectPermitActivity(permit, {
         Object.assign(existing.fields, published);
         existing.fields.linked_from.push(linkedFrom);
         existing.published_type ??= text(row[definition.type]) || null;
-        existing.published_status ??= text(row[definition.status]) || null;
+        if (statusField && (!existing.published_status || statusField === definition.status)) {
+          existing.published_status = status;
+          existing.fields.activity_status_field = statusField;
+        }
         existing.event_date ??= eventDate;
       }
       return;
     }
     records.set(recordId, { record_id: recordId, source_url: sourceUrl,
       published_type: text(row[definition.type]) || null,
-      published_status: text(row[definition.status]) || null,
+      published_status: status,
       event_date: eventDate, fields: { ...published, activity_kind: kind,
+        activity_status_field: statusField,
         permit_id: permitId, permit_type: permit.published_type,
         permit_status: permit.published_status, permit_number: permit.fields?.PermitNo ?? null,
         permit_date: municipalDate(permit.fields?.PermitDate),

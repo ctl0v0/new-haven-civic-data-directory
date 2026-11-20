@@ -15,12 +15,12 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
 const jobs = mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
-  ["municipal-business-licenses", () => importMunicipalBusinessLicenses()],
   ["municity:all-permit-types:recent-windows", () => importMunicipalPermitWindows()],
   ["municity-permit-activity", () => importMunicipalPermitActivity()],
   ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup", "managed-lots",
     "ct-brownfields", "metered-parking-spaces", "transit-stops"].map((id) =>
     [id, () => importArcgisSource(id)]),
+  ["municipal-business-licenses", () => importMunicipalBusinessLicenses()],
   ...["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].map((id) =>
     [id, () => importStateRoster(id)]),
   ["school-attendance", () => importSchoolAttendance()],

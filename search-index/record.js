@@ -78,7 +78,7 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
     if (run.coverage_date_from || run.coverage_date_to) {
       coverage.coverage_date_from = run.coverage_date_from;
       coverage.coverage_date_to = run.coverage_date_to;
-      coverage.note = "The selected permit source run covers only the published dates shown here.";
+      coverage.note = "The selected source run covers only the published dates shown here.";
     }
     const rows = await query(`SELECT record_id, source_url, published_type,
       published_status, event_date, fields,

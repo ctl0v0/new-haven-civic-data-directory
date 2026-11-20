@@ -18,7 +18,7 @@ if (identity?.role !== role || !identity.can_read || identity.can_write)
   throw new Error("The parcel-link audit requires a verified read-only index role");
 
 const active = await indexQuery("SELECT r.id, r.source_id, r.scope_key, r.status, r.returned_count, " +
-  "r.unlinked_count, r.coverage_date_from, r.coverage_date_to FROM search_active_runs a " +
+  "r.unlinked_count, r.coverage_date_from, r.coverage_date_to, to_jsonb(r)->'metadata' AS metadata FROM search_active_runs a " +
   "JOIN search_source_runs r ON r.id = a.run_id WHERE " +
   "(a.source_id = 'municity' AND a.scope_key = 'permit-window:90') " +
   "OR (a.source_id IN ('parcels','addresses','neighborhoods') AND a.scope_key = 'all')");
@@ -28,6 +28,12 @@ const addresses = active.find((row) => row.source_id === "addresses");
 const neighborhoods = active.find((row) => row.source_id === "neighborhoods");
 if ([permit, city, addresses, neighborhoods].some((row) => row?.status !== "complete"))
   throw new Error("Validated permit, City parcel, address and neighborhood source runs are required");
+if (permit.metadata?.parcel_only) {
+  console.log(JSON.stringify({ event: "recent_permit_linkage_audit_summary",
+    run_id: permit.id, date_from: permit.coverage_date_from, date_to: permit.coverage_date_to,
+    source_count: permit.returned_count, ...permit.metadata.parcel_link_summary }));
+  process.exit(0);
+}
 
 const missing = await indexQuery("SELECT r.record_id, r.published_type, r.event_date, r.source_url, " +
   "r.fields->>'PermitNo' AS permit_number, r.fields->>'Parcel_ID' AS vendor_id, " +
