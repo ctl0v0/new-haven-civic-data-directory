@@ -15,13 +15,15 @@ log('run', { time, index_status: coverage.index_status });
 if (coverage.index_status !== 'connected') throw new Error('Read-only coverage unavailable');
 const types = coverage.municipal_permit_types.filter((type) => type.in_catalog);
 const bySource = new Map(coverage.sources.filter(({ index_source_id }) => index_source_id).map((row) => [row.index_source_id, row]));
-log('permits_status', { catalog: coverage.municipal_permit_catalog, recent: coverage.municipal_recent_permits,
-  historical: { sourceRows: sum(types, 'returned_count'), retainedLinks: sum(types, 'linked_count'),
-    unlinked: sum(types, 'unlinked_count'), ambiguous: sum(types, 'ambiguous_count'), stale: types.filter((r) => r.indexed && !r.fresh).length,
-    missingOrFailed: types.filter((r) => !r.indexed || ['failed', 'blocked'].includes(r.latest_attempt_status)).map((r) => ({
-      name: r.permit_type, indexed: r.indexed, latest: r.latest_attempt_status, reason: r.latest_attempt_warning?.slice(0, 150),
-    })), topLinkGaps: [...types].sort((a,b) => (b.unlinked_count ?? 0) - (a.unlinked_count ?? 0)).slice(0, 8)
-      .map((r) => [r.permit_type, r.unlinked_count, r.returned_count]) } });
+log('permit_catalog', coverage.municipal_permit_catalog);
+for (const row of coverage.municipal_recent_permits) log('recent_window', row);
+log('historical_permits', { sourceRows: sum(types, 'returned_count'), retainedLinks: sum(types, 'linked_count'),
+  unlinked: sum(types, 'unlinked_count'), ambiguous: sum(types, 'ambiguous_count'), stale: types.filter((r) => r.indexed && !r.fresh).length,
+  topLinkGaps: [...types].sort((a,b) => (b.unlinked_count ?? 0) - (a.unlinked_count ?? 0)).slice(0, 8)
+    .map((r) => [r.permit_type, r.unlinked_count, r.returned_count]) });
+for (const r of types.filter((r) => !r.indexed || ['failed', 'blocked'].includes(r.latest_attempt_status)))
+  log('historical_type_gap', { name: r.permit_type, indexed: r.indexed, latest: r.latest_attempt_status,
+    reason: r.latest_attempt_warning?.slice(0, 160) });
 for (const [source, row] of bySource) log('index_source', { source, indexed: row.indexed, latest: row.latest_attempt_status,
   runId: row.active_run_id, sourceRows: row.source_count, scanned: row.returned_count, linked: row.linked_count,
   ambiguous: row.ambiguous_count, unlinked: row.unlinked_count, checked: row.last_successful_refresh, fresh: row.fresh,
@@ -78,6 +80,33 @@ await Promise.all([
     LEFT JOIN search_record_parcels j ON j.run_id=a.run_id AND j.source_id=a.source_id
     WHERE a.source_id='municity' AND a.scope_key LIKE 'permit-window:%'
     GROUP BY a.scope_key, rr.metadata->'parcel_link_summary' ORDER BY a.scope_key`)),
+  check('zoning_area_vs_boundary', async () => (await indexQuery(`WITH code_links AS (
+    SELECT p.record_id AS parcel_oid, nullif(trim(z.fields->>'zone_code'),'') AS zone_code,
+      ST_Relate(p.geometry,z.geometry,'2********') AS area_overlap
+    FROM search_record_parcels j
+    JOIN search_records z ON z.run_id=j.run_id AND z.source_id=j.source_id AND z.record_id=j.record_id
+    JOIN search_records p ON p.run_id=$1 AND p.source_id='parcels' AND p.record_id=j.city_objectid::text
+      AND p.fields->>'parcel_id'=j.city_parcel_id::text
+    WHERE j.run_id=$2 AND j.source_id='zoning' AND j.join_status='exact'
+  ), per_parcel AS (
+    SELECT parcel_oid, count(DISTINCT zone_code) AS codes,
+      count(DISTINCT zone_code) FILTER (WHERE area_overlap) AS area_codes,
+      bool_or(area_overlap) AS has_area_overlap
+    FROM code_links GROUP BY parcel_oid
+  ) SELECT count(*)::int AS intersecting,
+    count(*) FILTER (WHERE has_area_overlap)::int AS area_overlap_parcels,
+    count(*) FILTER (WHERE codes > 1)::int AS multiple_intersecting_codes,
+    count(*) FILTER (WHERE area_codes > 1)::int AS multiple_area_codes,
+    count(*) FILTER (WHERE codes > 1 AND area_codes <= 1)::int AS multiple_codes_due_to_touch
+    FROM per_parcel`, [bySource.get('parcels').active_run_id, bySource.get('zoning').active_run_id]))[0]),
+  check('unique_address_links', async () => (await indexQuery(`WITH points AS (
+      SELECT record_id, bool_or(join_status='exact') AS has_exact,
+        bool_or(join_status='ambiguous') AS has_ambiguous
+      FROM search_record_parcels WHERE source_id='addresses' AND run_id=$1 GROUP BY record_id
+    ) SELECT count(*) FILTER(WHERE has_exact)::int AS exact_points,
+      count(*) FILTER(WHERE has_ambiguous AND NOT has_exact)::int AS ambiguous_only_points,
+      count(*) FILTER(WHERE has_exact AND has_ambiguous)::int AS points_with_both,
+      count(*)::int AS linked_points FROM points`, [bySource.get('addresses').active_run_id]))[0]),
   check('activity_by_type', async () => indexQuery(`SELECT fields->>'permit_type' AS permit_type,
       fields->>'activity_kind' AS activity_kind,count(*)::int AS indexed_rows,
       count(*) FILTER (WHERE event_date IS NULL)::int AS missing_event_date
