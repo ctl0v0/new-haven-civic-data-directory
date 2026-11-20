@@ -1,0 +1,27 @@
+name: Audit the recent municipal permit parcel-link gaps
+on:
+  push:
+    branches: [codex/parcel-pilot]
+    paths: [.github/workflows/audit-recent-permit-window.yml, scripts/audit-recent-permit-window.mjs]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Audit indexed parcel keys and check representative City records
+        env:
+          SEARCH_DATABASE_WRITE_URL: ${{ secrets.SEARCH_DATABASE_WRITE_URL }}
+          SEARCH_DATABASE_READER_PASSWORD: ${{ secrets.SEARCH_DATABASE_READER_PASSWORD }}
+          SEARCH_DATABASE_READER_ROLE: ${{ vars.SEARCH_DATABASE_READER_ROLE || 'search_index_reader' }}
+        run: node scripts/audit-recent-permit-window.mjs
