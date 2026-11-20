@@ -84,7 +84,11 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
       published_status, event_date, fields,
       CASE WHEN $4::boolean AND geometry IS NOT NULL
         THEN ST_AsGeoJSON(geometry)::jsonb ELSE NULL END AS geometry
-      FROM search_records WHERE run_id = $1 AND source_id = $2 AND record_id = $3`,
+      FROM search_records r WHERE run_id = $1 AND source_id = $2 AND record_id = $3
+      AND (r.source_id <> 'municity' OR EXISTS (SELECT 1 FROM search_record_parcels j
+        WHERE j.run_id = r.run_id AND j.source_id = r.source_id AND j.record_id = r.record_id
+        GROUP BY j.record_id HAVING count(DISTINCT (j.city_parcel_id, j.city_objectid)) = 1
+          AND bool_and(j.join_status = 'exact')))`,
     [run.run_id, sourceId, recordId, input.include_geometry === true]);
     if (!rows.length) return { ...key, found: false, complete_for_query: complete, coverage };
     const links = await query(`SELECT city_parcel_id, city_objectid,

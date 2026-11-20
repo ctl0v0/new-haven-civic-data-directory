@@ -17,6 +17,7 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
       r.status, r.expected_count, r.returned_count, r.linked_count,
       r.ambiguous_count, r.unlinked_count, r.source_updated_at,
       r.coverage_date_from, r.coverage_date_to,
+      to_jsonb(r)->'metadata' AS metadata,
       r.finished_at, r.warning, last.status AS latest_attempt_status,
       last.started_at AS latest_attempt_started_at,
       last.warning AS latest_attempt_warning
@@ -146,6 +147,9 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
             returned_count: run.returned_count, linked_count: run.linked_count,
             ambiguous_count: run.ambiguous_count, unlinked_count: run.unlinked_count,
             source_updated_at: run.source_updated_at,
+            ...(run.coverage_date_from ? { coverage_date_from: run.coverage_date_from,
+              coverage_date_to: run.coverage_date_to } : {}),
+            ...(source.source_id === "municity-permit-activity" ? { type_inventory: run.metadata?.by_type } : {}),
             last_successful_refresh: run.finished_at, warning: run.warning,
             latest_attempt_status: run.latest_attempt_status,
             latest_attempt_started_at: run.latest_attempt_started_at,

@@ -20,7 +20,7 @@ const parcelOnly = new Set([
   "assessor", "assessor-owner", "assessor-sales", "assessor-valuations",
   "assessor-subareas", "assessor-land", "assessor-buildings",
   "assessor-extra-features", "assessor-outbuildings", "lci-cases",
-  "municipal-business-licenses", "municipal-occupants",
+  "municipal-occupants",
   "business-master", "business-principals", "business-agents",
 ]);
 const stateLocations = new Set(["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"]);
@@ -38,7 +38,11 @@ export const INDEX_DATASETS = Object.freeze({
   },
   "school-attendance": { id: "school-attendance", kind: "official-snapshot", cadence: "daily" },
   municity: { id: "municity", kind: "municipal-type", cadence: "daily",
-    gate: "Permit parent rows from all published types are indexed in verified 30- and 90-day PermitDate windows. Historical per-type runs and the Electrical group are tracked separately. A 10,000-row full-type response cannot establish historical completeness. Permit children, complaints, licenses and occupants remain live detail searches." },
+    gate: "Permit parent rows with exact City parcel links are indexed in verified 30- and 90-day PermitDate windows. Historical per-type runs and the Electrical group are tracked separately. A 10,000-row full-type response cannot establish historical completeness." },
+  "municity-permit-activity": { cadence: "daily",
+    gate: "Application, review and inspection rows linked through exact City parcel permits of the published types Water Heater and Hood - C in the 90-day PermitDate window." },
+  "municipal-business-licenses": { cadence: "daily",
+    gate: "Named City business licenses with a verified parcel link. The date-bounded index uses the City's IssueDate field." },
   "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",
     cadence: "daily" },
   ...Object.fromEntries([...stateLocations].map((id) => [id,
@@ -73,5 +77,9 @@ export function indexSourceCatalog() {
     index_source_id: "municity-permit-types", search_mode: "index_candidate",
     cadence: "daily", source_url: MUNICIPAL_PERMIT_TYPES_URL,
     coverage: "Official municipal permit type catalog; entries are types, not issued permits." });
+  entries.push({ source_id: "municity-permit-activity",
+    index_source_id: "municity-permit-activity", search_mode: "conditional_index",
+    cadence: "daily", source_url: SOURCES.find(({ id }) => id === "municity").url,
+    coverage: INDEX_DATASETS["municity-permit-activity"].gate });
   return entries;
 }

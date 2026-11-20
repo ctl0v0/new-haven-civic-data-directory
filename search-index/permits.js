@@ -2,8 +2,9 @@ import { SourceError } from "../parcel/http.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { indexConfigured, indexQuery } from "./db.js";
 import { recentPermitRun } from "./municity.js";
+import { filteredPermitLinkGaps } from "./parcel-only-permits.js";
 
-const date = (value, name) => {
+export const permitSearchDate = (value, name) => {
   if (value == null || value === "") return null;
   const raw = String(value);
   const parsed = Date.parse(`${raw}T00:00:00Z`);
@@ -14,9 +15,9 @@ const date = (value, name) => {
 };
 const attemptStatus = (status, warning) => status === "failed" &&
   warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : status;
-const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
+export const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
   : String(value ?? "").slice(0, 10);
-const check = (sourceId, scopeKey, row, maxAge, latest = null, from = null, to = null) => {
+const check = (sourceId, scopeKey, row, maxAge, latest = null, from = null, to = null, filters = null) => {
   if (!row) return { source_id: sourceId, scope_key: scopeKey, status: "not_indexed",
     ...(latest ? { latest_attempt_status: attemptStatus(latest.status, latest.warning),
       latest_attempt_warning: latest.warning ?? null,
@@ -26,9 +27,11 @@ const check = (sourceId, scopeKey, row, maxAge, latest = null, from = null, to =
     (!row.coverage_date_from && !row.coverage_date_to) ||
     Boolean(from && to && from >= dateOnly(row.coverage_date_from) &&
       to <= dateOnly(row.coverage_date_to));
+  const gaps = filters ? filteredPermitLinkGaps(row.metadata, filters) : null;
   const complete = fresh && row.status === "complete" && row.latest_attempt_status !== "failed" &&
     Number(row.expected_count) === Number(row.returned_count) &&
-    Number(row.ambiguous_count) === 0 && Number(row.unlinked_count) === 0 && dateCovered;
+    Number(gaps?.ambiguous_count ?? row.ambiguous_count) === 0 &&
+    Number(gaps?.unlinked_count ?? row.unlinked_count) === 0 && dateCovered;
   return { source_id: sourceId, scope_key: scopeKey,
     status: complete ? "complete" : "partial", run_id: Number(row.run_id),
     fresh, ...(sourceId === "municity" ? { date_covered: dateCovered,
@@ -36,6 +39,7 @@ const check = (sourceId, scopeKey, row, maxAge, latest = null, from = null, to =
       coverage_date_to: row.coverage_date_to ? dateOnly(row.coverage_date_to) : null } : {}),
     expected_count: Number(row.expected_count),
     returned_count: Number(row.returned_count),
+    ...(gaps ? { indexed_count: row.metadata.indexed_count, filtered_parcel_link_gaps: gaps } : {}),
     ambiguous_count: Number(row.ambiguous_count),
     unlinked_count: Number(row.unlinked_count), finished_at: row.finished_at,
     warning: row.warning ?? null,
@@ -68,8 +72,8 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
   const status = input.permit_status == null ? null : String(input.permit_status).trim();
   if (status != null && (!status || status.length > 100))
     throw new SourceError("Invalid published permit status", 400);
-  const from = date(input.permit_date_from, "permit_date_from");
-  const to = date(input.permit_date_to, "permit_date_to");
+  const from = permitSearchDate(input.permit_date_from, "permit_date_from");
+  const to = permitSearchDate(input.permit_date_to, "permit_date_to");
   if (from && to && from > to) throw new SourceError("Permit date range is reversed", 400);
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
@@ -88,6 +92,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
       r.status, r.finished_at, r.expected_count, r.returned_count,
       r.ambiguous_count, r.unlinked_count, r.warning,
       r.coverage_date_from, r.coverage_date_to,
+      to_jsonb(r)->'metadata' AS metadata,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -138,10 +143,11 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
       byKey.get("municity-permit-types:all"), 48 * 3600_000)] : []),
     ...(scope === "city" ? [] : [check(scope === "ward" ? "wards" : "neighborhoods",
       "all", byKey.get(`${scope === "ward" ? "wards" : "neighborhoods"}:all`), 48 * 3600_000)]),
-    ...(recent ? [check("municity", recent.scope_key, recent, 48 * 3600_000, null, from, to)] :
+    ...(recent ? [check("municity", recent.scope_key, recent, 48 * 3600_000, null, from, to,
+      { types, status, from, to })] :
       types.map((type) => check("municity", `permit-type:${type}`,
       byKey.get(`municity:permit-type:${type}`), 48 * 3600_000,
-      missingAttempts.get(`permit-type:${type}`), from, to)))];
+      missingAttempts.get(`permit-type:${type}`), from, to, { types: [type], status, from, to })))];
   if (checks.some((item) => item.status === "not_indexed" && item.source_id !== "municity"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: checks,
@@ -161,7 +167,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
   const add = (value) => { values.push(value); return `$${values.length}`; };
   const filters = [];
   if (recent && !allTypes) filters.push(`upper(trim(r.published_type)) = ANY(${add(types)}::text[])`);
-  if (status) filters.push(`upper(r.published_status) = upper(${add(status)})`);
+  if (status) filters.push(`upper(trim(r.published_status)) = upper(${add(status)})`);
   if (from) filters.push(`r.event_date >= ${add(from)}::date`);
   if (to) filters.push(`r.event_date <= ${add(to)}::date`);
   if (scope !== "city") {
@@ -185,7 +191,9 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     r.published_type AS permit_type, r.published_status AS permit_status,
     r.event_date AS permit_date, r.fields->>'LegalAddress' AS published_legal_address,
     r.fields->>'Application_ID' AS published_application_id,
-    r.source_url AS permit_source_url, j.match_method
+    r.source_url AS permit_source_url, j.match_method,
+    CASE WHEN j.match_method = 'municipal-explicit-subparcel-parent'
+      THEN r.fields->'VerifiedSubparcelParent' END AS parcel_link_evidence
     FROM search_records r
     JOIN search_record_parcels j ON j.run_id = r.run_id AND j.source_id = r.source_id
       AND j.record_id = r.record_id AND j.join_status = 'exact'

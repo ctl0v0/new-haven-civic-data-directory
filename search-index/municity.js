@@ -27,10 +27,10 @@ const LIMIT = 10000;
 const INDEX_FIELDS = ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
   "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
   "LegalAddress"];
-const municipalUrl = (searchfield, value, numrecs = LIMIT, fieldtype = "text") => {
+const municipalUrl = (searchfield, value, numrecs = LIMIT, fieldtype = "text", entity = "Permit") => {
   const url = new URL(VENDOR);
   for (const [key, fieldValue] of Object.entries({ Customer: "NewHavenCityCT",
-    entity: "Permit", entity_id: "", fieldtype, mapid: "", mapobject: "",
+    entity, entity_id: "", fieldtype, mapid: "", mapobject: "",
     module: "", numrecs: String(numrecs), operator: "=", pid: "",
     searchfield, section: "", value })) url.searchParams.set(key, fieldValue);
   return url;
@@ -38,11 +38,11 @@ const municipalUrl = (searchfield, value, numrecs = LIMIT, fieldtype = "text") =
 const vendorOptions = { headers: { SourceId: "2" }, timeout: 60000,
   maxBytes: 75_000_000 };
 
-async function municipalSearch(searchfield, value, numrecs, get, fieldtype = "text") {
+export async function municipalSearch(searchfield, value, numrecs, get = fetchJson, fieldtype = "text", entity = "Permit") {
   let data;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      data = await get(municipalUrl(searchfield, value, numrecs, fieldtype), vendorOptions);
+      data = await get(municipalUrl(searchfield, value, numrecs, fieldtype, entity), vendorOptions);
       break;
     } catch (error) {
       if (error?.upstreamStatus !== 429 || attempt === 2) throw error;
@@ -195,7 +195,7 @@ export async function municipalDateSearchFormat(type = "Electrical Permit", { ge
   throw new SourceError("Municipal PermitDate search did not reproduce a known official permit; recent window is unverified");
 }
 
-function municipalDateValue(date, encoding) {
+export function municipalDateValue(date, encoding) {
   if (encoding === "iso") return date;
   const month = encoding === "us_short" ? String(Number(date.slice(5, 7))) : date.slice(5, 7);
   const day = encoding === "us_short" ? String(Number(date.slice(8, 10))) : date.slice(8, 10);
@@ -267,16 +267,34 @@ async function checkedPermitDay(day, format, dateRows) {
   }
 }
 
-export async function municipalParentPrintKey(parcelId, { get = fetchJson } = {}) {
-  if (!/^\d{1,12}$/.test(String(parcelId ?? ""))) return null;
+const workOptions = { headers: { SourceId: "2" }, timeout: 10000, maxBytes: 10_000_000 };
+
+export async function municipalEntityRow(entity, entityId, { get = fetchJson } = {}) {
+  if (!["Parcel", "Application"].includes(entity) || !/^\d{1,12}$/.test(String(entityId ?? ""))) return null;
   const url = new URL(VENDOR);
   for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT",
-    entity: "Parcel", entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
-    module: "", numrecs: "5", operator: "=", pid: "", searchfield: "Parcel_ID",
-    section: "", value: String(parcelId) })) url.searchParams.set(key, value);
-  const data = await get(url, { headers: { SourceId: "2" }, timeout: 10000,
-    maxBytes: 10_000_000 });
+    entity, entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
+    module: "", numrecs: "5", operator: "=", pid: "", searchfield: `${entity}_ID`,
+    section: "", value: String(entityId) })) url.searchParams.set(key, value);
+  const data = await get(url, workOptions);
   if (Number(data.total) !== 1 || !Array.isArray(data.rows) || data.rows.length !== 1 ||
-      String(data.rows[0].Parcel_ID) !== String(parcelId)) return null;
-  return String(data.rows[0].PrintKey ?? "").trim() || null;
+      String(data.rows[0][`${entity}_ID`]) !== String(entityId)) return null;
+  return data.rows[0];
+}
+
+export const municipalParcelRow = (id, options) => municipalEntityRow("Parcel", id, options);
+
+export async function municipalWorkChildren(entity, entityId, { get = fetchJson } = {}) {
+  if (!["Permit", "Application", "Parcel"].includes(entity) || !/^[1-9]\d{0,11}$/.test(String(entityId)))
+    throw new SourceError("Invalid official permit work parent");
+  const url = new URL(`Customer/NewHavenCityCT/${entity}/${entityId}/Children`, VENDOR);
+  const data = await get(url, workOptions);
+  if (!data || typeof data !== "object" || Array.isArray(data))
+    throw new SourceError("Municipal work child categories were unavailable");
+  return data;
+}
+
+export async function municipalParentPrintKey(parcelId, options) {
+  const row = await municipalParcelRow(parcelId, options);
+  return String(row?.PrintKey ?? "").trim() || null;
 }

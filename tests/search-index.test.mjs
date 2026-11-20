@@ -70,7 +70,7 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
   const catalog = indexSourceCatalog();
   assert.equal(catalog.filter((entry) => entry.source_id !== "transit-stops" &&
     entry.source_id !== "metered-parking-spaces" && entry.source_id !== "loading-zones" &&
-    entry.source_id !== "parking-availability").length, 42);
+    entry.source_id !== "parking-availability").length, 43);
   assert.equal(catalog.find((entry) => entry.source_id === "municity-permit-types")
     .index_source_id, "municity-permit-types");
   assert.equal(catalog.find((entry) => entry.source_id === "tax-bills").search_mode, "gap");
@@ -79,7 +79,7 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
   assert.equal(catalog.find((entry) => entry.source_id === "parcel-owner").index_source_id,
     "parcels");
   assert.equal(catalog.find((entry) => entry.source_id === "municipal-business-licenses")
-    .search_mode, "parcel_only_pending_complete_enumeration");
+    .search_mode, "conditional_index");
   assert.equal(catalog.find((entry) => entry.source_id === "business-master")
     .index_source_id, null);
   assert.match(catalog.find((entry) => entry.source_id === "municity").release_gate,
@@ -431,33 +431,19 @@ test("coverage names every catalog type including one blocked at the vendor limi
 
 test("municipal permit linkage audit separates missing keys from unmatched published keys", async () => {
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
-  let countsSql = "";
   const audited = await auditMunicipalPermitLinks({ permit_type: "Heating Permit",
-    sample_limit: 2 }, { query: async (sql, values) => {
-    if (sql.includes("FROM search_active_runs a")) return [{ run_id: 71,
-      status: "complete", returned_count: 4, unlinked_count: 3,
-      finished_at: new Date(), latest_attempt_status: "complete" }];
-    if (sql.includes("WITH links AS")) {
-      countsSql = sql;
-      assert.deepEqual(values, [71]);
-      return [{ indexed_records: 4, exact_records: 1, ambiguous_records: 0,
-        unlinked_records: 3, missing_print_key: 2, unmatched_print_key: 1,
-        unlinked_with_vendor_parcel_id: 1,
-        missing_print_key_with_vendor_parcel_id: 1,
-        unlinked_with_vendor_parcel_key: 1,
-        missing_print_key_with_vendor_parcel_key: 1,
-        unlinked_with_legal_address: 1 }];
-    }
-    assert.deepEqual(values, [71, 2]);
-    return [{ record_id: "518136", reason: "missing_print_key",
-      print_key: null, legal_address: null }];
-  } });
+    sample_limit: 2 }, { query: async () => [{ run_id: 71,
+    status: "complete", returned_count: 4, unlinked_count: 3,
+    finished_at: new Date(), latest_attempt_status: "complete",
+    metadata: { parcel_link_summary: {
+      indexed_count: 1, ambiguous_count: 0, unlinked_count: 3,
+      missing_print_key: 2, unmatched_print_key: 1, unlinked_with_vendor_parcel_id: 1,
+    } } }] });
   assert.equal(audited.counts.missing_print_key, 2);
   assert.equal(audited.counts.unmatched_print_key, 1);
-  assert.equal(audited.counts.missing_print_key_with_vendor_parcel_id, 1);
-  assert.equal(audited.counts.missing_print_key_with_vendor_parcel_key, 1);
-  assert.equal(audited.samples[0].reason, "missing_print_key");
-  assert.match(countsSql, /NULLIF\(btrim\(r\.fields->>'PrintKey'\), ''\)/);
+  assert.equal(audited.counts.indexed_records, 1);
+  assert.equal(audited.counts.distinct_source_records, 4);
+  assert.deepEqual(audited.samples, []);
   const capped = await auditMunicipalPermitLinks({ permit_type: "Building Permit" },
     { query: async (sql) => sql.includes("search_active_runs") ? [] : [
       { status: "failed", warning: "MUNICIPAL_TYPE_CAP: 10,000 rows",
@@ -549,7 +535,7 @@ test("indexed record inspection keeps official fields and parcel join evidence s
         expected_count: 1, returned_count: 1, ambiguous_count: 0,
         unlinked_count: 0, latest_attempt_status: "complete" }];
     }
-    if (sql.includes("FROM search_records WHERE")) return recordId === "572030" ? [row] : [];
+    if (sql.includes("FROM search_records r WHERE")) return recordId === "572030" ? [row] : [];
     return [{ city_parcel_id: 12846, city_objectid: 4157,
       match_method: "published-parcel-key-exact", join_status: "exact" }];
   } });

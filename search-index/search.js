@@ -4,6 +4,8 @@ import { GIS_INDEX_FIELDS } from "./arcgis.js";
 import { indexConfigured, indexQuery } from "./db.js";
 import { STATE_ROSTERS } from "./socrata.js";
 import { recentPermitRun, RECENT_PERMIT_SCOPES } from "./municity.js";
+import { MUNICIPAL_LICENSE_FIELDS, MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
+import { filteredPermitLinkGaps } from "./parcel-only-permits.js";
 
 // Only published, indexed columns may be used as cross-source predicates.
 // A source can be listed here before its first validated import; readiness is
@@ -21,6 +23,7 @@ export const SEARCH_FIELDS = Object.freeze({
   "ct-liquor-permits": STATE_ROSTERS["ct-liquor-permits"].fields,
   "ct-child-care-licenses": STATE_ROSTERS["ct-child-care-licenses"].fields,
   "ct-cannabis-retail": STATE_ROSTERS["ct-cannabis-retail"].fields,
+  [MUNICIPAL_LICENSE_SOURCE]: MUNICIPAL_LICENSE_FIELDS,
   "school-attendance": ["street_name", "k8_school", "high_school"],
   municity: ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
     "PermStatus", "PermitDate", "Parcel_ID", "PrintKey", "PrintKey_Parcel",
@@ -41,6 +44,10 @@ export const NUMBER_FIELDS = Object.freeze({
 const sourceAge = () => 48 * 3600_000;
 const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
   : String(value ?? "").slice(0, 10);
+const dateCoverage = (run, requirement) => (!run.coverage_date_from && !run.coverage_date_to) ||
+  Boolean(requirement?.event_date_from && requirement?.event_date_to &&
+    requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
+    requirement.event_date_to <= dateOnly(run.coverage_date_to));
 async function missingMunicipalAttempt(scopeKey, query) {
   if (!scopeKey) return null;
   try {
@@ -229,6 +236,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
     active = await query(`SELECT a.source_id, a.scope_key, r.id AS run_id, r.status, r.finished_at,
       r.expected_count, r.returned_count, r.ambiguous_count, r.unlinked_count, r.warning,
       r.coverage_date_from, r.coverage_date_to,
+      to_jsonb(r)->'metadata' AS metadata,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -261,22 +269,24 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
         ...absentMunicipal } : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
-    const dateCovered = source_id !== "municity" ||
-      (!run.coverage_date_from && !run.coverage_date_to) ||
-      Boolean(municipalRequirements[0]?.event_date_from && municipalRequirements[0]?.event_date_to &&
-        municipalRequirements[0].event_date_from >= dateOnly(run.coverage_date_from) &&
-        municipalRequirements[0].event_date_to <= dateOnly(run.coverage_date_to));
+    const dateCovered = dateCoverage(run, requirements.find((item) => item.source_id === source_id));
+    const gaps = source_id === "municity" ? filteredPermitLinkGaps(run.metadata, {
+      types: municipalType ? [municipalType.trim().toUpperCase()] : [],
+      status: permit?.equals?.PermStatus, from: permit?.event_date_from, to: permit?.event_date_to,
+    }) : null;
     const complete = run.status === "complete" && fresh && run.latest_attempt_status !== "failed" &&
       Number(run.expected_count) === Number(run.returned_count) &&
-      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0 && dateCovered;
+      Number(gaps?.ambiguous_count ?? run.ambiguous_count) === 0 &&
+      Number(gaps?.unlinked_count ?? run.unlinked_count) === 0 && dateCovered;
     return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
       status: complete ? "complete" : "partial",
-      ...(source_id === "municity" ? { date_covered: dateCovered,
+      ...(run.coverage_date_from || source_id === "municity" ? { date_covered: dateCovered,
         coverage_date_from: run.coverage_date_from ? dateOnly(run.coverage_date_from) : null,
         coverage_date_to: run.coverage_date_to ? dateOnly(run.coverage_date_to) : null } : {}),
       run_id: Number(run.run_id), fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count), ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
+      ...(gaps ? { filtered_parcel_link_gaps: gaps } : {}),
       warning: run.warning ?? null,
       latest_attempt_status: run.latest_attempt_status === "failed" &&
         run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
@@ -363,13 +373,17 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   if ((parcelId == null) !== (objectId == null) ||
       (parcelId != null && (!/^\d{1,12}$/.test(parcelId) || !/^\d{1,12}$/.test(objectId))))
     throw new SourceError("Provide both City parcel ID and object ID, or neither", 400);
+  const neighborhood = input.neighborhood == null ? null : String(input.neighborhood).trim();
+  if (neighborhood != null && (!neighborhood || neighborhood.length > 80 ||
+      /[\x00-\x1f]/.test(neighborhood))) throw new SourceError("Invalid City neighborhood", 400);
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
     throw new SourceError("limit must be 1–50", 400);
   const requiredSources = [...new Set(["parcels", sourceId,
+    ...(neighborhood ? ["neighborhoods"] : []),
     ...(ADDRESS_DEPENDENT.has(sourceId) ? ["addresses"] : [])])];
   const criteria = { ...requirement, city_parcel_id: parcelId,
-    city_objectid: objectId };
+    city_objectid: objectId, ...(neighborhood ? { neighborhood } : {}) };
   if (!indexConfigured()) return { criteria, items: [], next_cursor: null,
     complete_for_query: false, coverage: { index_status: "unconfigured",
       source_checks: requiredSources.map((source_id) => ({ source_id, status: "unconfigured" })) } };
@@ -379,6 +393,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
       r.finished_at, r.expected_count, r.returned_count,
       r.ambiguous_count, r.unlinked_count, r.warning,
       r.coverage_date_from, r.coverage_date_to,
+      to_jsonb(r)->'metadata' AS metadata,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
@@ -410,24 +425,27 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
         ...absentMunicipal } : {}) };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
-    const dateCovered = source_id !== "municity" ||
-      (!run.coverage_date_from && !run.coverage_date_to) ||
-      Boolean(requirement.event_date_from && requirement.event_date_to &&
-        requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
-        requirement.event_date_to <= dateOnly(run.coverage_date_to));
+    const dateCovered = dateCoverage(run, source_id === sourceId ? requirement : null);
+    const gaps = source_id === "municity" ? filteredPermitLinkGaps(run.metadata, {
+      types: permitType ? [permitType.trim().toUpperCase()] : [],
+      status: requirement.equals.PermStatus, from: requirement.event_date_from, to: requirement.event_date_to,
+    }) : null;
     const complete = run.status === "complete" && fresh &&
       run.latest_attempt_status !== "failed" &&
       Number(run.expected_count) === Number(run.returned_count) &&
-      Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0 && dateCovered;
+      Number(gaps?.ambiguous_count ?? run.ambiguous_count) === 0 &&
+      Number(gaps?.unlinked_count ?? run.unlinked_count) === 0 && dateCovered;
     return { source_id, ...(source_id === "municity" ? { scope_key: municipalScope } : {}),
       status: complete ? "complete" : "partial", run_id: Number(run.run_id),
-      ...(source_id === "municity" ? { date_covered: dateCovered,
+      ...(run.coverage_date_from || source_id === "municity" ? { date_covered: dateCovered,
         coverage_date_from: run.coverage_date_from ? dateOnly(run.coverage_date_from) : null,
         coverage_date_to: run.coverage_date_to ? dateOnly(run.coverage_date_to) : null } : {}),
       fresh, expected_count: Number(run.expected_count),
       returned_count: Number(run.returned_count),
       ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
+      ...(gaps ? { filtered_parcel_link_gaps: gaps } : {}),
+      ...(source_id === MUNICIPAL_LICENSE_SOURCE ? { inventory: run.metadata } : {}),
       warning: run.warning ?? null,
       latest_attempt_status: run.latest_attempt_status === "failed" &&
         run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
@@ -450,6 +468,15 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   if (parcelId != null) {
     filters.push(`j.city_parcel_id = ${add(parcelId)}::bigint`);
     filters.push(`j.city_objectid = ${add(objectId)}::bigint`);
+  }
+  if (neighborhood) {
+    const boundaryRun = add(runs.neighborhoods);
+    const name = add(neighborhood);
+    filters.push(`EXISTS (SELECT 1 FROM search_record_parcels b
+      JOIN search_records n USING (run_id, source_id, record_id)
+      WHERE b.run_id = ${boundaryRun} AND b.source_id = 'neighborhoods' AND b.join_status = 'exact'
+        AND b.city_parcel_id = j.city_parcel_id AND b.city_objectid = j.city_objectid
+        AND upper(${name}) IN (upper(n.fields->>'neighborhood'), upper(n.fields->>'neighborhood_label')))`);
   }
   const parcelRun = add(runs.parcels);
   const addressRun = ADDRESS_DEPENDENT.has(sourceId) ? add(runs.addresses) : null;

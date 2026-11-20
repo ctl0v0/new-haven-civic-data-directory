@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS search_source_runs (
 
 ALTER TABLE search_source_runs ADD COLUMN IF NOT EXISTS coverage_date_from date;
 ALTER TABLE search_source_runs ADD COLUMN IF NOT EXISTS coverage_date_to date;
+ALTER TABLE search_source_runs ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS search_source_runs_lookup
   ON search_source_runs (source_id, scope_key, started_at DESC);

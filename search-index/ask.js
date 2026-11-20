@@ -4,7 +4,8 @@ import { getDataContext, commercialUseCodes, reviewedUseCodeValues } from "../pa
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 import { SourceError } from "../parcel/http.js";
 import { indexQuery, indexConfigured } from "./db.js";
-import { searchIndexedParcels } from "./search.js";
+import { searchIndexedParcels, searchIndexedRecords } from "./search.js";
+import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 
 const interpretationSchema = z.object({
   intent: z.enum(["search", "clarify", "unsupported"]),
@@ -45,6 +46,12 @@ export function interpretBaselineQuestion(question) {
   return { intent: "search", commercial: Boolean(match[1]),
     permit_type: null, permit_group: "Electrical", permit_status: null,
     permit_days: days, neighborhood: null, clarification: null };
+}
+
+function businessLicenseQuestion(question) {
+  const match = question.match(/^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:new|recent|issued) (?:city |municipal )?business licenses (?:issued )?in (?:the )?([a-z][a-z .'-]{1,70}?)(?: neighborhood)? in (?:the )?(?:past|last|previous) (\d{1,3}) days?[?.!]?$/i);
+  if (!match || Number(match[2]) < 1 || Number(match[2]) > 366) return null;
+  return { neighborhood: match[1].trim(), days: Number(match[2]) };
 }
 
 export async function interpretQuestion(question, typeNames, groupNames) {
@@ -100,11 +107,26 @@ export async function questionPermitCatalog({ query = indexQuery,
 
 export async function askIndexedParcels(input = {}, { interpret = interpretQuestion,
   catalog = questionPermitCatalog, search = searchIndexedParcels,
+  searchRecords = searchIndexedRecords,
   query = indexQuery, now = new Date() } = {}) {
   const edited = input.filters != null;
   const question = edited ? "Edited search filters" : String(input.question ?? "").trim();
   if (!question || question.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(question))
     throw new SourceError("Question must be 1–500 characters", 400);
+  const license = !edited && businessLicenseQuestion(question.replace(/\s+/g, " "));
+  if (license) {
+    const window = recentCalendarDates(license.days, now);
+    const criteria = { source_id: MUNICIPAL_LICENSE_SOURCE, neighborhood: license.neighborhood,
+      event_date_from: window.from, event_date_to: window.to, limit: 25 };
+    const searchResult = await searchRecords(criteria);
+    const checksComplete = searchResult.coverage?.source_checks?.every(({ status }) => status === "complete");
+    return { status: searchResult.complete_for_query ? "ready" :
+      checksComplete && searchResult.next_cursor ? "paging" : "coverage_limited",
+      question, interpretation: { intent: "search", neighborhood: license.neighborhood,
+        activity: "municipal_business_license_issuance", date_field: "IssueDate", date_window: window },
+      criteria, search_result: searchResult,
+      context: getDataContext({ source_id: MUNICIPAL_LICENSE_SOURCE }).entries };
+  }
   let typeNames, groupNames;
   try {
     const listed = await catalog();

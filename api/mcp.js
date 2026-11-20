@@ -34,6 +34,8 @@ import {
   parcelFeed,
   sourceCoverage,
 } from "../parcel/service.js";
+import { searchIndexedPermitActivity } from "../search-index/permit-activity.js";
+import { PERMIT_ACTIVITY_TYPES } from "../search-index/permit-activity-source.js";
 
 function reply(value) {
   return {
@@ -308,10 +310,7 @@ export function createServer() {
     "Intersect 1–5 source requirements by exact City parcel joins. Each requirement may filter published fields and event dates. A source without a validated index run, stale data, or ambiguous joins leaves completeness false; results retain official source links.",
     z.object({
       requirements: z.array(z.object({
-        source_id: z.enum(["parcels", "addresses", "trash-pickup", "zoning",
-          "wards", "neighborhoods", "cmt", "ct-brownfields",
-          "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail",
-          "school-attendance", "municity"]),
+        source_id: z.enum(Object.keys(SEARCH_FIELDS)),
         equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
         permit_group: z.string().min(1).max(100).optional(),
         one_of: z.record(z.string(), z.array(z.string().min(1).max(40)).min(1).max(250)).optional(),
@@ -329,7 +328,7 @@ export function createServer() {
     server,
     "ask_indexed_parcels",
     "Ask a bounded parcel search question",
-    "Interpret a question into reviewed City parcel and municipal permit filters, then return exact parcel matches and source coverage. An unavailable official definition or capped source blocks a complete answer.",
+    "Interpret a City parcel, municipal permit, or recent City business license question. Return exact parcel links and official source coverage.",
     z.object({ question: z.string().min(1).max(500) }),
     (args) => askIndexedParcels(args),
   );
@@ -362,6 +361,29 @@ export function createServer() {
   );
   tool(
     server,
+    "search_indexed_permit_activity",
+    "Search parcel-linked permit activity",
+    "Cross-filter applications, review tasks, or inspections linked to Water Heater and Hood - C permits in the indexed 90-day PermitDate window. Filter activity type, published status, City neighborhood, and separate permit and activity dates. Activity date is ApplicationDate, DateCompleted, or CloseDate by kind.",
+    z.object({
+      activity_kind: z.enum(["application", "review", "inspection"]),
+      permit_type: z.enum(PERMIT_ACTIVITY_TYPES),
+      permit_id: z.string().regex(/^[1-9]\d{0,11}$/).optional(),
+      city_parcel_id: z.string().regex(/^[1-9]\d{0,11}$/).optional(),
+      permit_status: z.string().min(1).max(100).optional(),
+      activity_type: z.string().min(1).max(100).optional(),
+      activity_status: z.string().min(1).max(100).optional(),
+      neighborhood: z.string().min(1).max(80).optional(),
+      permit_date_from: z.iso.date().optional(),
+      permit_date_to: z.iso.date().optional(),
+      activity_date_from: z.iso.date().optional(),
+      activity_date_to: z.iso.date().optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+      cursor: z.string().max(3000).optional(),
+    }),
+    (args) => searchIndexedPermitActivity(args),
+  );
+  tool(
+    server,
     "search_indexed_records",
     "Search indexed official records and parcel links",
     "Page all matching records from one indexed City or State source, with their published fields and exact City parcel links. Filter official fields or a selected parcel; a missing, stale or partially linked source keeps completeness false. Municipal records require one exact PermitType or published group. Use get_indexed_record to inspect all joins for a row.",
@@ -375,6 +397,7 @@ export function createServer() {
       event_date_to: z.iso.date().optional(),
       city_parcel_id: parcelId.optional(),
       city_objectid: z.string().regex(/^\d{1,12}$/).optional(),
+      neighborhood: z.string().min(1).max(80).optional(),
       limit: z.number().int().min(1).max(50).optional(),
       cursor: z.string().max(3000).optional(),
     }),
@@ -392,7 +415,7 @@ export function createServer() {
     server,
     "audit_municipal_permit_links",
     "Audit municipal permit parcel links",
-    "Count exact, ambiguous, and unlinked records for one indexed official permit type. Split unlinked records by missing versus unmatched published PrintKey and return bounded source-row examples. A legal address alone is not a parcel join.",
+    "Count exact parcel links and aggregate linkage gaps for one indexed official permit type, including missing versus unmatched published PrintKey.",
     z.object({
       permit_type: z.string().min(1).max(100),
       sample_limit: z.number().int().min(1).max(10).optional(),

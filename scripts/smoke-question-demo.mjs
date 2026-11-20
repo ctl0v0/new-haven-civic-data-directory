@@ -26,20 +26,21 @@ if (identity?.role !== role || !identity.can_read || identity.can_insert)
 process.env.PILOT_API_TOKEN ??= randomBytes(32).toString("hex");
 process.env.PILOT_PASSPHRASE ??= randomBytes(32).toString("hex");
 const { default: mcp } = await import("../api/mcp.js");
-const recent = await checkRecentPermitWindows({ search: async (args) => {
+async function callMcp(name, args) {
   const response = await mcp.fetch(new Request("https://example.com/mcp", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}`,
       "content-type": "application/json", accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call",
-      params: { name: "search_indexed_permits", arguments: args } }),
+      params: { name, arguments: args } }),
   }));
   const text = await response.text();
   const payload = JSON.parse(text.startsWith("event:") ? text.match(/^data: (.+)$/m)?.[1] : text);
   const result = payload.result?.structuredContent;
-  if (!response.ok || !result?.coverage) throw new Error("The recent permit MCP query failed");
+  if (!response.ok || !result) throw new Error(`The ${name} MCP query failed`);
   return result;
-} });
+}
+const recent = await checkRecentPermitWindows({ search: (args) => callMcp("search_indexed_permits", args) });
 for (const item of recent.windows)
   console.log(JSON.stringify({ event: "recent_permits_mcp_smoke", ...item }));
 
@@ -67,48 +68,45 @@ const inspected = first ? await getIndexedRecord({ source_id: "municity",
 if (first && (!inspected?.found || !inspected.parcel_links.some((link) =>
     Number(link.city_parcel_id) === Number(first.city_parcel_id))))
   throw new Error("A grouped Electrical permit failed indexed record inspection");
-const unlinked = await indexQuery(`SELECT r.record_id, r.source_url,
-    r.fields->>'PermitNo' AS permit_number,
-    r.fields->>'PermitType' AS permit_type,
-    r.fields->>'Parcel_ID' AS vendor_parcel_id,
-    r.fields->>'PrintKey' AS print_key,
-    r.fields->>'PrintKey_Parcel' AS parent_print_key,
-    r.fields->>'VerifiedParentPrintKey' AS verified_parent_print_key,
-    r.fields->>'LegalAddress' AS legal_address
-  FROM search_records r WHERE r.run_id = $1 AND r.source_id = 'municity'
+const [retention] = await indexQuery(`SELECT count(*)::int AS rows_without_verified_parcels
+  FROM search_active_runs a JOIN search_records r ON r.run_id = a.run_id
+  WHERE a.source_id = 'municity' AND r.source_id = 'municity'
     AND NOT EXISTS (SELECT 1 FROM search_record_parcels j
       WHERE j.run_id = r.run_id AND j.source_id = r.source_id
-        AND j.record_id = r.record_id)
-  ORDER BY r.record_id`, [group.run_id]);
-if (unlinked.length !== group.unlinked_count)
-  throw new Error("Grouped Electrical unlinked evidence disagrees with source coverage");
-const [parcelRun] = await indexQuery(`SELECT run_id FROM search_active_runs
-  WHERE source_id = 'parcels' AND scope_key = 'all'`);
-const unlinkedCandidates = [];
-for (const permit of unlinked) {
-  const byAddress = await indexQuery(`SELECT record_id, source_url,
-      fields->>'parcel_id' AS city_parcel_id,
-      fields->>'objectid' AS city_objectid,
-      fields->>'mblu' AS city_mblu,
-      fields->>'property_address' AS city_address
-    FROM search_records WHERE run_id = $1 AND source_id = 'parcels'
-      AND upper(trim(fields->>'property_address')) = upper(trim($2))
-    ORDER BY record_id LIMIT 10`, [parcelRun.run_id, permit.legal_address]);
-  const byVendorId = await indexQuery(`SELECT record_id, source_url,
-      fields->>'parcel_id' AS city_parcel_id,
-      fields->>'objectid' AS city_objectid,
-      fields->>'mblu' AS city_mblu,
-      fields->>'property_address' AS city_address
-    FROM search_records WHERE run_id = $1 AND source_id = 'parcels'
-      AND fields->>'parcel_id' = $2 ORDER BY record_id LIMIT 10`,
-  [parcelRun.run_id, permit.vendor_parcel_id]);
-  unlinkedCandidates.push({ record_id: permit.record_id, address_candidates_only: byAddress,
-    vendor_id_candidates_only: byVendorId });
-}
+        AND j.record_id = r.record_id AND j.join_status = 'exact')`);
+if (retention.rows_without_verified_parcels !== 0)
+  throw new Error("Active permit index includes records without a verified City parcel");
+const reviewedParents = await indexQuery(`SELECT j.city_parcel_id, count(*)::int AS permits
+  FROM search_active_runs a JOIN search_record_parcels j ON j.run_id = a.run_id
+  WHERE a.source_id = 'municity' AND a.scope_key = 'permit-window:90'
+    AND j.match_method = 'municipal-explicit-subparcel-parent'
+  GROUP BY j.city_parcel_id ORDER BY j.city_parcel_id`);
+console.log(JSON.stringify({ event: "parcel_permit_retention_smoke", ...retention,
+  verified_subparcel_parents: reviewedParents }));
 console.log(JSON.stringify({ event: "question_demo_source_smoke",
   reader_role_verified: true, date_window: window, group,
   source_checks: result.coverage.source_checks,
   complete_for_query: result.complete_for_query,
   first_page_count: result.items.length, has_more: Boolean(result.next_cursor),
-  examples, unlinked_evidence: unlinked, unlinked_candidates_not_joined: unlinkedCandidates,
+  examples,
   indexed_record_verified: Boolean(inspected?.found) }));
+
+const license = await callMcp("ask_indexed_parcels", {
+  question: "Show me new business licenses in East Rock neighborhood in the last 30 days",
+});
+const licenseRows = license.search_result?.items ?? [];
+if (license.interpretation?.date_field !== "IssueDate" ||
+    licenseRows.some((row) => !row.city_parcel_id || !row.fields?.IssueDate || !row.fields?.BusinessName))
+  throw new Error("Business license results did not preserve the published dates and parcel joins");
+console.log(JSON.stringify({ event: "municipal_business_license_mcp_smoke",
+  status: license.status, count: licenseRows.length, criteria: license.criteria,
+  sources: license.search_result?.coverage?.source_checks }));
+for (const permit_type of ["Water Heater", "Hood - C"]) {
+  for (const activity_kind of ["application", "review", "inspection"]) {
+    const activity = await callMcp("search_indexed_permit_activity", { permit_type, activity_kind, limit: 5 });
+    if (activity.items.some((row) => !row.city_parcel_id || row.fields?.activity_kind !== activity_kind))
+      throw new Error("MCP permit activity included an invalid row or parcel join");
+    console.log(JSON.stringify({ event: "permit_activity_mcp_smoke", permit_type, activity_kind,
+      count: activity.items.length, coverage: activity.coverage }));
+  }
+}

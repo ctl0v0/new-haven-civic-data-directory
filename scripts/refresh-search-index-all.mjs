@@ -3,6 +3,8 @@ import { importArcgisSource, importStateRoster, importMunicipalPermitType,
   importMunicipalPermitWindows } from "../search-index/import.js";
 import { municipalPermitCatalogRows, municipalTypeShard } from "../search-index/municity.js";
 import { municipalPermitTypes } from "../parcel/permit-types.js";
+import { importMunicipalPermitActivity } from "../search-index/import-permit-activity.js";
+import { importMunicipalBusinessLicenses } from "../search-index/import-municipal-licenses.js";
 
 const mode = process.argv[2] ?? "daily";
 if (!["daily", "hourly", "municipal"].includes(mode))
@@ -13,7 +15,9 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
 const jobs = mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
+  ["municipal-business-licenses", () => importMunicipalBusinessLicenses()],
   ["municity:all-permit-types:recent-windows", () => importMunicipalPermitWindows()],
+  ["municity-permit-activity", () => importMunicipalPermitActivity()],
   ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup", "managed-lots",
     "ct-brownfields", "metered-parking-spaces", "transit-stops"].map((id) =>
     [id, () => importArcgisSource(id)]),
@@ -47,13 +51,14 @@ for (const [sourceId, refresh] of jobs) {
     results.push({ source_id: sourceId, status: "complete", ...result });
   } catch (error) {
     results.push({ source_id: sourceId,
-      status: error?.code === "MUNICIPAL_TYPE_CAP" ? "blocked" : "failed",
+      status: ["MUNICIPAL_TYPE_CAP", "MUNICIPAL_LICENSE_UNVERIFIED"].includes(error?.code) ? "blocked" : "failed",
       warning: String(error?.message ?? error).slice(0, 300) });
   }
   console.log(JSON.stringify({ event: "source_refresh", ...results.at(-1) }));
 }
 console.log(JSON.stringify({ mode,
   completed: results.filter((item) => item.status === "complete").length,
+  partial: results.filter((item) => item.status === "partial").map(({ source_id }) => source_id),
   blocked: results.filter((item) => item.status === "blocked"),
   failed: results.filter((item) => item.status === "failed") }));
 if (results.some((result) => result.status === "failed")) process.exitCode = 1;

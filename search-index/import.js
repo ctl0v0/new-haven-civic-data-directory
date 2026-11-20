@@ -5,7 +5,10 @@ import { INDEX_DATASETS } from "./catalog.js";
 import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
 import { municipalPermitCatalogRows, municipalPermitTypeRows,
   sameMunicipalPermitRows, municipalDateSearchFormat, verifiedMunicipalPermitDays,
-  municipalParentPrintKey, RECENT_PERMIT_WINDOWS } from "./municity.js";
+  municipalParcelRow, RECENT_PERMIT_WINDOWS } from "./municity.js";
+import { isReviewedSubparcel, reviewedSubparcelEvidence } from "./subparcel-parents.js";
+import { retainParcelPermits } from "./parcel-only-permits.js";
+import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 import { recentCalendarDates } from "./ask.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
 import { municipalPermitTypes } from "../parcel/permit-types.js";
@@ -25,7 +28,7 @@ export async function beginRun(sourceId, scopeKey = "all", expectedCount = null,
   return Number(rows[0].id);
 }
 
-async function setRunInventory(runId, expectedCount, sourceUpdatedAt = null) {
+export async function setRunInventory(runId, expectedCount, sourceUpdatedAt = null) {
   await write(`UPDATE search_source_runs SET expected_count = $2,
     source_updated_at = $3 WHERE id = $1 AND status = 'running'`,
   [runId, expectedCount, sourceUpdatedAt]);
@@ -169,6 +172,36 @@ async function linkAdditionalMunicipalKey(runId, keyField) {
     keyField === "PrintKey_Parcel" ? "published-permit-parent-key-exact" : "verified-municipal-parent-key-exact"]);
 }
 
+async function linkReviewedSubparcelParents(runId) {
+  const runs = await write(`SELECT source_id, run_id FROM search_active_runs
+    WHERE scope_key = 'all' AND source_id IN ('parcels', 'addresses')`);
+  const active = Object.fromEntries(runs.map((row) => [row.source_id, row.run_id]));
+  if (!active.parcels || !active.addresses) return;
+  const mblu = (alias) => `trim(regexp_replace(upper(replace(${alias}.fields->>'mblu', '/', ' ')), '[[:space:]]+', ' ', 'g'))`;
+  await write(`INSERT INTO search_record_parcels (run_id, source_id, record_id,
+      city_parcel_id, city_objectid, city_address_objectid, match_method)
+    SELECT r.run_id, r.source_id, r.record_id, points.parcel_id, points.objectid,
+      points.address_id, 'municipal-explicit-subparcel-parent'
+    FROM search_records r
+    JOIN LATERAL (SELECT min(j.city_parcel_id) AS parcel_id, min(j.city_objectid) AS objectid,
+        min(a.record_id::bigint) AS address_id
+      FROM search_records a LEFT JOIN search_record_parcels j
+        ON j.run_id = a.run_id AND j.source_id = a.source_id AND j.record_id = a.record_id
+      WHERE a.run_id = $3 AND a.source_id = 'addresses'
+        AND a.fields->>'normalized_address' = r.fields->'VerifiedSubparcelParent'->>'normalized_address'
+      HAVING count(DISTINCT (j.city_parcel_id, j.city_objectid)) = 1
+        AND bool_and(j.join_status IS NOT DISTINCT FROM 'exact')) points ON true
+    JOIN search_records p ON p.run_id = $2 AND p.source_id = 'parcels'
+      AND p.fields->>'parcel_id' = points.parcel_id::text AND p.record_id = points.objectid::text
+      AND ${mblu("p")} = r.fields->'VerifiedSubparcelParent'->>'city_parent_mblu'
+    WHERE r.run_id = $1 AND r.source_id = 'municity' AND r.fields ? 'VerifiedSubparcelParent'
+      AND NOT EXISTS (SELECT 1 FROM search_records c WHERE c.run_id = p.run_id
+        AND c.source_id = p.source_id AND c.record_id <> p.record_id AND ${mblu("c")} = ${mblu("p")})
+      AND NOT EXISTS (SELECT 1 FROM search_record_parcels j
+        WHERE j.run_id = r.run_id AND j.source_id = r.source_id AND j.record_id = r.record_id)`,
+  [runId, active.parcels, active.addresses]);
+}
+
 async function linkStateAddresses(runId, sourceId) {
   const addressRun = await write(`SELECT run_id FROM search_active_runs
     WHERE source_id = 'addresses' AND scope_key = 'all'`);
@@ -197,7 +230,8 @@ async function linkStateAddresses(runId, sourceId) {
   [runId, Number(addressRun[0].run_id), sourceId]);
 }
 
-export async function finishRun(runId, sourceId, expectedCount, { sourceWarning = null } = {}) {
+export async function finishRun(runId, sourceId, expectedCount,
+  { sourceWarning = null, partial = false, metadata = {} } = {}) {
   const count = await write(`SELECT COUNT(*)::integer AS n FROM search_records WHERE run_id = $1`, [runId]);
   const returned = Number(count[0].n);
   if (returned !== expectedCount) throw new Error(`Source count ${expectedCount} differs from indexed count ${returned}`);
@@ -208,9 +242,10 @@ export async function finishRun(runId, sourceId, expectedCount, { sourceWarning 
     await linkExactParcelKey(runId, sourceId, "PrintKey", { mbluOnly: true });
     await linkAdditionalMunicipalKey(runId, "PrintKey_Parcel");
     await linkAdditionalMunicipalKey(runId, "VerifiedParentPrintKey");
+    await linkReviewedSubparcelParents(runId);
   }
-  else if (["school-attendance", "municity-permit-types"].includes(sourceId)) {
-    /* School rows are linked during import; catalog rows do not describe parcels. */
+  else if (["school-attendance", "municity-permit-types", "municity-permit-activity", MUNICIPAL_LICENSE_SOURCE].includes(sourceId)) {
+    /* These imports supply their own parcel links when applicable. */
   }
   else if (STATE_ROSTERS[sourceId]) await linkStateAddresses(runId, sourceId);
   else if (sourceId === "trash-pickup") await linkSpatial(runId, sourceId, { addressZone: true });
@@ -219,31 +254,33 @@ export async function finishRun(runId, sourceId, expectedCount, { sourceWarning 
   const statistics = await write(`SELECT COUNT(*)::integer AS linked,
     COUNT(*) FILTER (WHERE join_status = 'ambiguous')::integer AS ambiguous
     FROM search_record_parcels WHERE run_id = $1`, [runId]);
-  const linked = Number(statistics[0].linked);
-  const ambiguous = Number(statistics[0].ambiguous);
+  const retained = sourceId === "municity" ? await retainParcelPermits(runId) : null;
+  const linked = Number(retained?.linked ?? statistics[0].linked);
+  const ambiguous = Number(retained?.ambiguous ?? statistics[0].ambiguous);
   const distinctLinked = Number((await write(`SELECT COUNT(DISTINCT record_id)::integer AS n
     FROM search_record_parcels WHERE run_id = $1`, [runId]))[0].n);
-  const unlinked = ["metered-parking-spaces", "transit-stops", "municity-permit-types"].includes(sourceId)
-    ? 0 : Math.max(0, returned - distinctLinked);
+  const unlinked = retained ? Number(retained.unlinked)
+    : ["metered-parking-spaces", "transit-stops", "municity-permit-types"].includes(sourceId)
+      ? 0 : Math.max(0, returned - distinctLinked);
   const warning = [sourceId === "parcels" && unlinked > 0
     ? `${unlinked} official City parcel features lack a published parcel ID`
     : null, sourceWarning].filter(Boolean).join("; ") || null;
   await write(`WITH finished AS (
-    UPDATE search_source_runs SET status = 'complete', finished_at = now(),
+    UPDATE search_source_runs SET status = $7, finished_at = now(),
       returned_count = $2, linked_count = $3, ambiguous_count = $4,
-      unlinked_count = $5, warning = $6
+      unlinked_count = $5, warning = $6, metadata = metadata || $8::jsonb
     WHERE id = $1 AND status = 'running' RETURNING id, source_id, scope_key
   )
   INSERT INTO search_active_runs (source_id, scope_key, run_id)
   SELECT source_id, scope_key, id FROM finished
   ON CONFLICT (source_id, scope_key) DO UPDATE SET run_id = EXCLUDED.run_id`,
-  [runId, returned, linked, ambiguous, unlinked, warning]);
+  [runId, returned, linked, ambiguous, unlinked, warning, partial ? "partial" : "complete", JSON.stringify(metadata)]);
   return { run_id: runId, returned, linked, ambiguous, unlinked };
 }
 
 export async function failRun(runId, error) {
   const reason = String(error?.message ?? error);
-  const warning = error?.code === "MUNICIPAL_TYPE_CAP"
+  const warning = ["MUNICIPAL_TYPE_CAP", "MUNICIPAL_LICENSE_UNVERIFIED"].includes(error?.code)
     ? `${error.code}: ${reason}` : reason;
   await write(`UPDATE search_source_runs SET status = 'failed', finished_at = now(),
     warning = $2 WHERE id = $1 AND status = 'running'`,
@@ -411,13 +448,17 @@ export async function importMunicipalPermitWindows({ now = new Date() } = {}) {
 async function addVerifiedPermitParents(rows, cache) {
   for (const row of rows) {
     const { PrintKey, PrintKey_Parcel, Parcel_ID } = row.fields;
-    if (PrintKey || PrintKey_Parcel || !Parcel_ID) continue;
+    if (!Parcel_ID || ((PrintKey || PrintKey_Parcel) && !isReviewedSubparcel(Parcel_ID))) continue;
     const id = String(Parcel_ID);
     if (!cache.has(id)) {
-      try { cache.set(id, await municipalParentPrintKey(id)); }
+      try { cache.set(id, await municipalParcelRow(id)); }
       catch { cache.set(id, null); }
     }
-    if (cache.get(id)) row.fields.VerifiedParentPrintKey = cache.get(id);
+    const official = cache.get(id);
+    if (!PrintKey && !PrintKey_Parcel && official?.PrintKey)
+      row.fields.VerifiedParentPrintKey = official.PrintKey;
+    const parent = reviewedSubparcelEvidence(row.fields, official);
+    if (parent) row.fields.VerifiedSubparcelParent = parent;
   }
 }
 
