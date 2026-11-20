@@ -4,6 +4,7 @@ import { getSearchCoverage } from "../search-index/coverage.js";
 import { getIndexedRecord } from "../search-index/record.js";
 import { searchIndexedParcels } from "../search-index/search.js";
 import { recentCalendarDates } from "../search-index/ask.js";
+import { checkRecentPermitWindows } from "./smoke-recent-permits.mjs";
 
 const writer = process.env.SEARCH_DATABASE_WRITE_URL;
 const password = process.env.SEARCH_DATABASE_READER_PASSWORD;
@@ -21,6 +22,26 @@ const [identity] = await indexQuery(`SELECT current_user AS role,
   has_table_privilege(current_user, 'search_records', 'INSERT') AS can_insert`);
 if (identity?.role !== role || !identity.can_read || identity.can_insert)
   throw new Error("Question demo must use the read-only index role");
+
+process.env.PILOT_API_TOKEN ??= randomBytes(32).toString("hex");
+process.env.PILOT_PASSPHRASE ??= randomBytes(32).toString("hex");
+const { default: mcp } = await import("../api/mcp.js");
+const recent = await checkRecentPermitWindows({ search: async (args) => {
+  const response = await mcp.fetch(new Request("https://example.com/mcp", {
+    method: "POST",
+    headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}`,
+      "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call",
+      params: { name: "search_indexed_permits", arguments: args } }),
+  }));
+  const text = await response.text();
+  const payload = JSON.parse(text.startsWith("event:") ? text.match(/^data: (.+)$/m)?.[1] : text);
+  const result = payload.result?.structuredContent;
+  if (!response.ok || !result?.coverage) throw new Error("The recent permit MCP query failed");
+  return result;
+} });
+for (const item of recent.windows)
+  console.log(JSON.stringify({ event: "recent_permits_mcp_smoke", ...item }));
 
 const window = recentCalendarDates(30);
 const coverage = await getSearchCoverage();

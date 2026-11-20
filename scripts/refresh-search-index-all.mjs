@@ -1,6 +1,6 @@
 import { importArcgisSource, importStateRoster, importMunicipalPermitType,
   importMunicipalPermitCatalog, importSchoolAttendance,
-  importMunicipalRecentElectrical, importMunicipalRecentElectricalGroup } from "../search-index/import.js";
+  importMunicipalPermitWindows } from "../search-index/import.js";
 import { municipalPermitCatalogRows, municipalTypeShard } from "../search-index/municity.js";
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 
@@ -13,8 +13,7 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
 const jobs = mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
-  ["municity:Electrical Permit:recent-30-days", () => importMunicipalRecentElectrical()],
-  ["municity:Electrical group:recent-30-days", () => importMunicipalRecentElectricalGroup()],
+  ["municity:all-permit-types:recent-windows", () => importMunicipalPermitWindows()],
   ...["zoning", "wards", "neighborhoods", "cmt", "trash-pickup", "managed-lots",
     "ct-brownfields", "metered-parking-spaces", "transit-stops"].map((id) =>
     [id, () => importArcgisSource(id)]),

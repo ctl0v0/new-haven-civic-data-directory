@@ -346,7 +346,7 @@ export function createServer() {
     server,
     "search_indexed_permits",
     "Search indexed municipal permits",
-    "Search all indexed official permit types, or name up to six exact types, across City parcels and optional neighborhood or ward. Missing, capped, stale and unlinked types remain explicit coverage gaps. Permit date and status are source fields; linked application approvals require the live detail tools.",
+    "Search all published permit types within a verified recent PermitDate window, or search historical indexed types. Provide both dates to select a recent run. Optional exact types, statuses, City neighborhoods and wards narrow the results. Use get_search_coverage for indexed dates and join gaps.",
     z.object({
       permit_types: z.array(z.string().min(1).max(100)).min(1).max(6).optional(),
       scope: z.enum(["city", "neighborhood", "ward"]).optional(),

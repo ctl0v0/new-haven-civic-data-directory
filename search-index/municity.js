@@ -3,6 +3,23 @@ import { fetchJson, SourceError } from "../parcel/http.js";
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 
 const VENDOR = "https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data";
+export const RECENT_PERMIT_WINDOWS = Object.freeze([30, 90].map((days) => ({
+  days, scope_key: `permit-window:${days}`,
+})));
+export const RECENT_PERMIT_SCOPES = RECENT_PERMIT_WINDOWS.map((window) => window.scope_key);
+
+export function recentPermitRun(rows, from, to) {
+  if (!from || !to) return null;
+  const day = (value) => value instanceof Date ? value.toISOString().slice(0, 10)
+    : String(value ?? "").slice(0, 10);
+  return rows.filter((row) => row.source_id === "municity" &&
+    RECENT_PERMIT_SCOPES.includes(row.scope_key) && row.status === "complete" &&
+    row.coverage_date_from && row.coverage_date_to &&
+    from >= day(row.coverage_date_from) && to <= day(row.coverage_date_to))
+    .sort((a, b) => Number(a.latest_attempt_status === "failed") -
+      Number(b.latest_attempt_status === "failed") ||
+      Date.parse(b.finished_at) - Date.parse(a.finished_at))[0] ?? null;
+}
 // The municipal service returns more than 2,000 rows when requested. Ten
 // thousand has been checked against its public permit search. A response that
 // fills this request is still not an established full enumeration.
@@ -40,9 +57,10 @@ async function municipalSearch(searchfield, value, numrecs, get, fieldtype = "te
 }
 
 function normalizedPermitRows(rows, types) {
-  const names = new Set((Array.isArray(types) ? types : [types])
+  const names = types == null ? null : new Set((Array.isArray(types) ? types : [types])
     .map((name) => String(name).trim().toUpperCase()));
-  const filtered = rows.filter((row) => names.has(String(row.PermitType ?? "").trim().toUpperCase()));
+  const filtered = names ? rows.filter((row) =>
+    names.has(String(row.PermitType ?? "").trim().toUpperCase())) : rows;
   const byId = new Map();
   const present = (value) => value != null && String(value).trim() !== "";
   for (const row of filtered) {
@@ -204,6 +222,49 @@ export async function municipalPermitDateRows(date, types, format, { get = fetch
   return { date, vendor_count: total,
     observed_types: Object.fromEntries([...observedTypes].sort(([a], [b]) => a.localeCompare(b))),
     ...normalizedPermitRows(rows, types) };
+}
+
+export async function verifiedMunicipalPermitDays({ from, to }, format,
+  { dateRows = municipalPermitDateRows } = {}) {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const length = (Date.parse(`${to}T00:00:00Z`) - start) / 86_400_000 + 1;
+  if (!Number.isInteger(length) || length < 1 || length > 90)
+    throw new Error("Invalid municipal permit date window");
+  const days = Array.from({ length }, (_, offset) =>
+    new Date(start + offset * 86_400_000).toISOString().slice(0, 10));
+  const inventory = new Map();
+  const records = new Map();
+  let sourceCount = 0;
+  for (const day of days) {
+    const result = await checkedPermitDay(day, format, dateRows);
+    inventory.set(day, result);
+    sourceCount += result.vendor_count;
+    for (const row of result.rows) {
+      if (records.has(row.record_id)) throw new Error(`Permit ${row.record_id} appeared on multiple dates through ${day}`);
+      records.set(row.record_id, row);
+    }
+  }
+  for (const day of days) {
+    const first = inventory.get(day);
+    const second = await checkedPermitDay(day, format, dateRows);
+    if (first.vendor_count !== second.vendor_count || !sameMunicipalPermitRows(first.rows, second.rows))
+      throw new Error(`Municipal PermitDate ${day} changed during verification`);
+  }
+  return { rows: [...records.values()], sourceCount, datesChecked: days.length };
+}
+
+async function checkedPermitDay(day, format, dateRows) {
+  try {
+    const result = await dateRows(day, null, format);
+    if (result.vendor_count !== result.rows.length + result.duplicate_rows ||
+        result.rows.some((row) => row.event_date !== day))
+      throw new Error("Returned IDs and dates did not reconcile with the published count");
+    return result;
+  } catch (cause) {
+    const error = new Error(`Municipal PermitDate ${day}: ${cause.message}`, { cause });
+    if (cause.code) error.code = cause.code;
+    throw error;
+  }
 }
 
 export async function municipalParentPrintKey(parcelId, { get = fetchJson } = {}) {

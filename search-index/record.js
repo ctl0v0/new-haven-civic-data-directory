@@ -1,6 +1,7 @@
 import { SourceError } from "../parcel/http.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { indexConfigured, indexQuery } from "./db.js";
+import { RECENT_PERMIT_SCOPES } from "./municity.js";
 
 export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) {
   const sourceId = String(input.source_id ?? "").trim();
@@ -25,7 +26,7 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
   if (!indexConfigured()) return { ...key, found: false, complete_for_query: false,
     coverage: { index_status: "unconfigured" } };
   try {
-    const runs = await query(`SELECT r.id AS run_id, r.status, r.expected_count,
+    const runs = await query(`SELECT r.id AS run_id, a.scope_key, r.status, r.expected_count,
       r.returned_count, r.ambiguous_count, r.unlinked_count,
       r.source_updated_at, r.finished_at, r.warning,
       r.coverage_date_from, r.coverage_date_to,
@@ -34,7 +35,12 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
       LEFT JOIN LATERAL (SELECT status, warning FROM search_source_runs
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
-      WHERE a.source_id = $1 AND a.scope_key = $2`, [sourceId, scopeKey]);
+      WHERE a.source_id = $1 AND (a.scope_key = $2 OR (
+        a.scope_key = ANY($3::text[]) AND EXISTS (SELECT 1 FROM search_records p
+          WHERE p.run_id = r.id AND p.source_id = 'municity' AND p.record_id = $4
+            AND upper(trim(p.published_type)) = $5)))
+      ORDER BY (last.status = 'failed') ASC NULLS LAST, r.finished_at DESC LIMIT 1`,
+    [sourceId, scopeKey, permitType ? RECENT_PERMIT_SCOPES : [], recordId, permitType?.toUpperCase() ?? null]);
     const run = runs[0];
     if (!run) {
       let attempt = null;
@@ -52,6 +58,7 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
           latest_attempt_warning: attempt.warning ?? null,
           latest_attempt_started_at: attempt.started_at } : {}) } };
     }
+    key.scope_key = run.scope_key ?? scopeKey;
     const fresh = Date.now() - Date.parse(run.finished_at) <= 48 * 3600_000;
     const complete = fresh && run.status === "complete" &&
       run.latest_attempt_status !== "failed" &&
@@ -71,7 +78,7 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
     if (run.coverage_date_from || run.coverage_date_to) {
       coverage.coverage_date_from = run.coverage_date_from;
       coverage.coverage_date_to = run.coverage_date_to;
-      coverage.note = "This indexed permit type has only a date-bounded source run; absence outside that window is not established.";
+      coverage.note = "The selected permit source run covers only the published dates shown here.";
     }
     const rows = await query(`SELECT record_id, source_url, published_type,
       published_status, event_date, fields,

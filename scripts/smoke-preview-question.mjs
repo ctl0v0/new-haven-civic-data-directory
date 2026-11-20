@@ -1,6 +1,7 @@
 import { recentCalendarDates, askIndexedParcels } from '../search-index/ask.js';
 import { indexConfigured } from '../search-index/db.js';
 import { searchIndexedParcels } from '../search-index/search.js';
+import { checkRecentPermitWindows } from './smoke-recent-permits.mjs';
 
 // A private Preview build checks that the read-only index can answer the
 // working example. Only counts and source-run state are written to build logs.
@@ -16,6 +17,13 @@ const sourceSummary = (result) => ({
 });
 console.log(JSON.stringify({ event: 'preview_question_reader', configured: indexConfigured() }));
 const window = recentCalendarDates(30);
+try {
+  const report = await checkRecentPermitWindows();
+  for (const item of report.windows)
+    console.log(JSON.stringify({ event: 'preview_recent_permits', ...item }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_recent_permits_failed', message: error.message }));
+}
 try {
   const direct = await searchIndexedParcels({ requirements: [{ source_id: 'municity',
     permit_group: 'Electrical', event_date_from: window.from,

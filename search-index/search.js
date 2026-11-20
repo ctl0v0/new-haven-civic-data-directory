@@ -3,6 +3,7 @@ import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/searc
 import { GIS_INDEX_FIELDS } from "./arcgis.js";
 import { indexConfigured, indexQuery } from "./db.js";
 import { STATE_ROSTERS } from "./socrata.js";
+import { recentPermitRun, RECENT_PERMIT_SCOPES } from "./municity.js";
 
 // Only published, indexed columns may be used as cross-source predicates.
 // A source can be listed here before its first validated import; readiness is
@@ -209,8 +210,11 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
        (municipalType && (typeof municipalType !== "string" ||
          !municipalType.trim() || municipalType.length > 100))))
     throw new SourceError("Municipal search requires one exact PermitType or published permit group", 400);
-  const municipalScope = municipalType ? `permit-type:${municipalType.trim().toUpperCase()}`
+  let municipalScope = municipalType ? `permit-type:${municipalType.trim().toUpperCase()}`
     : municipalGroup ? `permit-group:${municipalGroup.toUpperCase()}` : null;
+  const permit = municipalRequirements[0];
+  const windowScopes = municipalType && permit.event_date_from && permit.event_date_to
+    ? RECENT_PERMIT_SCOPES : [];
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new SourceError("limit must be 1–100", 400);
@@ -231,7 +235,8 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
-        OR (a.source_id = 'municity' AND a.scope_key = $2)`, [requiredSources, municipalScope]);
+        OR (a.source_id = 'municity' AND (a.scope_key = $2 OR a.scope_key = ANY($3::text[])))`,
+    [requiredSources, municipalScope, windowScopes]);
   } catch (error) {
     console.warn(JSON.stringify({ event: "indexed_search_failed", stage: "active_runs",
       code: error?.code ?? null, name: error?.name ?? null }));
@@ -242,8 +247,9 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery } = 
   const byId = new Map(active.filter((row) => row.scope_key === "all")
     .map((row) => [row.source_id, row]));
   if (municipalScope) {
-    const municipal = active.find((row) => row.source_id === "municity" &&
-      row.scope_key === municipalScope);
+    const recent = windowScopes.length ? recentPermitRun(active, permit.event_date_from, permit.event_date_to) : null;
+    const municipal = recent ?? active.find((row) => row.source_id === "municity" && row.scope_key === municipalScope);
+    if (recent) municipalScope = recent.scope_key;
     if (municipal) byId.set("municity", municipal);
   }
   const absentMunicipal = municipalScope && !byId.has("municity")
@@ -347,9 +353,11 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
         (permitType && (typeof permitType !== "string" ||
           !permitType.trim() || permitType.length > 100))))
     throw new SourceError("Municipal record search requires exact PermitType or published permit group", 400);
-  const municipalScope = sourceId === "municity"
+  let municipalScope = sourceId === "municity"
     ? permitType ? `permit-type:${permitType.trim().toUpperCase()}`
       : `permit-group:${permitGroup.toUpperCase()}` : null;
+  const windowScopes = municipalScope && permitType && requirement.event_date_from && requirement.event_date_to
+    ? RECENT_PERMIT_SCOPES : [];
   const parcelId = input.city_parcel_id == null ? null : String(input.city_parcel_id);
   const objectId = input.city_objectid == null ? null : String(input.city_objectid);
   if ((parcelId == null) !== (objectId == null) ||
@@ -377,8 +385,8 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
         WHERE source_id = a.source_id AND scope_key = a.scope_key
         ORDER BY started_at DESC, id DESC LIMIT 1) last ON true
       WHERE (a.scope_key = 'all' AND a.source_id = ANY($1::text[]))
-        OR (a.source_id = 'municity' AND a.scope_key = $2)`,
-    [requiredSources, municipalScope]);
+        OR (a.source_id = 'municity' AND (a.scope_key = $2 OR a.scope_key = ANY($3::text[])))`,
+    [requiredSources, municipalScope, windowScopes]);
   } catch {
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "unavailable", source_checks: requiredSources.map((source_id) =>
@@ -387,8 +395,10 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   const byId = new Map(active.filter((row) => row.scope_key === "all")
     .map((row) => [row.source_id, row]));
   if (municipalScope) {
-    const municipal = active.find((row) => row.source_id === "municity" &&
-      row.scope_key === municipalScope);
+    const recent = windowScopes.length
+      ? recentPermitRun(active, requirement.event_date_from, requirement.event_date_to) : null;
+    const municipal = recent ?? active.find((row) => row.source_id === "municity" && row.scope_key === municipalScope);
+    if (recent) municipalScope = recent.scope_key;
     if (municipal) byId.set("municity", municipal);
   }
   const absentMunicipal = municipalScope && !byId.has("municity")

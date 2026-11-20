@@ -341,6 +341,56 @@ test("all-type permit search returns indexed matches while listing missing catal
   delete process.env.SEARCH_DATABASE_URL;
 });
 
+test("verified recent windows serve all types and keep exact type and neighborhood filters on a shared run", async () => {
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
+  const run = (source_id, scope_key, run_id, extra) => ({ source_id, scope_key, run_id,
+    status: "complete", finished_at: new Date(), expected_count: 10, returned_count: 10,
+    ambiguous_count: 0, unlinked_count: 0, ...extra });
+  const dates = { permit_date_from: "2026-08-23", permit_date_to: "2026-11-20" };
+  const active = [run("parcels", "all", 10), run("neighborhoods", "all", 11),
+    run("municity", "permit-window:30", 12, { coverage_date_from: "2026-10-22", coverage_date_to: dates.permit_date_to }),
+    run("municity", "permit-window:90", 13, { coverage_date_from: dates.permit_date_from, coverage_date_to: dates.permit_date_to }),
+    run("municity", "permit-type:WATER HEATER", 14)];
+  let statements = [];
+  const query = async (sql, params) => {
+    if (sql.includes("FROM search_active_runs")) return active;
+    statements.push({ sql, params });
+    return [{ permit_id: "1", permit_type: "Water Heater" }];
+  };
+  try {
+    const all = await searchIndexedPermits(dates, { query });
+    assert.equal(all.complete_for_query, true);
+    assert.equal(all.criteria.permit_types, "all-published-types");
+    assert.deepEqual(statements[0].params[0], [13]);
+    assert.equal(statements.length, 1);
+    const typed = await searchIndexedPermits({ ...dates, permit_types: ["Water Heater"],
+      scope: "neighborhood", neighborhood: "Westville" }, { query });
+    assert.equal(typed.coverage.source_checks.at(-1).scope_key, "permit-window:90");
+    assert.match(statements[1].sql, /upper\(trim\(r\.published_type\)\) = ANY/);
+    assert.ok(statements[1].params.some((value) => Array.isArray(value) && value[0] === "WATER HEATER"));
+    assert.ok(statements[1].params.includes("Westville"));
+    const historic = await searchIndexedPermits({ ...dates, permit_date_from: "2025-10-01",
+      permit_types: ["Water Heater"] }, { query });
+    assert.equal(historic.coverage.source_checks.at(-1).scope_key, "permit-type:WATER HEATER");
+    active[3].latest_attempt_status = "failed";
+    const short = await searchIndexedPermits({ ...dates, permit_date_from: "2026-10-22" }, { query });
+    assert.equal(short.coverage.source_checks.at(-1).scope_key, "permit-window:30");
+    assert.equal(short.complete_for_query, true);
+    const partial = await searchIndexedPermits(dates, { query });
+    assert.equal(partial.coverage.source_checks.at(-1).scope_key, "permit-window:90");
+    assert.equal(partial.complete_for_query, false);
+    statements = [];
+    const requirement = { source_id: "municity", equals: { PermitType: "Water Heater" },
+      event_date_from: dates.permit_date_from, event_date_to: dates.permit_date_to };
+    const parcels = await searchIndexedParcels({ requirements: [requirement,
+      { source_id: "neighborhoods", equals: { neighborhood: "Westville" } }] }, { query });
+    const records = await searchIndexedRecords(requirement, { query });
+    for (const result of [parcels, records])
+      assert.equal(result.coverage.source_checks.find((check) => check.source_id === "municity").scope_key, "permit-window:90");
+    assert.ok(statements.every(({ params }) => params.includes(13) && params.includes("Water Heater")));
+  } finally { delete process.env.SEARCH_DATABASE_URL; }
+});
+
 test("coverage names every catalog type including one blocked at the vendor limit", async () => {
   process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
   const coverage = await getSearchCoverage({ query: async (sql) => {
@@ -493,7 +543,8 @@ test("indexed record inspection keeps official fields and parcel join evidence s
   const inspect = async (recordId) => getIndexedRecord({ source_id: "municity",
     permit_type: "Hood - C", record_id: recordId }, { query: async (sql, values) => {
     if (sql.includes("FROM search_active_runs a")) {
-      assert.deepEqual(values, ["municity", "permit-type:HOOD - C"]);
+      assert.deepEqual(values, ["municity", "permit-type:HOOD - C",
+        ["permit-window:30", "permit-window:90"], recordId, "HOOD - C"]);
       return [{ run_id: 11, status: "complete", finished_at: new Date(),
         expected_count: 1, returned_count: 1, ambiguous_count: 0,
         unlinked_count: 0, latest_attempt_status: "complete" }];

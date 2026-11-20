@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { askIndexedParcels, interpretBaselineQuestion, questionPermitCatalog, recentCalendarDates } from "../search-index/ask.js";
 import { queryWorkbenchVisible } from "../api/pilot-page.js";
 import { getDataContext, recordedParcelUse } from "../parcel/data-context.js";
-import { municipalDateSearchFormat, municipalPermitDateRows } from "../search-index/municity.js";
+import { municipalDateSearchFormat, municipalPermitDateRows, verifiedMunicipalPermitDays } from "../search-index/municity.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { auditCityUseCodes } from "../search-index/use-codes.js";
 import contextRoute from "../api/v1/data-context.js";
@@ -314,6 +314,31 @@ test("date search must reproduce a known vendor permit and reconcile the exact d
   await assert.rejects(municipalPermitDateRows("2026-11-18", "Electrical Permit", format, {
     get: async () => ({ rows: [{ ...sample, PermitDate: "11/17/2026" }], total: 1 }),
   }), /unverified row or date/);
+});
+
+test("all-type date verification checks each day twice and keeps an empty day and every published type", async () => {
+  const range = { from: "2026-11-18", to: "2026-11-19" };
+  const format = { fieldtype: "text", encoding: "us" };
+  const raw = ["Water Heater", "A name outside the current catalog"].map((PermitType, i) =>
+    ({ PermitType, Permit_ID: i + 1, PermitDate: "11/18/2026" }));
+  const calls = [];
+  const get = async (url) => {
+    const day = new URL(url).searchParams.get("value");
+    calls.push(day);
+    return day === "11/18/2026" ? { rows: raw, total: 2 } : { rows: "", total: 0 };
+  };
+  const dateRows = (day, types, encoding) => municipalPermitDateRows(day, types, encoding, { get });
+  const verified = await verifiedMunicipalPermitDays(range, format, { dateRows });
+  assert.deepEqual(calls, ["11/18/2026", "11/19/2026", "11/18/2026", "11/19/2026"]);
+  assert.equal(verified.datesChecked, 2);
+  assert.equal(verified.sourceCount, 2);
+  assert.deepEqual(verified.rows.map((row) => row.published_type), raw.map((row) => row.PermitType));
+  let read = 0;
+  await assert.rejects(verifiedMunicipalPermitDays(range, format, {
+    dateRows: async (day) => ({ rows: day === range.from ? [{ record_id: "1",
+      event_date: day, published_status: ++read === 1 ? "Open" : "Closed" }] : [],
+    vendor_count: day === range.from ? 1 : 0, duplicate_rows: 0 }),
+  }), /2026-11-18 changed during verification/);
 });
 
 test("official context is protected and the MCP returns the same reviewed entries", async () => {

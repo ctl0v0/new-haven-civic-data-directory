@@ -4,8 +4,8 @@ import { arcgisInventory, arcgisFeatures } from "./arcgis.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
 import { municipalPermitCatalogRows, municipalPermitTypeRows,
-  sameMunicipalPermitRows, municipalDateSearchFormat, municipalPermitDateRows,
-  municipalParentPrintKey } from "./municity.js";
+  sameMunicipalPermitRows, municipalDateSearchFormat, verifiedMunicipalPermitDays,
+  municipalParentPrintKey, RECENT_PERMIT_WINDOWS } from "./municity.js";
 import { recentCalendarDates } from "./ask.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
 import { municipalPermitTypes } from "../parcel/permit-types.js";
@@ -120,6 +120,10 @@ async function linkSpatial(runId, sourceId, { addressZone = false } = {}) {
     sourceId === "addresses" ? "address-point-intersection" : "parcel-polygon-intersection"]);
 }
 
+const oneMunicipalParcelKey = `(SELECT count(DISTINCT nullif(trim(regexp_replace(
+  upper(replace(r.fields->>key, '/', ' ')), '[[:space:]]+', ' ', 'g')), ''))
+  FROM unnest(ARRAY['PrintKey', 'PrintKey_Parcel', 'VerifiedParentPrintKey']) AS keys(key)) <= 1`;
+
 async function linkExactParcelKey(runId, sourceId, keyField, { mbluOnly = false } = {}) {
   const parcelRun = await write(`SELECT run_id FROM search_active_runs
     WHERE source_id = 'parcels' AND scope_key = 'all'`);
@@ -137,7 +141,7 @@ async function linkExactParcelKey(runId, sourceId, keyField, { mbluOnly = false 
       AND (${mbluOnly ? "" : "upper(trim(r.fields->>$3)) = upper(p.fields->>'parcel_id') OR"}
         regexp_replace(upper(replace(r.fields->>$3, '/', ' ')), '[[:space:]]+', ' ', 'g') =
         regexp_replace(upper(replace(p.fields->>'mblu', '/', ' ')), '[[:space:]]+', ' ', 'g'))
-    WHERE r.run_id = $1 AND r.source_id = $4`,
+    WHERE r.run_id = $1 AND r.source_id = $4${sourceId === "municity" ? ` AND ${oneMunicipalParcelKey}` : ""}`,
   [runId, Number(parcelRun[0].run_id), keyField, sourceId]);
 }
 
@@ -157,6 +161,8 @@ async function linkAdditionalMunicipalKey(runId, keyField) {
         regexp_replace(upper(replace(p.fields->>'mblu', '/', ' ')), '[[:space:]]+', ' ', 'g')
     WHERE r.run_id = $1 AND r.source_id = 'municity'
       AND NULLIF(trim(r.fields->>$3), '') IS NOT NULL
+      AND NULLIF(trim(p.fields->>'parcel_id'), '') IS NOT NULL
+      AND ${oneMunicipalParcelKey}
       AND NOT EXISTS (SELECT 1 FROM search_record_parcels j
         WHERE j.run_id = r.run_id AND j.source_id = r.source_id AND j.record_id = r.record_id)`,
   [runId, Number(parcelRun[0].run_id), keyField,
@@ -357,95 +363,102 @@ export async function importMunicipalPermitType(permitType) {
   }
 }
 
-async function importMunicipalRecentWindow({ scopeKey, types, now = new Date(),
-  dateFormat = municipalDateSearchFormat, dateRows = municipalPermitDateRows,
-  parentKey = municipalParentPrintKey, verifyTypes = null }) {
-  const range = recentCalendarDates(30, now);
-  const runId = await beginRun("municity", scopeKey, null, null, range);
+// These windows share one source scan. The older slice extends the validated
+// 30-day run without fetching the most recent dates a third time.
+export async function importMunicipalPermitWindows({ now = new Date() } = {}) {
+  const [shortWindow, longWindow] = RECENT_PERMIT_WINDOWS;
+  const recent = recentCalendarDates(shortWindow.days, now);
+  const extended = recentCalendarDates(longWindow.days, now);
+  const older = { from: extended.from,
+    to: new Date(Date.parse(recent.from) - 86_400_000).toISOString().slice(0, 10) };
+  const parents = new Map();
+
+  const shortRun = await beginRun("municity", shortWindow.scope_key, null, null, recent);
+  let format, short, shortResult;
   try {
-    const format = await dateFormat("Electrical Permit");
-    const days = Array.from({ length: 30 }, (_, index) =>
-      new Date(Date.parse(`${range.from}T00:00:00Z`) + index * 86400_000)
-        .toISOString().slice(0, 10));
-    const first = [];
-    const dailyCounts = [];
-    const observedTypes = new Map();
-    for (const day of days) {
-      const result = await dateRows(day, types, format);
-      first.push(...result.rows);
-      dailyCounts.push(result.vendor_count);
-      for (const [name, count] of Object.entries(result.observed_types ?? {}))
-        observedTypes.set(name, (observedTypes.get(name) ?? 0) + count);
-    }
-    const ids = new Set(first.map((row) => row.record_id));
-    if (ids.size !== first.length || first.some((row) => row.event_date == null))
-      throw new Error("Recent municipal permit window has duplicate IDs across dates or an undated row");
-    const parents = new Map();
-    for (const row of first) {
-      const key = (value) => String(value ?? "").replaceAll("/", " ")
-        .trim().replace(/\s+/g, " ").toUpperCase();
-      if (key(row.fields.PrintKey) && key(row.fields.PrintKey_Parcel) &&
-          key(row.fields.PrintKey) !== key(row.fields.PrintKey_Parcel))
-        throw new Error(`Municipal permit ${row.record_id} publishes conflicting parcel keys`);
-      if (row.fields.PrintKey || !row.fields.Parcel_ID) continue;
-      const id = String(row.fields.Parcel_ID);
-      if (!parents.has(id)) {
-        try { parents.set(id, await parentKey(id)); }
-        catch { parents.set(id, null); }
-      }
-      if (parents.get(id)) row.fields.VerifiedParentPrintKey = parents.get(id);
-      if (key(row.fields.PrintKey_Parcel) && key(row.fields.VerifiedParentPrintKey) &&
-          key(row.fields.PrintKey_Parcel) !== key(row.fields.VerifiedParentPrintKey))
-        throw new Error(`Municipal permit ${row.record_id} disagrees with its verified parent parcel`);
-    }
-    await setRunInventory(runId, first.length);
-    for (let offset = 0; offset < first.length; offset += 200)
-      await insertRecords(runId, "municity", first.slice(offset, offset + 200));
-    const second = [];
-    for (const [index, day] of days.entries()) {
-      const result = await dateRows(day, types, format);
-      if (result.vendor_count !== dailyCounts[index])
-        throw new Error("Municipal daily permit count changed during refresh");
-      second.push(...result.rows);
-    }
-    for (const row of second)
-      if (parents.get(String(row.fields.Parcel_ID)))
-        row.fields.VerifiedParentPrintKey = parents.get(String(row.fields.Parcel_ID));
-    if (!sameMunicipalPermitRows(first, second))
-      throw new Error("Municipal recent permit rows changed during refresh");
-    if (verifyTypes && !(await verifyTypes()))
-      throw new Error("Official municipal permit group changed during refresh");
-    return { ...await finishRun(runId, "municity", first.length),
-      coverage_date_from: range.from, coverage_date_to: range.to,
-      daily_counts: dailyCounts,
-      observed_type_counts: Object.fromEntries([...observedTypes]
-        .sort(([a], [b]) => a.localeCompare(b))) };
+    format = await municipalDateSearchFormat();
+    short = await verifiedMunicipalPermitDays(recent, format);
+    await addVerifiedPermitParents(short.rows, parents);
+    shortResult = await publishPermitWindow(shortRun, shortWindow.scope_key, recent, short);
   } catch (error) {
-    await failRun(runId, error);
+    await failRun(shortRun, error);
     throw error;
+  }
+
+  const errors = [];
+  await refreshElectricalProjections(recent, short.rows, errors);
+  const longRun = await beginRun("municity", longWindow.scope_key, null, null, extended);
+  let longResult;
+  try {
+    const earlier = await verifiedMunicipalPermitDays(older, format);
+    const ids = new Set(short.rows.map((row) => row.record_id));
+    if (earlier.rows.some((row) => ids.has(row.record_id)))
+      throw new Error(`A permit appeared on both sides of the ${recent.from} date boundary`);
+    await addVerifiedPermitParents(earlier.rows, parents);
+    longResult = await publishPermitWindow(longRun, longWindow.scope_key, extended, {
+      rows: [...earlier.rows, ...short.rows],
+      sourceCount: earlier.sourceCount + short.sourceCount,
+      datesChecked: earlier.datesChecked + short.datesChecked,
+    });
+  } catch (error) {
+    await failRun(longRun, error);
+    errors.push(`${longWindow.scope_key}: ${error.message}`);
+  }
+  if (errors.length) throw new Error(errors.join("; "));
+  return { recent: shortResult, extended: longResult };
+}
+
+async function addVerifiedPermitParents(rows, cache) {
+  for (const row of rows) {
+    const { PrintKey, PrintKey_Parcel, Parcel_ID } = row.fields;
+    if (PrintKey || PrintKey_Parcel || !Parcel_ID) continue;
+    const id = String(Parcel_ID);
+    if (!cache.has(id)) {
+      try { cache.set(id, await municipalParentPrintKey(id)); }
+      catch { cache.set(id, null); }
+    }
+    if (cache.get(id)) row.fields.VerifiedParentPrintKey = cache.get(id);
   }
 }
 
-export async function importMunicipalRecentElectrical(options = {}) {
-  return importMunicipalRecentWindow({ scopeKey: "permit-type:ELECTRICAL PERMIT",
-    types: ["Electrical Permit"], ...options });
+async function publishPermitWindow(runId, scopeKey, range, { rows, sourceCount, datesChecked }) {
+  await setRunInventory(runId, rows.length);
+  for (let offset = 0; offset < rows.length; offset += 200)
+    await insertRecords(runId, "municity", rows.slice(offset, offset + 200));
+  const sourceWarning = sourceCount > rows.length
+    ? `${sourceCount} published rows reconciled to ${rows.length} distinct permit IDs across ${datesChecked} verified dates`
+    : null;
+  const counts = await finishRun(runId, "municity", rows.length, { sourceWarning });
+  const summary = { scope_key: scopeKey, coverage_date_from: range.from,
+    coverage_date_to: range.to, dates_checked: datesChecked, vendor_rows: sourceCount,
+    observed_types: new Set(rows.map((row) => row.published_type)).size, ...counts };
+  console.log(JSON.stringify({ event: "municipal_permit_window", ...summary }));
+  return summary;
 }
 
-export async function importMunicipalRecentElectricalGroup(options = {}) {
-  const getNames = async () => {
-    const listed = await municipalPermitTypes({ fresh: true, retry429: true });
-    const electrical = listed.groups?.find((group) => group.name === "Electrical");
-    if (listed.partial || !electrical?.types?.length)
-      throw new Error("Official Electrical permit group is unavailable");
-    const names = electrical.types.map((item) => item.name).sort();
-    if (names.some((name) => !name) || new Set(names).size !== names.length)
-      throw new Error("Official Electrical permit group repeats or omits a name");
-    return names;
-  };
-  const types = await getNames();
-  return importMunicipalRecentWindow({ scopeKey: "permit-group:ELECTRICAL",
-    types, ...options, verifyTypes: async () =>
-      JSON.stringify(types) === JSON.stringify(await getNames()) });
+async function refreshElectricalProjections(range, rows, errors) {
+  const projections = [
+    ["permit-type:ELECTRICAL PERMIT", async () => ["ELECTRICAL PERMIT"]],
+    ["permit-group:ELECTRICAL", async () => {
+      const listed = await municipalPermitTypes({ fresh: true, retry429: true });
+      municipalPermitCatalogRows(listed);
+      const group = listed.groups.find((entry) => entry.name === "Electrical");
+      if (!group?.types.length) throw new Error("Official Electrical group is absent");
+      return group.types.map((entry) => entry.name.trim().toUpperCase());
+    }],
+  ];
+  for (const [scopeKey, typeNames] of projections) {
+    const runId = await beginRun("municity", scopeKey, null, null, range);
+    try {
+      const names = new Set(await typeNames());
+      const subset = rows.filter((row) => names.has(row.published_type.trim().toUpperCase()));
+      await publishPermitWindow(runId, scopeKey, range, { rows: subset, sourceCount: subset.length,
+        datesChecked: 30 });
+    } catch (error) {
+      await failRun(runId, error);
+      errors.push(`${scopeKey}: ${error.message}`);
+    }
+  }
 }
 
 export async function importMunicipalPermitCatalog() {

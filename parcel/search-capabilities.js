@@ -71,13 +71,13 @@ export function searchCapabilities() {
         sources: ["municity", "parcels", "neighborhoods", "wards"],
         scopes: ["city", "neighborhood", "ward"],
         filter_fields: {
-          permit_types: "Optional: one to six exact published PermitType values. Omit to search every indexed type in the latest official type catalog",
+          permit_types: "Optional: one to six exact published PermitType values. Within a validated recent date window, omit to search all published types. Historical searches use the indexed type catalog",
           permit_status: "Published PermStatus exact value",
           permit_date_from: "Published PermitDate lower calendar date",
           permit_date_to: "Published PermitDate upper calendar date",
         },
         paging: "1–50 matching permit rows per page; continue next_cursor",
-        completeness: "The all-type search also requires a fresh official type catalog. Every queried type needs a fresh validated run below the current 10,000-row request bound, exact MBLU joins and the last result page. Missing types and unlinked rows keep results partial; approval fields require the live detail tools",
+        completeness: "Provide both dates to use a verified all-type recent run when it covers the window. Other searches use historical type runs. Freshness, exact parcel joins, source gaps and remaining pages determine completeness; approval fields require live details",
         follow_up_tools: ["get_indexed_record", "get_permit_details", "get_application_details"],
       },
       {

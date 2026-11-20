@@ -1,6 +1,7 @@
 import { SourceError } from "../parcel/http.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { indexConfigured, indexQuery } from "./db.js";
+import { recentPermitRun } from "./municity.js";
 
 const date = (value, name) => {
   if (value == null || value === "") return null;
@@ -99,7 +100,10 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
         ({ source_id, status: "unavailable" })) } };
   }
   const byKey = new Map(active.map((row) => [`${row.source_id}:${row.scope_key}`, row]));
-  if (allTypes) {
+  const recent = recentPermitRun(active, from, to);
+  const needsCatalog = allTypes && !recent;
+  if (recent && allTypes) criteria.permit_types = "all-published-types";
+  if (needsCatalog) {
     const catalog = byKey.get("municity-permit-types:all");
     if (!catalog) return { criteria, items: [], next_cursor: null,
       complete_for_query: false, coverage: { index_status: "partial",
@@ -119,7 +123,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     }
   }
   let missingAttempts = new Map();
-  const missingScopes = types.map((type) => `permit-type:${type}`)
+  const missingScopes = (recent ? [] : types).map((type) => `permit-type:${type}`)
     .filter((scopeKey) => !byKey.has(`municity:${scopeKey}`));
   if (missingScopes.length) try {
     const attempts = await query(`SELECT DISTINCT ON (scope_key)
@@ -130,13 +134,14 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     missingAttempts = new Map(attempts.map((row) => [row.scope_key, row]));
   } catch { /* Missing attempt details never promote a result to complete. */ }
   const checks = [check("parcels", "all", byKey.get("parcels:all"), 48 * 3600_000),
-    ...(allTypes ? [check("municity-permit-types", "all",
+    ...(needsCatalog ? [check("municity-permit-types", "all",
       byKey.get("municity-permit-types:all"), 48 * 3600_000)] : []),
     ...(scope === "city" ? [] : [check(scope === "ward" ? "wards" : "neighborhoods",
       "all", byKey.get(`${scope === "ward" ? "wards" : "neighborhoods"}:all`), 48 * 3600_000)]),
-    ...types.map((type) => check("municity", `permit-type:${type}`,
+    ...(recent ? [check("municity", recent.scope_key, recent, 48 * 3600_000, null, from, to)] :
+      types.map((type) => check("municity", `permit-type:${type}`,
       byKey.get(`municity:permit-type:${type}`), 48 * 3600_000,
-      missingAttempts.get(`permit-type:${type}`), from, to))];
+      missingAttempts.get(`permit-type:${type}`), from, to)))];
   if (checks.some((item) => item.status === "not_indexed" && item.source_id !== "municity"))
     return { criteria, items: [], next_cursor: null, complete_for_query: false,
       coverage: { index_status: "partial", source_checks: checks,
@@ -146,7 +151,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     .map((item) => [`${item.source_id}:${item.scope_key}`, item.run_id]));
   const sourceHash = fingerprint(runIds);
   const cursor = readSearchCursor(input.cursor, fingerprint(criteria), sourceHash);
-  const availableTypeRuns = types.map((type) => runIds[`municity:permit-type:${type}`])
+  const availableTypeRuns = recent ? [Number(recent.run_id)] : types.map((type) => runIds[`municity:permit-type:${type}`])
     .filter((runId) => runId != null);
   if (!availableTypeRuns.length) return { criteria, items: [], next_cursor: null,
     complete_for_query: false, coverage: { index_status: "partial", source_checks: checks,
@@ -155,6 +160,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     runIds["parcels:all"]];
   const add = (value) => { values.push(value); return `$${values.length}`; };
   const filters = [];
+  if (recent && !allTypes) filters.push(`upper(trim(r.published_type)) = ANY(${add(types)}::text[])`);
   if (status) filters.push(`upper(r.published_status) = upper(${add(status)})`);
   if (from) filters.push(`r.event_date >= ${add(from)}::date`);
   if (to) filters.push(`r.event_date <= ${add(to)}::date`);

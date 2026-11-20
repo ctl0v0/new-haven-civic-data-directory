@@ -38,7 +38,7 @@ export const INDEX_DATASETS = Object.freeze({
   },
   "school-attendance": { id: "school-attendance", kind: "official-snapshot", cadence: "daily" },
   municity: { id: "municity", kind: "municipal-type", cadence: "daily",
-    gate: "Municipal Permit parent rows are indexed by published type or a verified recent Electrical catalog group. Applications, complaints, documents, contacts, licenses and occupants remain live parcel-only. A 10,000-row full-type response cannot establish historical completeness; a separately verified recent date window can only answer dates inside that window." },
+    gate: "Permit parent rows from all published types are indexed in verified 30- and 90-day PermitDate windows. Historical per-type runs and the Electrical group are tracked separately. A 10,000-row full-type response cannot establish historical completeness. Permit children, complaints, licenses and occupants remain live detail searches." },
   "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",
     cadence: "daily" },
   ...Object.fromEntries([...stateLocations].map((id) => [id,

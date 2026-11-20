@@ -1,5 +1,6 @@
 import { indexConfigured, indexQuery } from "./db.js";
 import { indexSourceCatalog } from "./catalog.js";
+import { RECENT_PERMIT_SCOPES, RECENT_PERMIT_WINDOWS } from "./municity.js";
 
 const maxAgeMs = (cadence) => cadence === "hourly" ? 2 * 3600_000 : 48 * 3600_000;
 
@@ -36,14 +37,34 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
       fields->>'group' AS group_name
       FROM search_records WHERE run_id = $1 AND source_id = 'municity-permit-types'
       ORDER BY record_id`, [typeCatalogRun.run_id]) : [];
-    const latestTypes = await query(`SELECT DISTINCT ON (scope_key)
-      scope_key, status, warning, started_at
+    const latestMunicipal = await query(`SELECT DISTINCT ON (scope_key)
+      scope_key, status, warning, started_at, coverage_date_from, coverage_date_to
       FROM search_source_runs WHERE source_id = 'municity'
-        AND scope_key LIKE 'permit-type:%'
-      ORDER BY scope_key, started_at DESC, id DESC`);
+        AND (scope_key LIKE 'permit-type:%' OR scope_key = ANY($1::text[]))
+      ORDER BY scope_key, started_at DESC, id DESC`, [RECENT_PERMIT_SCOPES]);
     const byScope = new Map(rows.filter((row) => row.source_id === "municity")
       .map((row) => [row.scope_key, row]));
-    const latestByScope = new Map(latestTypes.map((row) => [row.scope_key, row]));
+    const latestByScope = new Map(latestMunicipal.map((row) => [row.scope_key, row]));
+    const recentPermits = RECENT_PERMIT_WINDOWS.map(({ days, scope_key }) => {
+      const run = byScope.get(scope_key);
+      const latest = latestByScope.get(scope_key);
+      const fresh = Boolean(run && now - Date.parse(run.finished_at) <= maxAgeMs("daily"));
+      return { days, scope_key, indexed: Boolean(run), fresh,
+        complete_for_covered_window: Boolean(run && fresh && run.status === "complete" &&
+          latest?.status === "complete" && Number(run.expected_count) === Number(run.returned_count) &&
+          Number(run.ambiguous_count) === 0 && Number(run.unlinked_count) === 0),
+        ...(run ? { run_id: Number(run.run_id), returned_count: Number(run.returned_count),
+          linked_count: Number(run.linked_count), ambiguous_count: Number(run.ambiguous_count),
+          unlinked_count: Number(run.unlinked_count), coverage_date_from: run.coverage_date_from,
+          coverage_date_to: run.coverage_date_to, last_successful_refresh: run.finished_at,
+          warning: run.warning } : {}),
+        ...(latest ? { latest_attempt_status: latest.status === "failed" &&
+          latest.warning?.startsWith("MUNICIPAL_TYPE_CAP:") ? "blocked" : latest.status,
+          latest_attempt_warning: latest.warning, latest_attempt_started_at: latest.started_at,
+          latest_attempt_date_from: latest.coverage_date_from,
+          latest_attempt_date_to: latest.coverage_date_to } : {}),
+      };
+    });
     const catalogNames = new Set(typeNames.map((row) => row.record_id.toUpperCase()));
     const municipalTypes = [...typeNames.map((row) => row.record_id),
       ...rows.filter((row) => row.source_id === "municity" &&
@@ -101,6 +122,7 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
     });
     return {
       index_status: "connected",
+      municipal_recent_permits: recentPermits,
       municipal_permit_types: municipalTypes,
       municipal_permit_groups: municipalGroups,
       municipal_permit_catalog: { indexed: Boolean(typeCatalogRun),
