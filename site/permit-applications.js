@@ -202,7 +202,11 @@ export async function renderPermitApplications(parent, sidebar, { api, el, link 
     }
   }
   form.onsubmit = (event) => { event.preventDefault(); clearTimeout(timer); void load(); };
-  form.onchange = () => { clearTimeout(timer); void load(); };
+  form.onchange = (event) => {
+    if (event.target === search) return;
+    clearTimeout(timer);
+    void load();
+  };
   search.oninput = () => { clearTimeout(timer); timer = setTimeout(() => void load(), 250); };
   view.onchange = () => { department.value = ""; };
   next.onclick = () => void load(true);
