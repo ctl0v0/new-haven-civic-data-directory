@@ -118,16 +118,40 @@ try {
   const milliseconds = Math.round(performance.now() - before);
   const counts = Object.create(null);
   for (const { properties } of result.features) {
-    const use = properties.recorded_use.category;
+    const use = result.recorded_uses[properties.use_code].category;
     counts[use] = (counts[use] ?? 0) + 1;
   }
-  if (result.features.length <= 500 || !counts.mixed_use)
+  if (result.features.length <= 500 || !counts.mixed_use || result.viewport_limited)
     throw new Error('The wider downtown view did not return the expected parcel outlines and recorded-use categories');
   console.log(JSON.stringify({ event: 'preview_browse_zoom_15', mode: result.mode, status: result.status,
     polygons: result.features.length, counts, milliseconds, bytes: Buffer.byteLength(JSON.stringify(result)),
     warning: result.warning }));
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_browse_zoom_15_failed', name: error?.name, message: error?.message }));
+}
+
+try {
+  const [{ browseParcels }, { LAYERS }, { arcgis }] = await Promise.all([
+    import('../parcel/browse.js'), import('../parcel/config.js'), import('../parcel/http.js'),
+  ]);
+  const streets = await arcgis(LAYERS.parcels, {
+    where: ['WILLOW', 'FOSTER', 'NICOLL'].map((street) => `UPPER(property_address) LIKE '% ${street} ST%'`).join(' OR '),
+    outFields: 'objectid', returnGeometry: 'true', geometryPrecision: '6', outSR: '4326', resultRecordCount: '500',
+  });
+  const ids = new Set(streets.features.map((feature) => feature.attributes.objectid));
+  if (streets.exceededTransferLimit || ids.size < 30) throw new Error('The City street parcel check returned an incomplete list');
+  const points = streets.features.flatMap((feature) => feature.geometry?.rings?.flat() ?? []);
+  const x = points.map(([longitude]) => longitude);
+  const y = points.map(([, latitude]) => latitude);
+  const bounds = [Math.min(...x), Math.min(...y), Math.max(...x), Math.max(...y)].join(',');
+  const result = await browseParcels(bounds, { zoom: '15' });
+  const seen = new Set(result.features.map(({ properties }) => properties.objectid));
+  const missing = [...ids].filter((id) => !seen.has(id));
+  if (result.viewport_limited || missing.length) throw new Error(`Wider East Rock view omitted ${missing.length} street parcels`);
+  console.log(JSON.stringify({ event: 'preview_browse_east_rock', mode: result.mode,
+    street_parcels: ids.size, viewport_polygons: seen.size, missing: missing.length }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_browse_east_rock_failed', name: error?.name, message: error?.message }));
 }
 
 // Exercise the same read-only query used by the feed UI, REST and MCP.

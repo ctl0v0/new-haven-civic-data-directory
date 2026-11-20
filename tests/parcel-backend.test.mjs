@@ -2349,7 +2349,11 @@ test("a zoom 15 map uses one indexed viewport for parcel outlines and use colors
   const city = parcel(10386);
   city.attributes.use_code = "3030";
   const fresh = "2026-11-20T07:53:00Z";
-  const rows = [{ attributes: city.attributes, geometry: parcelFeatureToGeoJSON(city).geometry, finished_at: fresh }];
+  const geometry = parcelFeatureToGeoJSON(city).geometry;
+  const rows = [
+    { attributes: city.attributes, geometry, finished_at: fresh },
+    { attributes: { objectid: 10397, parcel_id: null }, geometry, finished_at: fresh },
+  ];
   const configured = () => true;
   globalThis.fetch = async () => { assert.fail("the indexed map should not call the live City layer"); };
   const data = await browseParcels(bounds, { zoom: "15", configured, query: async (sql, values) => {
@@ -2360,8 +2364,12 @@ test("a zoom 15 map uses one indexed viewport for parcel outlines and use colors
   } });
   assert.equal(data.mode, "indexed");
   assert.equal(data.indexed_at, fresh);
-  assert.equal(data.features[0].properties.recorded_use.category, "mixed_use");
-  assert.match(data.features[0].properties.source_url, /FeatureServer\/0\/10396$/);
+  assert.equal(data.recorded_uses[data.features[0].properties.use_code].category, "mixed_use");
+  assert.equal(data.features[0].properties.objectid, 10396);
+  assert.match(data.source_url, /FeatureServer\/0$/);
+  assert.equal(data.viewport_limited, false);
+  assert.equal(data.features[1].properties.parcel_id, null);
+  assert.equal(data.features[1].properties.objectid, 10397);
   assert.deepEqual(data.features[0].geometry, rows[0].geometry);
   const empty = await browseParcels(bounds, { zoom: "15", configured,
     query: async () => [{ attributes: null, geometry: null, finished_at: fresh }] });

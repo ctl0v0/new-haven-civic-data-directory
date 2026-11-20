@@ -4,7 +4,7 @@ import { parcelFeatureToGeoJSON, parcelGeoJSON } from "./geometry.js";
 import { indexConfigured, indexQuery } from "../search-index/db.js";
 
 const MAX_PARCELS = 500;
-const MAX_MAP_PARCELS = 6500;
+const MAX_MAP_PARCELS = 8500;
 const MAX_MAP_BYTES = 3_800_000;
 const CITY_PAGE_SIZE = 1000;
 const browseFields = "objectid,parcel_id,property_address,mblu,use_code";
@@ -95,21 +95,30 @@ function formatParcels(rows, limit, toFeature, { truncated = false, interrupted 
   let invalid = 0;
   let bytes = 0;
   const features = [];
+  const recordedUses = Object.create(null);
   for (const row of rows.slice(0, limit)) {
-    if (row.attributes?.parcel_id == null || row.attributes?.objectid == null) {
+    if (row.attributes?.objectid == null || (!source.mode && row.attributes?.parcel_id == null)) {
       invalid++;
       continue;
     }
     try {
-      const feature = toFeature(row);
-      feature.properties.source_url = `${LAYERS.parcels}/${row.attributes.objectid}`;
-      if (source.mode) {
-        bytes += Buffer.byteLength(JSON.stringify(feature)) + 1;
-        if (bytes > MAX_MAP_BYTES) {
-          truncated = true;
-          break;
-        }
+      const { id, geometry, properties, ...rest } = toFeature(row);
+      if (!source.mode) {
+        properties.source_url = `${LAYERS.parcels}/${properties.objectid}`;
+        features.push({ ...rest, id, geometry, properties });
+        continue;
       }
+      const { parcel_id, objectid, address, mblu, recorded_use } = properties;
+      const use_code = recorded_use.published_code ?? "";
+      const feature = { type: "Feature", id, geometry, properties: { parcel_id: parcel_id ?? null, objectid, address, mblu, use_code } };
+      bytes += Buffer.byteLength(JSON.stringify(feature)) + 1;
+      if (!Object.hasOwn(recordedUses, use_code))
+        bytes += Buffer.byteLength(JSON.stringify(use_code)) + Buffer.byteLength(JSON.stringify(recorded_use)) + 2;
+      if (bytes > MAX_MAP_BYTES) {
+        truncated = true;
+        break;
+      }
+      recordedUses[use_code] = recorded_use;
       features.push(feature);
     } catch { invalid++; }
   }
@@ -117,6 +126,7 @@ function formatParcels(rows, limit, toFeature, { truncated = false, interrupted 
     ...source,
     status: truncated || interrupted || invalid ? "partial" : features.length ? "ok" : "no_records",
     features,
+    ...(source.mode ? { recorded_uses: recordedUses, viewport_limited: truncated || interrupted } : {}),
     warning: interrupted ? "The City parcel layer returned only part of this view. Zoom in to retry."
       : truncated ? "More City parcels intersect this view. Zoom in to see all outlines."
       : invalid ? `${invalid} City parcels did not have displayable geometry and identifiers.` : null,

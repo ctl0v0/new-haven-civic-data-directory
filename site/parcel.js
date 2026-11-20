@@ -1626,6 +1626,7 @@ const browseUseStyles = new Map([
 ]);
 const MIN_BROWSE_ZOOM = 15;
 const BROWSE_REUSE_MS = 60_000;
+const BROWSE_MAX_SPLIT_DEPTH = 2;
 
 function browseUseStyle(category) {
   return browseUseStyles.get(category) ?? browseUseStyles.get("unclassified");
@@ -1745,6 +1746,41 @@ async function selectBrowseParcel(feature) {
       photoStatus.textContent = "Photo sources unavailable; the City parcel selection remains available.";
   }
 }
+async function fetchBrowseViewport(bounds, zoom, signal, depth = 0) {
+  const west = bounds.getWest();
+  const south = bounds.getSouth();
+  const east = bounds.getEast();
+  const north = bounds.getNorth();
+  const bbox = [west, south, east, north].join(",");
+  const data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox, zoom })}`, { signal });
+  for (const { properties } of data.features) {
+    if (data.recorded_uses) properties.recorded_use = data.recorded_uses[properties.use_code];
+    if (data.source_url) properties.source_url = `${data.source_url}/${properties.objectid}`;
+  }
+  if (!data.viewport_limited || depth >= BROWSE_MAX_SPLIT_DEPTH) return data;
+
+  const longitude = (west + east) / 2;
+  const latitude = (south + north) / 2;
+  const width = (east - west) * Math.cos(latitude * Math.PI / 180);
+  const sections = width >= north - south
+    ? [[[south, west], [north, longitude]], [[south, longitude], [north, east]]]
+    : [[[south, west], [latitude, east]], [[latitude, west], [north, east]]];
+  const parts = await Promise.allSettled(sections.map((section) =>
+    fetchBrowseViewport(window.L.latLngBounds(section), zoom, signal, depth + 1)));
+  signal.throwIfAborted();
+  const available = parts.flatMap((part) => part.status === "fulfilled" ? [part.value] : []);
+  const limited = available.length < sections.length || available.some((part) => part.viewport_limited);
+  const features = new Map();
+  for (const part of limited ? [data, ...available] : available)
+    for (const feature of part.features) features.set(parcelKey(feature.properties), feature);
+  return {
+    features: [...features.values()],
+    viewport_limited: limited,
+    warning: limited ? "Some City parcel outlines could not be loaded for this view. Zoom in to retry."
+      : available.some((part) => part.warning) ? "Some City parcel geometries could not be displayed." : null,
+  };
+}
+
 async function loadBrowseParcels() {
   if (!browseMap || $("browse-view").hidden || !$("browse-map").clientWidth) return;
   const status = $("browse-map-status");
@@ -1772,15 +1808,18 @@ async function loadBrowseParcels() {
   const controller = new AbortController();
   const request = { zoom, bounds, controller };
   browseRequest = request;
-  const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
   status.textContent = "Loading City parcel outlines for this map view…";
   try {
-    const data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox, zoom })}`, { signal: controller.signal });
+    const data = await fetchBrowseViewport(bounds, zoom, controller.signal);
     if (request !== browseRequest) return;
     const paths = new Map();
     const layer = window.L.geoJSON({ type: "FeatureCollection", features: data.features }, {
       renderer: browseRenderer, style: browseParcelStyle,
       onEachFeature: (feature, path) => {
+        if (feature.properties.parcel_id == null || feature.properties.objectid == null) {
+          path.options.interactive = false;
+          return;
+        }
         paths.set(parcelKey(feature.properties), path);
         path.on("click", () => { void selectBrowseParcel(feature); });
       },
@@ -1793,7 +1832,7 @@ async function loadBrowseParcels() {
       ? "City parcel outlines loaded. Select one to preview it."
       : "No City parcel outlines returned for this view.");
     status.textContent = message;
-    browseCoverage = { zoom, bounds: data.status === "partial" ? view : bounds,
+    browseCoverage = { zoom, bounds: data.viewport_limited ? view : bounds,
       message, expires: Date.now() + BROWSE_REUSE_MS };
   } catch (error) {
     if (request === browseRequest)
