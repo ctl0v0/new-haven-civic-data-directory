@@ -7,7 +7,7 @@ import { nearbyFeatureCounts } from "../parcel/nearby-counts.js";
 import { permitDetails } from "../parcel/permit-details.js";
 import { parcelPhoto } from "../parcel/photo.js";
 import { parcelQueryCatalog, queryDateFields, queryParcelDataSchema, relatedPermitFields } from "../parcel/query-contract.js";
-import { loadParcel, resolveParcel } from "../parcel/resolve.js";
+import { loadParcel, normalizeAddress, resolveParcel } from "../parcel/resolve.js";
 import { schoolAddress } from "../parcel/school-attendance.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { indexQuery } from "./db.js";
@@ -91,9 +91,11 @@ async function exactScope(scope, resolve) {
   const resolved = await resolve(scope.kind === "address" ? scope.address : scope.parcel_id);
   const candidates = resolved.candidates.filter((item) => item.objectid != null &&
     (scope.kind !== "parcel" || String(item.parcel_id) === scope.parcel_id));
+  const listedAddressMatches = scope.kind === "address" &&
+    normalizeAddress(candidates[0]?.address) === normalizeAddress(scope.address);
   const chosen = scope.objectid ? candidates.find((item) => pair(item) === pair(scope))
     : !resolved.truncated && candidates.length === 1 &&
-      candidates[0].match?.method !== "address-point-intersection" ? candidates[0] : null;
+      (candidates[0].match?.method !== "address-point-intersection" || listedAddressMatches) ? candidates[0] : null;
   if (chosen) return { scope: { kind: "parcel", parcel_id: String(chosen.parcel_id), objectid: String(chosen.objectid) },
     address_match: scope.kind === "address" ? { searched_address: scope.address, ...chosen.match } : undefined };
   if (!candidates.length) {

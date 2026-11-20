@@ -117,7 +117,7 @@ test("school questions preserve the address and select the published NHPS names"
   const resolve = async (value) => {
     assert.equal(value, address);
     return { candidates: [{ parcel_id: 11236, objectid: 979, address,
-      match: { method: "parcel-address" } }] };
+      match: { method: "address-point-intersection" } }] };
   };
   const records = async (sourceId) => {
     assert.equal(sourceId, "school-attendance");
