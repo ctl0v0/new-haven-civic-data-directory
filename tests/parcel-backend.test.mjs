@@ -25,6 +25,8 @@ import feedRoute from "../api/v1/feed.js";
 import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
 import browseParcelsRoute from "../api/v1/browse-parcels.js";
+import parcelRoute from "../api/v1/parcel.js";
+import parcelZoningRoute from "../api/v1/parcel-zoning.js";
 import parcelPhotoRoute from "../api/v1/parcel-photo.js";
 import permitDetailsRoute from "../api/v1/permit-details.js";
 import applicationDetailsRoute from "../api/v1/application-details.js";
@@ -2303,8 +2305,12 @@ test("map browsing requests only bounded City parcel polygons until a parcel is 
     const url = new URL(input);
     requests.push(url.pathname);
     assert.match(url.pathname, /Parcel_Viewer\/FeatureServer\/0\/query$/);
-    assert.equal(url.searchParams.get("outFields"), "objectid,parcel_id,property_address,mblu");
-    return response({ features: [parcel(999091)], spatialReference: { wkid: 4326 } });
+    if (url.searchParams.has("geometry"))
+      assert.equal(url.searchParams.get("outFields"), "objectid,parcel_id,property_address,mblu,use_code");
+    const feature = parcel(999091);
+    Object.assign(feature.attributes, { use_code: "TEST-UNREVIEWED", zone: "BD",
+      units_commercial: 2, units_residential: 3 });
+    return response({ features: [feature], spatialReference: { wkid: 4326 } });
   };
   const url = "https://example.com/api/v1/browse-parcels?bbox=-72.93,41.3,-72.92,41.31";
   assert.equal((await browseParcelsRoute.fetch(new Request(url))).status, 401);
@@ -2315,9 +2321,47 @@ test("map browsing requests only bounded City parcel polygons until a parcel is 
   assert.equal(data.features.length, 1);
   assert.equal(data.features[0].properties.parcel_id, 999091);
   assert.deepEqual(requests.length, 1);
+  const use = data.features[0].properties.recorded_use;
+  assert.equal(use.category, "unclassified");
+  assert.equal(use.published_code, "TEST-UNREVIEWED");
+  const summary = await parcelRoute.fetch(new Request(
+    "https://example.com/api/v1/parcel?parcel_id=999091&objectid=999101", { headers },
+  ));
+  assert.deepEqual((await summary.json()).parcel.recorded_use, use);
   assert.equal((await browseParcelsRoute.fetch(new Request(
     "https://example.com/api/v1/browse-parcels?bbox=-73,41.3,-72.8,41.4", { headers },
   ))).status, 400);
+});
+
+test("selected parcel zoning reports mapped districts and preserves incomplete source states", async () => {
+  let zoningResponse;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer")) {
+      const id = Number(url.searchParams.get("where").split("=")[1]);
+      const feature = parcel(id);
+      feature.attributes.zone = "ASSESSOR-ZONE";
+      return response({ features: [feature], spatialReference: { wkid: 4326 } });
+    }
+    assert.match(url.pathname, /Zoning_\(View\)\/FeatureServer\/0\/query/);
+    assert.equal(url.searchParams.get("spatialRel"), "esriSpatialRelIntersects");
+    return zoningResponse();
+  };
+  const url = (id) => `https://example.com/api/v1/parcel-zoning?parcel_id=${id}&objectid=${id + 10}`;
+  const headers = { authorization: "Bearer " + process.env.PILOT_API_TOKEN };
+  assert.equal((await parcelZoningRoute.fetch(new Request(url(999401)))).status, 401);
+  zoningResponse = () => response({ exceededTransferLimit: true, features: ["RM-2", "BD", "BD"].map(
+    (zone_code, objectid) => ({ attributes: { objectid, zone_code } })) });
+  const partial = await parcelZoningRoute.fetch(new Request(url(999401), { headers }));
+  assert.equal(partial.status, 200);
+  const mapped = await partial.json();
+  assert.equal(mapped.status, "partial");
+  assert.deepEqual(mapped.district_codes, ["BD", "RM-2"]);
+  assert.match(mapped.source_url, /Zoning_/);
+  zoningResponse = () => Promise.reject(new Error("Unavailable"));
+  const failure = await parcelZoningRoute.fetch(new Request(url(999402), { headers }));
+  assert.equal(failure.status, 200);
+  assert.equal((await failure.json()).status, "unavailable");
 });
 
 test("photo preview requires the selected City parcel and matching assessor PID", async () => {

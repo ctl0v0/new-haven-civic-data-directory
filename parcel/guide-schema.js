@@ -3,7 +3,7 @@ import { DISPLAY_GROUPS } from "./record-state.js";
 
 const methods = [
   ["resolve", "Resolve a parcel", "POST /api/v1/resolve", "resolve_parcel", "Start with an address, parcel ID, MBLU or assessor account. Select a City parcel from any candidates.", "query"],
-  ["parcel", "Parcel identity", "GET /api/v1/parcel", "get_parcel", "Return the selected City parcel ID, object ID, published address and available groups.", "parcel_id, objectid"],
+  ["parcel", "Parcel identity", "GET /api/v1/parcel", "get_parcel", "Return the selected City parcel ID, object ID, address, recorded use and available groups.", "parcel_id, objectid"],
   ["overview", "Overview", "GET /api/v1/overview", "get_parcel_overview", "Return source-linked highlights, group counts, source coverage and five dated references.", "parcel_id, objectid"],
   ["manifest", "Parcel source manifest", "GET /api/v1/parcel-manifest", "get_parcel_manifest", "Return the status and count certainty of every configured source for one selected parcel.", "parcel_id, objectid"],
   ["records", "Grouped records", "GET /api/v1/records", "get_parcel_records", "Return a bounded, filterable page of official records, facets and source coverage.", "parcel_id, objectid, group, limit, cursor, filters"],

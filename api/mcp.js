@@ -97,7 +97,7 @@ export function createServer() {
     server,
     "get_parcel",
     "Get parcel",
-    "Return the selected parcel identity and available groups.",
+    "Return the selected parcel identity, recorded use category and published code, and available groups.",
     z.object(common),
     ({ parcel_id, objectid }) => parcelSummary(parcel_id, objectid),
   );

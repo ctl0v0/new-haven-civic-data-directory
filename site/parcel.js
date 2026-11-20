@@ -1517,13 +1517,53 @@ async function loadGuide() {
   }
   renderGuideSection("home");
 }
+const browseUseStyles = new Map([
+  ["residential", { label: "Residential", color: "#286eae", opacity: .40 }],
+  ["mixed_use", { label: "Mixed-use", color: "#ca820b", opacity: .47 }],
+  ["commercial_only", { label: "Commercial only", color: "#863db4", opacity: .40 }],
+  ["other", { label: "Other", color: "#696e7d", opacity: .28 }],
+  ["unclassified", { label: "Unclassified", color: "#b0b7bc", opacity: .15 }],
+]);
+
+function browseUseStyle(category) {
+  return browseUseStyles.get(category) ?? browseUseStyles.get("unclassified");
+}
+
 function browseParcelStyle(feature) {
   const p = feature.properties ?? {};
   const active = selectedBrowseParcel &&
     String(p.parcel_id) === String(selectedBrowseParcel.parcel_id) &&
     String(p.objectid) === String(selectedBrowseParcel.objectid);
+  const use = browseUseStyle(p.recorded_use?.category);
+  const useMode = $("browse-parcel-display").value === "use";
   return { color: active ? "#00d5d8" : "#173e35", weight: active ? 4 : 1.5,
-    fillColor: active ? "#00d5d8" : "#f8c547", fillOpacity: active ? .22 : .04 };
+    fillColor: useMode ? use.color : active ? "#00d5d8" : "#f8c547",
+    fillOpacity: useMode ? use.opacity : active ? .22 : .04 };
+}
+
+function browseUseDetail(use) {
+  const detail = el("dd", browseUseStyle(use?.category).label);
+  const published = [use?.published_label, use?.published_code && `Code ${use.published_code}`].filter(Boolean);
+  if (published.length) detail.append(el("span", ` · ${published.join(" · ")}`));
+  if (use?.definition_source_url) detail.append(document.createTextNode(" · "),
+    link(use.definition_source_url, "Use definition"));
+  return detail;
+}
+
+async function loadBrowseZoning(qs, version, detail) {
+  try {
+    const data = await api(`/api/v1/parcel-zoning?${qs}`);
+    if (version !== browseSelectionVersion) return;
+    detail.textContent = data.district_codes.length ? data.district_codes.join(", ")
+      : data.status === "no_records" ? "No intersecting districts returned" : "Zoning unavailable";
+    if (data.status === "partial") {
+      detail.append(el("span", data.district_codes.length ? " · Partial coverage" : " · Check incomplete"));
+    }
+    if (data.warning) detail.append(el("span", ` · ${data.warning}`));
+    if (data.source_url) detail.append(document.createTextNode(" · "), link(data.source_url, "City zoning layer"));
+  } catch {
+    if (version === browseSelectionVersion) detail.textContent = "Zoning unavailable";
+  }
 }
 async function selectBrowseParcel(feature) {
   const p = feature.properties ?? {};
@@ -1548,9 +1588,13 @@ async function selectBrowseParcel(feature) {
   if (window.matchMedia("(max-width: 44rem)").matches)
     aside.scrollIntoView({ behavior: "smooth", block: "start" });
   const title = p.address?.trim() || `City parcel ${p.parcel_id}`;
+  const zoning = el("dd", "Checking City zoning districts…");
+  const facts = el("dl", null, "browse-selection-facts");
+  facts.append(el("dt", "Recorded use"), browseUseDetail(p.recorded_use), el("dt", "Mapped zoning"), zoning);
+  const photoStatus = el("p", "Checking official parcel photo sources…", "meta");
   aside.replaceChildren(el("p", "Selected City parcel", "eyebrow"), el("h2", title),
     el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "meta"),
-    el("p", "Checking official parcel photo sources…", "meta"));
+    facts, photoStatus);
   aside.append(link(p.source_url, "Open City parcel source"));
   const button = el("button", requestedParcelKey === key ? "Refresh parcel data" : "Request parcel data");
   button.type = "button";
@@ -1571,13 +1615,13 @@ async function selectBrowseParcel(feature) {
     }
   });
   aside.append(button);
+  const qs = new URLSearchParams({ parcel_id: p.parcel_id, objectid: p.objectid });
+  void loadBrowseZoning(qs, version, zoning);
   try {
-    const qs = new URLSearchParams({ parcel_id: p.parcel_id, objectid: p.objectid });
     const data = await api(`/api/v1/parcel-photo?${qs}`);
     if (version !== browseSelectionVersion) return;
-    aside.querySelector(".meta:last-of-type")?.remove();
     if (data.status !== "ok") {
-      aside.insertBefore(el("p", "No verified municipal or assessor photo was returned for this parcel.", "meta"), button);
+      photoStatus.textContent = "No verified municipal or assessor photo was returned for this parcel.";
       return;
     }
     const figure = el("figure", null, "parcel-photo");
@@ -1589,12 +1633,11 @@ async function selectBrowseParcel(feature) {
     source.rel = "noopener noreferrer";
     caption.append(source);
     figure.append(image, caption);
-    if (setVerifiedPhoto(figure, image, source, data)) aside.insertBefore(figure, button);
+    if (setVerifiedPhoto(figure, image, source, data)) photoStatus.replaceWith(figure);
+    else photoStatus.textContent = "No verified municipal or assessor photo was returned for this parcel.";
   } catch {
-    if (version === browseSelectionVersion) {
-      aside.querySelector(".meta:last-of-type")?.remove();
-      aside.insertBefore(el("p", "Photo sources unavailable; the City parcel selection remains available.", "meta"), button);
-    }
+    if (version === browseSelectionVersion)
+      photoStatus.textContent = "Photo sources unavailable; the City parcel selection remains available.";
   }
 }
 async function loadBrowseParcels() {
@@ -1633,6 +1676,19 @@ function initBrowseMap() {
     $("browse-map-status").textContent = "Map renderer unavailable.";
     return;
   }
+  const legend = $("browse-use-legend");
+  for (const { label, color } of browseUseStyles.values()) {
+    const entry = el("li");
+    const swatch = el("span", null, "browse-use-swatch");
+    swatch.style.backgroundColor = color;
+    swatch.setAttribute("aria-hidden", "true");
+    entry.append(swatch, document.createTextNode(label));
+    legend.append(entry);
+  }
+  $("browse-parcel-display").addEventListener("change", (event) => {
+    $("browse-use-key").hidden = event.currentTarget.value !== "use";
+    browseLayer?.setStyle(browseParcelStyle);
+  });
   browseMap = leaflet.map($("browse-map"), { scrollWheelZoom: false, keyboard: true });
   addMapBackgrounds(browseMap);
   browseMap.setView([41.3083, -72.9279], 17);

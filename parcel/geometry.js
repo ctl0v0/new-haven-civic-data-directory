@@ -1,6 +1,7 @@
 import { arcgisToGeoJSON } from "@terraformer/arcgis";
 import { LAYERS } from "./config.js";
 import { SourceError } from "./http.js";
+import { recordedParcelUse } from "./data-context.js";
 
 export function parcelFeatureToGeoJSON(feature) {
   if (!Array.isArray(feature?.geometry?.rings) || !feature.geometry.rings.length)
@@ -48,6 +49,7 @@ export function parcelFeatureToGeoJSON(feature) {
       objectid: a.objectid,
       address: a.property_address ?? null,
       mblu: a.mblu ?? null,
+      recorded_use: recordedParcelUse(a.use_code),
       source_id: "parcels",
       source_url: LAYERS.parcels,
       description: "City mapped parcel boundary; not a building footprint.",

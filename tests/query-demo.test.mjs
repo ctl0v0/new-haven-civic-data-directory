@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { askIndexedParcels, interpretBaselineQuestion, questionPermitCatalog, recentCalendarDates } from "../search-index/ask.js";
 import { queryWorkbenchVisible } from "../api/pilot-page.js";
-import { getDataContext, commercialUseCodes } from "../parcel/data-context.js";
+import { getDataContext, commercialUseCodes, recordedParcelUse } from "../parcel/data-context.js";
 import { municipalDateSearchFormat, municipalPermitDateRows } from "../search-index/municity.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { auditCityUseCodes } from "../search-index/use-codes.js";
@@ -35,6 +35,24 @@ const catalog = async () => ({ partial: false, groups: [
 const interpreted = { intent: "search", commercial: false,
   permit_type: "Electrical Permit", permit_group: null, permit_status: null,
   permit_days: 30, neighborhood: null, clarification: null };
+
+test("recorded parcel use requires an exact, reviewed City use-code definition", () => {
+  const official_source_url = "https://gis.newhavenct.gov/example";
+  const codes = [
+    { code: "001", category: "residential", published_label: "Test dwelling", business_space: false },
+    { code: "002", category: "mixed_use", published_label: "Test dwelling and shop", business_space: true },
+    { code: "ABC", category: "commercial_only", published_label: "Test shop", business_space: true },
+    { code: "004", category: "other", published_label: "Test park", business_space: false },
+  ].map((row) => ({ ...row, official_source_url }));
+  const dictionary = { reviewed_on: "2026-11-20", codes };
+  for (const row of codes) assert.equal(recordedParcelUse(row.code, dictionary).category, row.category);
+  assert.deepEqual(recordedParcelUse(" abc ", dictionary), { category: "commercial_only",
+    published_code: "abc", published_label: "Test shop", definition_source_url: official_source_url,
+    reviewed_on: "2026-11-20" });
+  for (const code of ["ABC 1", "1", "", null])
+    assert.equal(recordedParcelUse(code, dictionary).category, "unclassified");
+  assert.equal(recordedParcelUse("001", { ...dictionary, codes: [...codes, codes[0]] }).category, "unclassified");
+});
 
 test("private query workbench appears on the pilot Preview branch only", () => {
   assert.equal(queryWorkbenchVisible({ VERCEL_ENV: "preview",

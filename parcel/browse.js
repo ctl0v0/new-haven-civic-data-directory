@@ -22,7 +22,7 @@ export async function browseParcels(bounds) {
     geometryType: "esriGeometryEnvelope",
     inSR: "4326", outSR: "4326", spatialRel: "esriSpatialRelIntersects",
     returnGeometry: "true",
-    outFields: "objectid,parcel_id,property_address,mblu",
+    outFields: "objectid,parcel_id,property_address,mblu,use_code",
     resultRecordCount: String(MAX_PARCELS + 1),
   });
   const wkid = data.spatialReference?.latestWkid ?? data.spatialReference?.wkid;

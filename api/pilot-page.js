@@ -90,6 +90,11 @@ const app = `
         <p class="eyebrow">Official City parcel layer</p>
         <div class="browse-sidebar-heading"><h1>Browse parcels</h1><button id="browse-panel-toggle" type="button" class="secondary" aria-expanded="false">Expand panel</button></div>
         <p id="browse-intro">Pan and zoom, then select a parcel. Full records load only after you request them.</p>
+        <div class="browse-use-controls">
+          <label for="browse-parcel-display">Color parcels by</label>
+          <select id="browse-parcel-display"><option value="use">Recorded use</option><option value="outlines">Outlines</option></select>
+          <div id="browse-use-key"><ul id="browse-use-legend" aria-label="Recorded use legend"></ul><p class="meta">Unclassified parcels lack a verified use classification.</p></div>
+        </div>
         <div id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and official photo.</p></div>
         <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
         <div id="browse-record-actions" class="browse-record-actions" hidden><button id="browse-open-records" type="button">View full records without map</button></div>

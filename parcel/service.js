@@ -15,6 +15,7 @@ import { searchIndexedParcels, searchIndexedRecords } from "../search-index/sear
 import { searchIndexedPermits } from "../search-index/permits.js";
 import { nearbyFeatureCounts } from "./nearby-counts.js";
 import { municipalPermitTypes } from "./permit-types.js";
+import { recordedParcelUse } from "./data-context.js";
 
 export { resolveParcel };
 export { parcelMapContext };
@@ -35,6 +36,22 @@ export async function parcelPhoto(id, objectid = null) {
   return photoForParcel(id, objectid);
 }
 
+export async function parcelZoning(id, objectid = null) {
+  const feature = await loadParcel(id, objectid);
+  const source = await getSourceRecords("zoning", feature);
+  const codes = source.items.map((item) => String(item.attributes?.zone_code ?? "").trim());
+  const missingCode = codes.some((code) => !code);
+  return {
+    parcel_id: feature.attributes.parcel_id,
+    objectid: feature.attributes.objectid,
+    status: missingCode ? "partial" : source.status,
+    district_codes: [...new Set(codes.filter(Boolean))].sort(),
+    source_url: source.source_url,
+    warning: [source.warning, missingCode ? "A returned district did not publish its code." : null]
+      .filter(Boolean).join(" ") || null,
+  };
+}
+
 export async function parcelSummary(id, objectid = null) {
   const feature = await loadParcel(id, objectid);
   const a = feature.attributes;
@@ -45,6 +62,7 @@ export async function parcelSummary(id, objectid = null) {
       address: a.property_address ?? null,
       mblu: a.mblu ?? null,
       account_number: a.account_number ?? null,
+      recorded_use: recordedParcelUse(a.use_code),
     },
     groups: GROUPS,
     source_count: SOURCES.length,

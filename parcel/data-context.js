@@ -17,7 +17,7 @@ export const DATA_CONTEXT = Object.freeze([
   { id: "city-use-code", term: "Parcel use code", source_id: "parcels", field: "use_code",
     official_source_url: parcelLayer,
     source_fact: "The City parcel layer publishes a use_code value for a parcel when available.",
-    reading_rule: "Keep the published code. A commercial grouping requires an official code definition and a reviewed mapping; zoning is a different field." },
+    reading_rule: "The recorded use category follows a reviewed official definition for the published code. Missing or unreviewed definitions stay unclassified. Mapped zoning is supplied separately." },
   { id: "commercial-parcel-query", term: "Commercial parcel search", source_id: "parcels", field: "use_code",
     official_source_url: parcelLayer,
     source_fact: "The City publishes parcel use codes and commercial-unit fields separately.",
@@ -75,23 +75,44 @@ export function getDataContext(input = {}) {
   } };
 }
 
-export function commercialUseCodes() {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(useCodes.reviewed_on ?? "") || !Array.isArray(useCodes.codes) ||
-      !useCodes.codes.length) return null;
-  const seen = new Set();
-  for (const row of useCodes.codes) {
-    const code = String(row.code ?? "").trim().toUpperCase();
-    if (!code || seen.has(code) || !row.published_label ||
-        typeof row.business_space !== "boolean" ||
+const recordedUseCategories = new Set(["residential", "mixed_use", "commercial_only", "other"]);
+const normalizeUseCode = (code) => String(code ?? "").trim().toUpperCase();
+
+function reviewedUseCodeIndex(dictionary) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dictionary.reviewed_on ?? "") ||
+      !Array.isArray(dictionary.codes) || !dictionary.codes.length) return null;
+  const index = new Map();
+  for (const row of dictionary.codes) {
+    const code = normalizeUseCode(row?.code);
+    if (!code || index.has(code) || typeof row.published_label !== "string" ||
+        !row.published_label.trim() || typeof row.business_space !== "boolean" ||
         !/^https:\/\/(?:[\w-]+\.)*(?:newhavenct\.gov|municityconnect\.com)\//i.test(row.official_source_url ?? ""))
       return null;
-    seen.add(code);
+    index.set(code, row);
   }
-  return useCodes.codes.filter((row) => row.business_space)
-    .map((row) => String(row.code).trim().toUpperCase());
+  return index;
+}
+
+const cityUseCodeIndex = reviewedUseCodeIndex(useCodes);
+
+export function recordedParcelUse(value, dictionary = useCodes) {
+  const publishedCode = String(value ?? "").trim() || null;
+  const index = dictionary === useCodes ? cityUseCodeIndex : reviewedUseCodeIndex(dictionary);
+  const definition = index?.get(normalizeUseCode(publishedCode));
+  return {
+    category: recordedUseCategories.has(definition?.category) ? definition.category : "unclassified",
+    published_code: publishedCode,
+    published_label: definition?.published_label ?? null,
+    definition_source_url: definition?.official_source_url ?? null,
+    reviewed_on: definition ? dictionary.reviewed_on : null,
+  };
+}
+
+export function commercialUseCodes() {
+  return cityUseCodeIndex && [...cityUseCodeIndex]
+    .filter(([, row]) => row.business_space).map(([code]) => code);
 }
 
 export function reviewedUseCodeValues() {
-  return commercialUseCodes() === null ? null : new Set(useCodes.codes.map((row) =>
-    String(row.code).trim().toUpperCase()));
+  return cityUseCodeIndex && new Set(cityUseCodeIndex.keys());
 }
