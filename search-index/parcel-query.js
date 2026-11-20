@@ -1,7 +1,7 @@
 import { getSourceRecords } from "../parcel/adapters.js";
 import { addressEvidence, checkedQueryAddress } from "../parcel/address-evidence.js";
 import { LAYERS } from "../parcel/config.js";
-import { commercialUseCodes, getDataContext, reviewedUseCodeValues } from "../parcel/data-context.js";
+import { parcelUseCodesForSearch, reviewedUseCodeValues } from "../parcel/data-context.js";
 import { SourceError } from "../parcel/http.js";
 import { nearbyFeatureCounts } from "../parcel/nearby-counts.js";
 import { permitDetails } from "../parcel/permit-details.js";
@@ -145,9 +145,8 @@ async function neighborhoodName(name, query) {
 }
 
 async function applyUseCategory(category, requirements, query) {
-  const codes = category === "business_space" ? commercialUseCodes()
-    : getDataContext().use_code_definitions.filter((row) => row.category === category).map((row) => row.code);
-  if (!codes?.length) return { reason: "Official City use-code definitions for this classification are unavailable." };
+  const codes = parcelUseCodesForSearch(category);
+  if (!codes.length) return { reason: "Official City use-code definitions for this classification are unavailable." };
   const requirement = requirements.find(({ source_id }) => source_id === "parcels");
   if (requirement?.one_of?.use_code || requirement?.equals?.use_code)
     return { reason: "Choose an exact use code or a recorded-use classification." };

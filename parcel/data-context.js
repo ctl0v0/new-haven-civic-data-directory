@@ -133,6 +133,11 @@ export function commercialUseCodes() {
     .filter(([, row]) => row.business_space).map(([code]) => code);
 }
 
+export function parcelUseCodesForSearch(category) {
+  if (category === "business_space") return commercialUseCodes() ?? [];
+  return [...(cityUseCodeIndex ?? [])].filter(([, row]) => row.category === category).map(([code]) => code);
+}
+
 export function reviewedUseCodeValues() {
   // A published label can be shown on the map even if it cannot support the
   // commercial query. Keep those codes outside that query's reviewed set.
