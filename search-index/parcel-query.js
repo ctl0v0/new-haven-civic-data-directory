@@ -14,6 +14,7 @@ import { indexQuery } from "./db.js";
 import { questionPermitCatalog } from "./ask.js";
 import { municipalDate } from "./municity.js";
 import { PERMIT_ACTIVITY_KINDS, PERMIT_ACTIVITY_SOURCE, PERMIT_ACTIVITY_TYPES } from "./permit-activity-source.js";
+import { permitNumber } from "./question-routes.js";
 import { PARCEL_QUERY_FIELDS, searchIndexedParcels } from "./search.js";
 
 const DETAILS = {
@@ -56,8 +57,9 @@ export function parcelQueryPlanProblem(plan, entries = new Map(parcelQueryCatalo
     if (item.permit_group && (item.source_id !== "municity" || item.equals?.PermitType))
       return "Use a published permit group or an exact permit type.";
     if (item.source_id === "municity" && !(item.permit_group || item.equals?.PermitType ||
+        permitNumber.test(item.equals?.PermitNo ?? "") ||
         (item.date?.from && item.date.to)))
-      return "Choose an exact permit type, permit group, or a bounded recent PermitDate range.";
+      return "Choose a published permit number, exact permit type, permit group, or bounded recent PermitDate range.";
     if (item.source_id === PERMIT_ACTIVITY_SOURCE) {
       const kind = normalized(item.equals?.activity_kind).toLowerCase();
       const type = normalized(item.equals?.permit_type);
@@ -73,6 +75,7 @@ export function parcelQueryPlanProblem(plan, entries = new Map(parcelQueryCatalo
     if (!definition?.projectable) return `${item.source_id} is not available as a parcel return source.`;
     if (item.fields?.some((field) => !definition.return_fields.includes(field)))
       return `Unknown return field for ${item.source_id}. Check the query catalog.`;
+    if (item.record_category && item.source_id !== "municity") return "A Permit category applies only to municipal records.";
     if (item.source_id === PERMIT_ACTIVITY_SOURCE && !requirementIds.includes(PERMIT_ACTIVITY_SOURCE))
       return "Choose an indexed permit activity kind and type, or request live details on matching permits.";
   }
@@ -84,6 +87,22 @@ export function parcelQueryPlanProblem(plan, entries = new Map(parcelQueryCatalo
       !requirementIds.some((id) => ["municity", PERMIT_ACTIVITY_SOURCE].includes(id)))
     return "A cross-parcel permit detail request needs a matching municipal permit or permit activity filter.";
   return null;
+}
+
+async function indexedPermitNumber(number, query) {
+  const rows = await query(`SELECT DISTINCT trim(r.published_type) AS permit_type, r.event_date
+    FROM search_active_runs a JOIN search_records r ON r.run_id = a.run_id AND r.source_id = a.source_id
+    WHERE a.source_id = 'municity' AND (a.scope_key LIKE 'permit-type:%' OR a.scope_key LIKE 'permit-window:%')
+      AND upper(trim(r.fields->>'PermitNo')) = $1 AND nullif(trim(r.published_type), '') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM search_record_parcels j
+        WHERE j.run_id = r.run_id AND j.source_id = r.source_id AND j.record_id = r.record_id
+        GROUP BY j.record_id HAVING count(DISTINCT (j.city_parcel_id, j.city_objectid)) = 1
+          AND bool_and(j.join_status = 'exact'))
+    LIMIT 8`, [normalized(number)]);
+  const types = [...new Map(rows.map(({ permit_type }) => [normalized(permit_type), permit_type])).values()];
+  const dates = [...new Set(rows.map(({ event_date }) => event_date instanceof Date
+    ? event_date.toISOString().slice(0, 10) : String(event_date ?? "").slice(0, 10)))];
+  return { types, date: dates.length === 1 && /^\d{4}-\d{2}-\d{2}$/.test(dates[0]) ? dates[0] : null };
 }
 
 async function exactScope(scope, resolve) {
@@ -183,11 +202,18 @@ async function liveSource(sourceId, wanted, feature, plan, dependencies) {
           source_record_id: sourceId === "parcel-photo" ? String(parcel_id) : String(objectid) }, wanted)] };
   }
   const result = await records(sourceId, feature);
+  const recordCategory = sourceId === "municity" ? plan.include.find(({ source_id }) => source_id === sourceId)?.record_category : null;
   const schoolFocus = sourceId === "school-attendance" && plan.scope.kind === "address"
     ? schoolAddress(plan.scope.address) : null;
   const selected = schoolFocus ? result.items.filter((item) =>
-    schoolAddress(item.attributes.address)?.address === schoolFocus.address) : result.items;
+    schoolAddress(item.attributes.address)?.address === schoolFocus.address)
+    : recordCategory ? result.items.filter(({ category }) => category === recordCategory) : result.items;
+  const countEstablished = result.count_established ?? (recordCategory ?
+    !result.omitted_categories?.includes(recordCategory) && !result.truncated_categories?.includes(recordCategory) : undefined);
   return { ...result,
+    ...(countEstablished === false && good.has(result.status) ? { status: "partial",
+      warning: result.warning || "The source did not establish the number of records in this category." } : {}),
+    ...(countEstablished === undefined ? {} : { count_established: countEstablished }),
     ...(schoolFocus && !selected.length && good.has(result.status) ? { status: "not_linked",
       warning: "No official NHPS attendance-zone row could be linked to the exact searched address." } : {}),
     items: selected.map((item) => {
@@ -321,6 +347,7 @@ async function projectParcel(row, plan, entries, dependencies) {
         warning: "Only the first 50 records from this live source are shown." } : {
         status: result.status, warning: result.warning, source_url: entries.get(sourceId).source_url,
         retrieved_at: result.retrieved_at,
+        ...(result.count_established === undefined ? {} : { count_established: result.count_established }),
       });
     } catch { checks.set(sourceId, { status: "unavailable", warning: "The official parcel source could not be checked." }); }
   }
@@ -368,6 +395,23 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
   if (!requirements.length && !isParcel)
     return unsupported("Choose at least one indexed source requirement for a cross-parcel query.", plan);
   const municipal = requirements.find(({ source_id }) => source_id === "municity");
+  if (municipal?.equals?.PermitNo && !municipal.equals.PermitType && !municipal.permit_group) {
+    if (!permitNumber.test(municipal.equals.PermitNo))
+      return unsupported("Enter the published permit number or pair it with an exact permit type.", plan);
+    let found;
+    try { found = await indexedPermitNumber(municipal.equals.PermitNo, query); }
+    catch { return unavailable("The published permit number could not be checked against the private permit index.", plan); }
+    if (found.types.length > 1) return { status: "clarify", plan,
+      reason: `The index lists that number under ${found.types.join(", ")}. Specify the exact published permit type.` };
+    if (!found.types.length) return { status: "coverage_limited", plan, items: [], complete_for_query: false,
+      coverage: { index_status: "partial", source_checks: [{ source_id: "municity", status: "partial",
+        warning: "The active index returned no exact City parcel link for this permit number." }] } };
+    municipal.equals = { ...municipal.equals, PermitType: found.types[0] };
+    if (!municipal.event_date_from && !municipal.event_date_to && found.date) {
+      municipal.event_date_from = found.date;
+      municipal.event_date_to = found.date;
+    }
+  }
   let permitTypes;
   if (municipal?.equals?.PermitType || municipal?.permit_group) {
     let listed;
