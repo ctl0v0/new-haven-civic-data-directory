@@ -1,8 +1,9 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { getDataContext, commercialUseCodes, reviewedUseCodeValues } from "../parcel/data-context.js";
-import { municipalPermitTypes } from "../parcel/permit-types.js";
+import { MUNICIPAL_PERMIT_TYPES_URL, municipalPermitTypes } from "../parcel/permit-types.js";
 import { SourceError } from "../parcel/http.js";
+import { searchParcelPermits } from "../parcel/permit-search.js";
 import { indexQuery, indexConfigured } from "./db.js";
 import { searchIndexedParcels, searchIndexedRecords } from "./search.js";
 import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
@@ -54,6 +55,18 @@ function businessLicenseQuestion(question) {
   return { neighborhood: match[1].trim(), days: Number(match[2]) };
 }
 
+function permitContactQuestion(question) {
+  const match = question.trim().replace(/\s+/g, " ").match(
+    /^(?:show(?: me)?|find|list) (?:all )?(?:the )?(?:public )?([a-z][a-z -]{1,60}?) contacts (?:who did|for|on|listed on) (.+?) (?:in|over|during) (?:the )?(?:past|last|previous) (\d{1,3}) days?[?.!]?$/i);
+  if (!match || Number(match[3]) < 1 || Number(match[3]) > 366) return null;
+  const type = match[2].replace(/\s+permits?$/i, "").trim();
+  const replacement = /^water[ -]+heater replacements?$/i.test(type);
+  return { role: match[1].trim(),
+    permitType: /^water[ -]+heater$/i.test(type) || replacement ? "Water Heater" : type,
+    ...(replacement ? { terms: ["replace", "replacing", "change out", "change-out"] } : {}),
+    days: Number(match[3]) };
+}
+
 export async function interpretQuestion(question, typeNames, groupNames) {
   const baseline = interpretBaselineQuestion(question);
   if (baseline && groupNames.includes("Electrical")) return baseline;
@@ -97,7 +110,9 @@ export async function questionPermitCatalog({ query = indexQuery,
           if (!groups.has(row.group_name)) groups.set(row.group_name, []);
           groups.get(row.group_name).push({ name: row.record_id });
         }
-        return { partial: false, groups: [...groups].map(([name, types]) =>
+        return { partial: false, source_url: MUNICIPAL_PERMIT_TYPES_URL,
+          retrieved_at: run.finished_at, method: "verified_index", distinct_type_names: rows.length,
+          groups: [...groups].map(([name, types]) =>
           ({ name, types })) };
       }
     }
@@ -108,6 +123,7 @@ export async function questionPermitCatalog({ query = indexQuery,
 export async function askIndexedParcels(input = {}, { interpret = interpretQuestion,
   catalog = questionPermitCatalog, search = searchIndexedParcels,
   searchRecords = searchIndexedRecords,
+  searchPermitWork = searchParcelPermits,
   query = indexQuery, now = new Date() } = {}) {
   const edited = input.filters != null;
   const question = edited ? "Edited search filters" : String(input.question ?? "").trim();
@@ -136,6 +152,26 @@ export async function askIndexedParcels(input = {}, { interpret = interpretQuest
   } catch {
     return { status: "unavailable", question,
       reason: "The official municipal permit type catalog could not be checked." };
+  }
+  const contact = !edited && permitContactQuestion(question);
+  if (contact) {
+    const permitType = canonicalType(contact.permitType, typeNames);
+    if (!permitType) return { status: "clarify", question,
+      clarification: "Choose an exact type from the official permit catalog for a contact search." };
+    const window = recentCalendarDates(contact.days, now);
+    const criteria = { scope: "city", permit_types: [permitType],
+      permit_date_from: window.from, permit_date_to: window.to,
+      contact_role: contact.role, require_contact_role: true, scan_limit: 6,
+      ...(contact.terms ? { permit_description_terms: contact.terms } : {}) };
+    const searchResult = await searchPermitWork(criteria);
+    return { status: searchResult.complete_for_query ? "ready" :
+      searchResult.next_cursor ? "paging" : "coverage_limited", question, search_method: "contacts",
+      interpretation: { intent: "search", activity: "permit_contacts", permit_type: permitType,
+        contact_role: contact.role, date_field: "PermitDate", date_window: window,
+        ...(contact.terms ? { permit_description_terms: contact.terms } : {}) },
+      criteria, search_result: searchResult,
+      context: getDataContext().entries.filter(({ id }) =>
+        ["municipal-permit-date", "municipal-permit-contact-role"].includes(id)) };
   }
   let parsed;
   if (edited) {

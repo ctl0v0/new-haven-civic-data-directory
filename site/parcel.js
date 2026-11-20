@@ -66,6 +66,11 @@ let feedLoadVersion = 0;
 let activeDataSection = "overview";
 let activeRecordGroup = null;
 let guideData = null;
+let guideSection = "home";
+let queryModule = null;
+let askMode = "language";
+let askMethod = "parcels";
+let askVersion = 0;
 let askCriteria = null;
 let askCursor = null;
 let overviewGroups = [];
@@ -1357,7 +1362,7 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
     return [];
   }
 }
-function showExplorerTab(tab, { noMap = false } = {}) {
+function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   const browsing = tab === "browse";
   const guiding = tab === "guide";
   const asking = tab === "ask" && !$('ask-tab').hidden;
@@ -1370,6 +1375,9 @@ function showExplorerTab(tab, { noMap = false } = {}) {
   else if (asking) url.searchParams.set("view", "ask");
   else if (maplessRecords) url.searchParams.set("view", "records");
   else url.searchParams.delete("view");
+  if (guiding && section !== "home" && (section !== "query-explorer" || !$("ask-tab").hidden))
+    url.searchParams.set("guide", section);
+  else url.searchParams.delete("guide");
   history.replaceState(null, "", `${url.pathname}${url.search}`);
   $("records-view").hidden = browsing || guiding || asking;
   $("browse-view").hidden = !browsing;
@@ -1380,7 +1388,7 @@ function showExplorerTab(tab, { noMap = false } = {}) {
   $("browse-tab").setAttribute("aria-selected", String(browsing));
   $("guide-tab").setAttribute("aria-selected", String(guiding));
   $("ask-tab").setAttribute("aria-selected", String(asking));
-  if (guiding) void loadGuide();
+  if (guiding) void loadGuide(section);
   if (browsing) requestAnimationFrame(() => {
     if (!browseMap) initBrowseMap();
     else browseMap.invalidateSize();
@@ -1411,13 +1419,25 @@ function guideFieldTable(parent, fields) {
 }
 function renderGuideSection(key) {
   if (!guideData) return;
+  guideSection = key;
+  const url = new URL(location.href);
+  if (key === "home") url.searchParams.delete("guide");
+  else url.searchParams.set("guide", key);
+  history.replaceState(null, "", `${url.pathname}${url.search}`);
   const content = $("guide-content");
   const example = $("guide-example");
   content.replaceChildren();
   example.replaceChildren();
   for (const button of $("guide-nav").querySelectorAll("button"))
     button.setAttribute("aria-current", button.dataset.guide === key ? "page" : "false");
-  if (key === "home") {
+  if (key === "query-explorer" && !$("ask-tab").hidden) {
+    const reference = el("div");
+    const sidebar = el("div");
+    content.append(reference);
+    example.append(sidebar);
+    void queryExplorer().then(({ explorer }) => explorer.renderGuide(reference, sidebar))
+      .catch((error) => reference.replaceChildren(el("p", error.message, "source-warning")));
+  } else if (key === "home") {
     content.append(el("p", "Official source records · private preview", "eyebrow"),
       el("h2", "How to read this parcel feed"));
     const steps = el("ol", null, "guide-steps");
@@ -1497,7 +1517,7 @@ function renderGuideSection(key) {
     }
   }
 }
-async function loadGuide() {
+async function loadGuide(section) {
   if (!guideData) {
     $("guide-content").replaceChildren(el("p", "Loading the protected data guide…", "meta"));
     try { guideData = await api("/api/v1/schema"); }
@@ -1508,14 +1528,18 @@ async function loadGuide() {
   }
   const nav = $("guide-nav");
   nav.replaceChildren();
-  for (const [id, title] of [["home", "How to read the data"], ...guideData.methods.map((item) => [item.id, item.title]), ["fields", "Field guide"], ["sources", "Sources and gaps"]]) {
+  const sections = [["home", "How to read the data"],
+    ...(!$("ask-tab").hidden ? [["query-explorer", "Query explorer"]] : []),
+    ...guideData.methods.map((item) => [item.id, item.title]), ["fields", "Field guide"], ["sources", "Sources and gaps"]];
+  for (const [id, title] of sections) {
     const button = el("button", title, "guide-nav-button");
     button.type = "button";
     button.dataset.guide = id;
     button.onclick = () => renderGuideSection(id);
     nav.append(button);
   }
-  renderGuideSection("home");
+  if (!$("guide-view").hidden)
+    renderGuideSection(sections.some(([id]) => id === section) ? section : "home");
 }
 const browseUseStyles = new Map([
   ["residential", { label: "Residential", color: "#286eae", opacity: .40 }],
@@ -2283,6 +2307,50 @@ $("browse-open-records").addEventListener("click", () => {
   void loadHeroPhoto(selectedQuery(), viewVersion);
   navigateDataSection(activeDataSection);
 });
+function queryExplorer() {
+  queryModule ??= import("/query-explorer.js").then((module) => ({
+    ...module,
+    explorer: module.createQueryExplorer({
+      api, el, link, schema: async () => guideData ??= await api("/api/v1/schema"),
+      openTest: () => { showExplorerTab("ask"); void setAskMode("fields", true); },
+      openQuestion: (question) => {
+        showExplorerTab("ask");
+        void setAskMode("language", true);
+        $("ask-question").value = question;
+        $("ask-question").focus();
+      },
+      run: (method, args) => void runFieldSearch(method, args),
+    }),
+  })).catch((error) => { queryModule = null; throw error; });
+  return queryModule;
+}
+async function setAskMode(mode, fromGuide = false) {
+  if ($("ask-tab").hidden || (mode === askMode && !fromGuide)) return;
+  askMode = mode;
+  askVersion++;
+  const structured = mode === "fields";
+  $("ask-language-mode").setAttribute("aria-pressed", String(!structured));
+  $("ask-fields-mode").setAttribute("aria-pressed", String(structured));
+  $("ask-language").hidden = structured;
+  $("ask-structured").hidden = !structured;
+  clearAskResult();
+  setAskStatus("");
+  if (!structured) return;
+  try {
+    const { explorer } = await queryExplorer();
+    if (askMode !== "fields") return;
+    await explorer.renderWorkbench($("ask-structured"));
+    if (fromGuide && askMode === "fields") $("ask-structured").querySelector("select")?.focus();
+  } catch (error) { setAskStatus(error.message, "unavailable"); }
+}
+$("ask-query-guide").addEventListener("click", (event) => {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  showExplorerTab("guide", { section: "query-explorer" });
+});
+$("ask-language-mode").addEventListener("click", () => void setAskMode("language"));
+$("ask-fields-mode").addEventListener("click", () => void setAskMode("fields"));
+
 function renderAskContext(entries = []) {
   const target = $("ask-context");
   target.replaceChildren();
@@ -2299,9 +2367,10 @@ function renderAskContext(entries = []) {
 function renderAskCoverage(result) {
   const target = $("ask-coverage");
   target.replaceChildren();
-  const checks = result?.coverage?.source_checks ?? [];
-  target.hidden = !checks.length;
-  if (!checks.length) return;
+  const coverage = result?.coverage;
+  const checks = coverage?.source_checks ?? [];
+  target.hidden = !checks.length && !coverage?.note;
+  if (target.hidden) return;
   target.append(el("h2", "Source coverage"));
   for (const check of checks) {
     const line = el("p", `${sourceNames[check.source_id] ?? check.source_id}: ${check.status}`, "ask-source-check");
@@ -2319,7 +2388,15 @@ function renderAskCoverage(result) {
     else if (check.date_covered === false) line.append(el("span", " · requested dates are outside this source run"));
     target.append(line);
   }
-  if (result.coverage?.note) target.append(el("p", result.coverage.note, "meta"));
+  if (coverage?.permit_date_from && coverage?.permit_date_to)
+    target.append(el("p", `Parent PermitDate window · ${coverage.permit_date_from} through ${coverage.permit_date_to}`, "meta"));
+  if (coverage?.type_inventory?.gaps) target.append(el("p",
+    Object.entries(coverage.type_inventory.gaps).map(([kind, count]) => `${kind} gaps: ${count}`).join(" · "), "meta"));
+  if (coverage?.cumulative) {
+    const checked = coverage.cumulative;
+    target.append(el("p", `${checked.scanned} permits checked · ${checked.detail_failed} detail checks unavailable · ${coverage.remaining_candidate_permits} candidates remaining`, "meta"));
+  }
+  if (coverage?.note || result.note) target.append(el("p", coverage?.note ?? result.note, "meta"));
   target.append(el("p", result.complete_for_query
     ? "All required source checks are complete through the last result page."
     : "This is not a complete citywide answer. Follow every page and review incomplete source checks.", "meta"));
@@ -2343,6 +2420,38 @@ function appendAskItems(items = []) {
         link(example.source_url, `Source record ${example.record_id ?? ""}`.trim()));
       li.append(row);
     }
+    const work = item.permit;
+    const sourceUrl = item.source_url ?? item.permit_source_url ?? work?.source_url;
+    if (sourceUrl) {
+      const fields = item.fields ?? {};
+      const name = fields.BusinessName ?? fields.dba ?? fields.business ?? fields.name;
+      const type = item.published_type ?? item.permit_type ?? item.activity_type ?? work?.PermitType;
+      const recordStatus = item.published_status ?? item.permit_status ?? item.activity_status ?? work?.PermStatus;
+      const date = item.event_date ?? item.permit_date ?? item.activity_date ?? work?.PermitDate;
+      const record = el("p", [name, type, recordStatus, date && String(date).slice(0, 10)].filter(Boolean).join(" · "));
+      if (record.textContent) record.append(document.createTextNode(" · "));
+      record.append(link(sourceUrl, `Official record ${item.permit_number ?? item.record_id ?? item.permit_id ?? work?.PermitNo ?? ""}`.trim()));
+      li.append(record);
+      if (work?.Description) li.append(el("p", work.Description, "meta"));
+      if (item.contacts?.length) {
+        const contacts = el("ul", null, "query-contact-list");
+        for (const person of item.contacts) {
+          const entry = el("li");
+          entry.append(el("strong", person.Fullname ?? person.CompanyName ?? person.ContactRole ?? "Listed contact"));
+          const summary = [person.ContactRole, person.CompanyName !== person.Fullname ? person.CompanyName : null,
+            person.Phone, person.Email ?? person.EMailAddress].filter(Boolean);
+          if (summary.length) entry.append(document.createTextNode(` · ${summary.join(" · ")}`));
+          if (person.source_url && person.source_url !== sourceUrl) entry.append(document.createTextNode(" · "),
+            link(person.source_url, "Contact source"));
+          contacts.append(entry);
+        }
+        li.append(contacts);
+      }
+      const detail = el("details", null, "query-result-detail");
+      detail.append(el("summary", "Published fields and parcel evidence"),
+        el("pre", JSON.stringify(item, null, 2)));
+      li.append(detail);
+    }
     $("ask-results").append(li);
   }
 }
@@ -2350,26 +2459,73 @@ function setAskStatus(message, state = "") {
   $("ask-status").textContent = message;
   $("ask-status").dataset.state = state;
 }
-async function runAsk(question, filters = null) {
-  if (filters) $("ask-question").value = "";
-  $("ask-run-mode").textContent = filters
-    ? "This result uses the applied filters below. The question box is ready for a new search."
-    : "This result uses the question shown above.";
-  $("ask-run-mode").hidden = false;
+function clearAskResult() {
+  $("ask-run-mode").hidden = true;
   $("ask-without-commercial").hidden = true;
-  setAskStatus(filters ? "Checking edited filters against indexed sources…" :
-    "Interpreting the question and checking indexed sources…", "loading");
   $("ask-results").replaceChildren();
   $("ask-coverage").hidden = true;
   $("ask-interpretation").hidden = true;
   $("ask-filter-form").hidden = true;
   $("ask-more").hidden = true;
+  $("ask-context").hidden = true;
   askCriteria = null;
   askCursor = null;
+}
+function displaySearchResult(result, { append = false } = {}) {
+  askCursor = result.next_cursor;
+  appendAskItems(result.items);
+  renderAskCoverage(result);
+  $("ask-more").hidden = !askCursor;
+  const indexStatus = result.coverage?.index_status;
+  const count = append ? $("ask-results").children.length : result.items.length;
+  const noun = askMethod === "parcels" ? "parcel" : askMethod === "contacts" ? "permit" : "record";
+  let message;
+  if (indexStatus === "unconfigured")
+    message = "The private parcel index is not connected in this Preview.";
+  else if (indexStatus === "unavailable")
+    message = "The private parcel index could not be queried.";
+  else if (count)
+    message = `${count} ${noun}${count === 1 ? "" : "s"} shown. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`;
+  else message = result.complete_for_query ? `No matching ${noun}s in the checked sources.` :
+    `No matching ${noun}s on this page. Source coverage is incomplete.`;
+  setAskStatus(message, ["unconfigured", "unavailable"].includes(indexStatus)
+    ? "unavailable" : result.complete_for_query ? "ready" : "coverage_limited");
+}
+async function runFieldSearch(method, args) {
+  const version = ++askVersion;
+  clearAskResult();
+  setAskStatus("Checking indexed sources…", "loading");
+  try {
+    const { indexedQueryRequest, indexedQueryTool } = await queryExplorer();
+    const result = await api(...indexedQueryRequest(method, args));
+    if (version !== askVersion) return;
+    const target = $("ask-interpretation");
+    const request = el("details", null, "query-result-detail");
+    request.append(el("summary", "MCP request"),
+      el("pre", JSON.stringify({ tool: indexedQueryTool(method), arguments: args }, null, 2)));
+    target.replaceChildren(request);
+    target.hidden = false;
+    askMethod = method;
+    askCriteria = args;
+    displaySearchResult(result);
+  } catch (error) {
+    if (version === askVersion) setAskStatus(error.message, "unavailable");
+  }
+}
+async function runAsk(question, filters = null) {
+  const version = ++askVersion;
+  clearAskResult();
+  if (filters) $("ask-question").value = "";
+  $("ask-run-mode").textContent = filters ? "This result uses the applied filters below." :
+    "This result uses the question shown above.";
+  $("ask-run-mode").hidden = false;
+  setAskStatus(filters ? "Checking edited filters against indexed sources…" :
+    "Interpreting the question and checking indexed sources…", "loading");
   try {
     const response = await api("/api/v1/ask-parcels", { method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(filters ? { filters } : { question }) });
+    if (version !== askVersion) return;
     const parsed = response.interpretation;
     if (parsed) {
       const target = $("ask-interpretation");
@@ -2378,7 +2534,10 @@ async function runAsk(question, filters = null) {
         parsed.permit_group ? `Published permit group: ${parsed.permit_group}` : null,
         parsed.permit_type ? `Permit type: ${parsed.permit_type}` : null,
         parsed.permit_status ? `Published permit status: ${parsed.permit_status}` : null,
-        parsed.date_window ? `PermitDate: ${parsed.date_window.from} through ${parsed.date_window.to}` : null,
+        parsed.contact_role ? `Listed contact role: ${parsed.contact_role}` : null,
+        parsed.permit_description_terms?.length ? `Permit description contains any of ${parsed.permit_description_terms.join(", ")}` : null,
+        parsed.activity === "municipal_business_license_issuance" ? "City business license issuance" : null,
+        parsed.date_window ? `${parsed.date_field ?? "PermitDate"} · ${parsed.date_window.from} through ${parsed.date_window.to}` : null,
         parsed.neighborhood ? `City neighborhood: ${parsed.neighborhood}` : null].filter(Boolean);
       for (const part of parts) target.append(el("p", part));
       target.hidden = !parts.length;
@@ -2388,7 +2547,7 @@ async function runAsk(question, filters = null) {
       $("ask-permit-status").value = parsed.permit_status ?? "";
       $("ask-days").value = parsed.permit_days ?? "";
       $("ask-neighborhood").value = parsed.neighborhood ?? "";
-      $("ask-filter-form").hidden = false;
+      $("ask-filter-form").hidden = Boolean(parsed.activity);
     }
     renderAskContext(response.context);
     if (response.reason || response.clarification) {
@@ -2408,23 +2567,11 @@ async function runAsk(question, filters = null) {
     const result = response.search_result;
     if (!result) { setAskStatus("No validated search result was returned.", "unavailable"); return; }
     askCriteria = response.criteria;
-    askCursor = result.next_cursor;
-    appendAskItems(result.items);
-    renderAskCoverage(result);
-    $("ask-more").hidden = !askCursor;
-    const indexStatus = result.coverage?.index_status;
-    let message;
-    if (indexStatus === "unconfigured")
-      message = "The private parcel index is not connected in this Preview. No parcel search ran.";
-    else if (indexStatus === "unavailable")
-      message = "The private parcel index could not be queried. Zero matches have not been established.";
-    else if (result.items.length)
-      message = `${result.items.length} parcel${result.items.length === 1 ? "" : "s"} on this page. ${result.complete_for_query ? "Source checks and paging are complete." : "Review source coverage and remaining pages."}`;
-    else message = result.complete_for_query ? "No matching parcels in the checked sources." :
-      "No matching parcels on this page; source coverage is incomplete, so zero is not established.";
-    setAskStatus(message, ["unconfigured", "unavailable"].includes(indexStatus)
-      ? "unavailable" : result.complete_for_query ? "ready" : "coverage_limited");
-  } catch (error) { setAskStatus(error.message, "unavailable"); }
+    askMethod = response.search_method === "contacts" ? "contacts" : askCriteria?.source_id ? "records" : "parcels";
+    displaySearchResult(result);
+  } catch (error) {
+    if (version === askVersion) setAskStatus(error.message, "unavailable");
+  }
 }
 for (const button of document.querySelectorAll("[data-ask-example]")) {
   button.addEventListener("click", () => {
@@ -2448,18 +2595,17 @@ $("ask-filter-form").addEventListener("submit", (event) => {
 });
 $("ask-more").addEventListener("click", async () => {
   if (!askCursor || !askCriteria) return;
-  setAskStatus("Loading the next matching parcels…", "loading");
+  const version = askVersion;
+  const button = $("ask-more");
+  button.disabled = true;
+  setAskStatus("Loading the next results…", "loading");
   try {
-    const result = await api("/api/v1/search-indexed-parcels", { method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...askCriteria, cursor: askCursor }) });
-    appendAskItems(result.items);
-    askCursor = result.next_cursor;
-    $("ask-more").hidden = !askCursor;
-    renderAskCoverage(result);
-    setAskStatus(`${$("ask-results").children.length} parcels shown. ${result.complete_for_query ? "The checked result is complete." : "Review source coverage and remaining pages."}`,
-      result.complete_for_query ? "ready" : "coverage_limited");
-  } catch (error) { setAskStatus(error.message, "unavailable"); }
+    const { indexedQueryRequest } = await queryExplorer();
+    const result = await api(...indexedQueryRequest(askMethod, askCriteria, askCursor));
+    if (version === askVersion) displaySearchResult(result, { append: true });
+  } catch (error) {
+    if (version === askVersion) setAskStatus(error.message, "unavailable");
+  } finally { button.disabled = false; }
 });
 function setMobileBrowseView(view) {
   document.body.classList.toggle("mobile-records-active", view === "records");
@@ -2488,7 +2634,7 @@ $("records-tab").parentElement.addEventListener("keydown", (event) => {
   target.click();
 });
 const initial = new URL(location.href).searchParams;
-if (initial.get("view") === "guide") showExplorerTab("guide");
+if (initial.get("view") === "guide") showExplorerTab("guide", { section: initial.get("guide") ?? "home" });
 if (initial.get("view") === "ask" && !$("ask-tab").hidden) showExplorerTab("ask");
 if (initial.get("view") === "records") showExplorerTab("records", { noMap: true });
 if (initial.get("view") === "map") {

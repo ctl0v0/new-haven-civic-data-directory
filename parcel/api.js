@@ -21,7 +21,8 @@ export function guarded(handler, { methods = ["GET"] } = {}) {
       if (!methods.includes(request.method))
         return respond(json({ error: "Method not allowed" }, 405));
       try {
-        return respond(json(await handler(request)));
+        const result = await handler(request);
+        return respond(result instanceof Response ? result : json(result));
       } catch (error) {
         const e = apiError(error);
         return respond(json({ error: e.error }, e.status));

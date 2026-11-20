@@ -5,6 +5,9 @@ import { getIndexedRecord } from "../search-index/record.js";
 import { searchIndexedParcels } from "../search-index/search.js";
 import { recentCalendarDates } from "../search-index/ask.js";
 import { checkRecentPermitWindows } from "./smoke-recent-permits.mjs";
+import { fetchJson } from "../parcel/http.js";
+import { municipalSearch } from "../search-index/municity.js";
+import { indexedLicenseExport } from "../search-index/license-export.js";
 
 const writer = process.env.SEARCH_DATABASE_WRITE_URL;
 const password = process.env.SEARCH_DATABASE_READER_PASSWORD;
@@ -25,6 +28,46 @@ if (identity?.role !== role || !identity.can_read || identity.can_insert)
 
 process.env.PILOT_API_TOKEN ??= randomBytes(32).toString("hex");
 process.env.PILOT_PASSPHRASE ??= randomBytes(32).toString("hex");
+const licenses = await indexedLicenseExport();
+if (licenses.items.some((row) => !row.city_parcel_id || !row.official_record_url ||
+    (row.source_id === "municipal-business-licenses" && row.effective_date)))
+  throw new Error("The license export did not preserve exact parcel links or source date meanings");
+const { default: exportRoute } = await import("../api/v1/license-export.js");
+const exportUrl = "https://example.com/api/v1/license-export?format=csv";
+if ((await exportRoute.fetch(new Request(exportUrl))).status !== 401)
+  throw new Error("License export must require pilot access");
+const downloaded = await exportRoute.fetch(new Request(exportUrl, {
+  headers: { authorization: `Bearer ${process.env.PILOT_API_TOKEN}` },
+}));
+if (!downloaded.ok || !downloaded.headers.get("content-type")?.startsWith("text/csv") ||
+    !(await downloaded.text()).startsWith("source_id,record_id,"))
+  throw new Error("The private license CSV did not download");
+console.log(JSON.stringify({ event: "license_export_smoke", rows: licenses.items.length,
+  sources: licenses.coverage.map(({ source_id, exported_records, indexed_records }) =>
+    ({ source_id, exported_records, indexed_records })) }));
+const sample = licenses.items.find((row) => row.source_id === "municipal-business-licenses" && row.license_type);
+if (sample) {
+  const audit = {};
+  try {
+    const types = await fetchJson("https://services5.municity5.com/M5Services/M5Service.svc/Customer/NewHavenCityCT/LicenseTypes",
+      { headers: { SourceId: "2" }, timeout: 7000 });
+    audit.catalog = { array: Array.isArray(types), rows: Array.isArray(types) ? types.length : null };
+  } catch (error) { audit.catalog = { upstream_status: error.upstreamStatus ?? null }; }
+  for (const [field, value] of [["License_ID", sample.record_id], ["LicenseType", sample.license_type]]) {
+    try {
+      const oneRequest = async (url, options) => {
+        try { return await fetchJson(url, { ...options, timeout: 7000 }); }
+        catch (error) { throw new Error(error.message, { cause: error }); }
+      };
+      const result = await municipalSearch(field, value, field === "License_ID" ? 5 : 200,
+        oneRequest, "text", "License");
+      audit[field] = { total: result.total, returned: result.rows.length,
+        reproduced: result.rows.some((row) => String(row.License_ID ?? "") === sample.record_id) };
+    } catch (error) { audit[field] = { upstream_status: error.cause?.upstreamStatus ?? null,
+      warning: error.message }; }
+  }
+  console.log(JSON.stringify({ event: "municipal_license_inventory_probe", ...audit }));
+}
 const { default: mcp } = await import("../api/mcp.js");
 async function callMcp(name, args) {
   const response = await mcp.fetch(new Request("https://example.com/mcp", {
@@ -39,6 +82,25 @@ async function callMcp(name, args) {
   const result = payload.result?.structuredContent;
   if (!response.ok || !result) throw new Error(`The ${name} MCP query failed`);
   return result;
+}
+try {
+  const answer = await callMcp("ask_indexed_parcels", { question:
+    "Show me Contractor contacts who did water heater replacements in the last 30 days" });
+  if (answer.search_method !== "contacts" || answer.interpretation?.date_field !== "PermitDate")
+    throw new Error("The contractor question did not preserve its role or permit-date filter");
+  const result = answer.search_result;
+  const contacts = result.items.flatMap((item) => item.contacts ?? []);
+  if (contacts.some((person) => String(person.ContactRole ?? "").trim().toLowerCase() !== "contractor") ||
+      result.items.some((item) => !item.city_parcel_id || !item.permit?.source_url ||
+        !answer.criteria.permit_description_terms.some((term) =>
+          String(item.permit.Description ?? "").toLowerCase().includes(term))))
+    throw new Error("A returned replacement or contractor lacked its published evidence");
+  console.log(JSON.stringify({ event: "contractor_question_smoke", status: answer.status,
+    matched_permits: result.items.length, contact_rows: contacts.length,
+    has_more: Boolean(result.next_cursor), scanned: result.coverage?.cumulative?.scanned ?? 0,
+    unavailable_details: result.coverage?.cumulative?.detail_failed ?? 0 }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: "contractor_question_unavailable", warning: error.message }));
 }
 const recent = await checkRecentPermitWindows({ search: (args) => callMcp("search_indexed_permits", args) });
 for (const item of recent.windows)

@@ -311,6 +311,10 @@ export async function searchParcelPermits(input = {}) {
   const reviewStatus = checkedOptional(input.review_status, "review status");
   const reviewType = checkedOptional(input.review_type, "review type");
   const contactRole = checkedOptional(input.contact_role, "contact role");
+  const rawTerms = input.permit_description_terms ?? [];
+  if (!Array.isArray(rawTerms) || rawTerms.length > 6)
+    throw new SourceError("Provide up to six permit description terms", 400);
+  const descriptionTerms = [...new Set(rawTerms.map((term) => checkedText(term, "description term", 80)))];
   if (input.require_contact_role != null && typeof input.require_contact_role !== "boolean")
     throw new SourceError("Invalid require_contact_role", 400);
   if (input.require_contact_role && !contactRole)
@@ -327,6 +331,7 @@ export async function searchParcelPermits(input = {}) {
     review_status: reviewStatus, review_completed_from: reviewFrom,
     review_completed_to: reviewTo, contact_role: contactRole,
     require_contact_role: input.require_contact_role === true,
+    ...(descriptionTerms.length ? { permit_description_terms: descriptionTerms } : {}),
   };
   const queryHash = digest(criteria);
   const settled = await Promise.allSettled(types.map((type) => vendorPermits(type)));
@@ -423,7 +428,11 @@ export async function searchParcelPermits(input = {}) {
         /Full application fields|linked application could not be verified/i.test(warning)))
         relevantWarnings.push("Linked application status was not fully checked.");
       const missingApplicationStatus = Boolean(applicationStatus && !application?.PermitApplicationStatus);
-      if (relevantWarnings.length || missingApplicationStatus) pageCoverage.criteria_unverified++;
+      const description = detail.permit?.attributes?.Description;
+      const missingDescription = descriptionTerms.length > 0 && !normalized(description);
+      if (relevantWarnings.length || missingApplicationStatus || missingDescription) pageCoverage.criteria_unverified++;
+      if (descriptionTerms.length && !descriptionTerms.some((term) => normalized(description).includes(normalized(term))))
+        continue;
       if (applicationStatus && !same(application?.PermitApplicationStatus, applicationStatus)) {
         continue;
       }
@@ -464,6 +473,7 @@ export async function searchParcelPermits(input = {}) {
           PermStatus: detail.permit.attributes.PermStatus,
           PermitDate: detail.permit.attributes.PermitDate,
           Department: detail.permit.attributes.Department,
+          ...(descriptionTerms.length ? { Description: description } : {}),
           source_url: detail.permit.source_url,
         },
         application: application ? {

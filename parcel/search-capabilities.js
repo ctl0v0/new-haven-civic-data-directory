@@ -1,6 +1,42 @@
 // Backend-only query contract. Keep this aligned with the registered MCP tools
 // and protected REST routes; the public data guide does not advertise searches.
 import { NUMBER_FIELDS, SEARCH_FIELDS } from "../search-index/search.js";
+import { MUNICIPAL_LICENSE_SOURCE } from "../search-index/municipal-licenses.js";
+import { PERMIT_ACTIVITY_TYPES } from "../search-index/permit-activity-source.js";
+import { STATE_ROSTERS } from "../search-index/socrata.js";
+import { indexConfigured, indexQuery } from "../search-index/db.js";
+import { SourceError } from "./http.js";
+
+const eventFields = { parcels: "sale_date", municity: "PermitDate",
+  [MUNICIPAL_LICENSE_SOURCE]: "IssueDate",
+  ...Object.fromEntries(Object.entries(STATE_ROSTERS).map(([id, source]) => [id, source.event_date])) };
+const valueFields = {
+  parcels: ["use_code", "zone"], zoning: ["zone_code"], wards: ["ward"],
+  neighborhoods: ["neighborhood", "neighborhood_label"], "trash-pickup": ["trash_day"],
+  municity: ["PermStatus"], [MUNICIPAL_LICENSE_SOURCE]: ["LicenseType", "Status"],
+  "ct-liquor-permits": ["status"], "ct-child-care-licenses": ["licensetype", "status"],
+  "ct-cannabis-retail": ["type"], "managed-lots": ["status"],
+};
+
+export async function indexedQueryValues(source, field, { query = indexQuery, configured = indexConfigured } = {}) {
+  if (!Object.hasOwn(valueFields, source) || !valueFields[source].includes(field) ||
+      !SEARCH_FIELDS[source]?.includes(field))
+    throw new SourceError("Observed values are available for the listed categorical fields.", 400);
+  if (!configured()) return { status: "unconfigured", values: [] };
+  const [run] = await query(`SELECT a.run_id, s.finished_at, s.status FROM search_active_runs a
+    JOIN search_source_runs s ON s.id = a.run_id
+    WHERE a.source_id = $1 AND a.scope_key = $2`,
+  [source, source === "municity" ? "permit-window:90" : "all"]);
+  if (!run) return { status: "not_indexed", values: [] };
+  const rows = await query(`SELECT DISTINCT trim(fields->>$3) AS value FROM search_records
+    WHERE source_id = $1 AND run_id = $2 AND nullif(trim(fields->>$3), '') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM search_record_parcels j WHERE j.run_id = search_records.run_id
+        AND j.source_id = search_records.source_id AND j.record_id = search_records.record_id
+        AND j.join_status = 'exact')
+    ORDER BY value LIMIT 101`, [source, run.run_id, field]);
+  return { status: run.status, checked_at: run.finished_at, values: rows.slice(0, 100).map(({ value }) => value),
+    truncated: rows.length > 100 };
+}
 
 export function searchCapabilities() {
   return {
@@ -21,8 +57,9 @@ export function searchCapabilities() {
           review_status: "Task.ApprovalStatus on the verified linked application",
           review_completed_from: "Task.DateCompleted; inclusive lower calendar date",
           review_completed_to: "Task.DateCompleted; inclusive upper calendar date",
-          contact_role: "source-public Contact.ContactRole on the permit or linked application",
-          require_contact_role: "exclude permits without that source-public contact role",
+          contact_role: "Published Contact.ContactRole on the permit or linked application",
+          require_contact_role: "Exclude permits without the named published contact role",
+          permit_description_terms: "Require any of up to six text terms in the published permit description",
         },
         join: "Permit.PrintKey equals one City parcel mblu after slash/space normalization; neighborhood uses City parcel-polygon intersection",
         paging: "scan_limit checks 1–12 candidate permits per call; continue next_cursor until absent",
@@ -46,11 +83,7 @@ export function searchCapabilities() {
       {
         tool: "search_indexed_parcels",
         rest: "POST /api/v1/search-indexed-parcels",
-        sources: ["parcels", "addresses", "trash-pickup", "zoning", "wards",
-          "neighborhoods", "cmt", "ct-brownfields", "ct-liquor-permits",
-          "municipal-business-licenses",
-          "ct-child-care-licenses", "ct-cannabis-retail", "school-attendance",
-          "municity"],
+        sources: Object.keys(SEARCH_FIELDS),
         scopes: ["City parcel joins across one to five published-source requirements"],
         filter_fields: {
           equals: "Exact source-published fields from the search field allowlist",
@@ -124,9 +157,9 @@ export function searchCapabilities() {
       {
         tool: "ask_indexed_parcels",
         rest: "POST /api/v1/ask-parcels",
-        sources: ["parcels", "neighborhoods", "municity"],
-        scopes: ["Private, bounded natural-language interpretation of reviewed City parcel and municipal permit fields"],
-        filter_fields: { question: "Commercial use codes, one exact published PermitType, optional published permit status/date, and City neighborhood" },
+        sources: ["parcels", "neighborhoods", "municity", MUNICIPAL_LICENSE_SOURCE],
+        scopes: ["Municipal permits and their published contact roles, reviewed commercial parcel use, and City business license issuance"],
+        filter_fields: { question: "Permit type or group, published status, date window, City neighborhood, permit contact role, or recent City business license issuance" },
         paging: "First parcel page is returned with validated criteria; use search_indexed_parcels and its cursor for later pages",
         completeness: "The model supplies no source facts. The checked index and official code review control completeness; unsupported or ambiguous questions return clarification.",
         follow_up_tools: ["get_data_context", "get_search_coverage", "search_indexed_parcels"],
@@ -141,7 +174,8 @@ export function searchCapabilities() {
       },
     ],
     not_yet_available: [
-      "Citywide permit fees and contact roles, and citywide applications, review tasks, and inspections outside the first two indexed permit types",
+      "Indexed citywide permit fees and contact roles; live permit searches can check published contact roles",
+      "Indexed citywide applications, review tasks, and inspections outside the first two permit types",
       "Cross-parcel municipal occupant searches; City license issuance searches depend on published IssueDate coverage",
       "Citywide assessor ownership and valuation history, building subareas and outbuildings; exact-PID card detail is available per parcel",
       "Cross-parcel State LLC principal and agent search; the verified owner-LLC registry join is available per parcel",
@@ -162,7 +196,11 @@ export function searchCapabilities() {
         number_gte: NUMBER_FIELDS[source_id] ?? [],
         number_lte: NUMBER_FIELDS[source_id] ?? [],
         event_date: "Only the source event_date value stored in the index; null dates do not match date bounds",
+        event_date_field: eventFields[source_id] ?? null,
+        observed_value_fields: (valueFields[source_id] ?? []).filter((field) => fields.includes(field)),
+        site_address_supported: source_id === MUNICIPAL_LICENSE_SOURCE || Object.hasOwn(STATE_ROSTERS, source_id),
       }])),
+    permit_activity_types: PERMIT_ACTIVITY_TYPES,
     diagnostics: {
       tool: "audit_municipal_permit_links",
       rest: "GET /api/v1/permit-linkage-audit",

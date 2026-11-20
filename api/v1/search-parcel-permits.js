@@ -16,6 +16,7 @@ export default guarded((request) => {
     review_completed_from: p.get("review_completed_from"),
     review_completed_to: p.get("review_completed_to"),
     contact_role: p.get("contact_role"),
+    permit_description_terms: p.getAll("permit_description_term"),
     require_contact_role: p.has("require_contact_role")
       ? p.get("require_contact_role") === "true" ? true
         : p.get("require_contact_role") === "false" ? false : p.get("require_contact_role")

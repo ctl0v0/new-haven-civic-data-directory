@@ -111,9 +111,16 @@ const app = `
   </section>
   <section id="ask-view" role="tabpanel" aria-labelledby="ask-tab" hidden>
     <div class="ask-workspace">
-      <div class="ask-heading"><p class="eyebrow">Private search workbench</p><h1>Test a question</h1><p>Ask about indexed New Haven parcels. Each result shows the interpreted filters, official record links, and source coverage. An incomplete result is a set of matches to review, not an all-parcels answer.</p></div>
+      <div class="ask-heading"><h1>Test a question</h1><p>Write a question or choose the exact fields to search.</p></div>
+      <div class="query-mode-bar"><div role="group" aria-label="Search mode">
+        <button id="ask-language-mode" type="button" class="secondary" aria-pressed="true">Plain language</button>
+        <button id="ask-fields-mode" type="button" class="secondary" aria-pressed="false">Field filters</button>
+      </div><a id="ask-query-guide" href="/parcel?view=guide&amp;guide=query-explorer">Browse fields and permit types</a></div>
+      <div id="ask-language">
       <form id="ask-form"><label for="ask-question">Question</label><div class="ask-form-row"><input id="ask-question" type="search" maxlength="500" required placeholder="Show commercial parcels with electrical permits pulled in the past 30 days"><button type="submit">Search records</button></div></form>
-      <div class="ask-examples"><span>Try:</span><button type="button" data-ask-example="Show parcels with electrical permits pulled in the past 30 days">Electrical permits · 30 days</button><button type="button" data-ask-example="Show commercial parcels with electrical permits pulled in the past 30 days">Commercial + electrical · shows the current gap</button></div>
+      <div class="ask-examples"><span>Examples</span><button type="button" data-ask-example="Show parcels with electrical permits pulled in the past 30 days">Electrical permits · 30 days</button><button type="button" data-ask-example="Show commercial parcels with electrical permits pulled in the past 30 days">Commercial + electrical</button><button type="button" data-ask-example="Show me new business licenses in East Rock neighborhood in the last 30 days">East Rock license issuance</button><button type="button" data-ask-example="Show me Contractor contacts who did water heater replacements in the last 30 days">Water Heater contractors</button></div>
+      </div>
+      <div id="ask-structured" hidden></div>
       <p id="ask-status" role="status" aria-live="polite"></p>
       <p id="ask-run-mode" class="meta" hidden></p>
       <button id="ask-without-commercial" type="button" class="secondary" hidden>Search without the Commercial filter</button>
@@ -121,7 +128,7 @@ const app = `
       <form id="ask-filter-form" class="ask-filter-form" hidden><p class="eyebrow">Refine the interpretation</p><label><input id="ask-commercial" type="checkbox"> Commercial use codes</label><label>Permit group <input id="ask-permit-group" type="text" maxlength="100" placeholder="Electrical"></label><label>Exact permit type <input id="ask-permit-type" type="text" maxlength="100"></label><label>Published permit status <input id="ask-permit-status" type="text" maxlength="100"></label><label>Permit date: last <input id="ask-days" type="number" min="1" max="366" inputmode="numeric"> calendar days</label><label>City neighborhood <input id="ask-neighborhood" type="text" maxlength="80"></label><button type="submit" class="secondary">Run edited filters</button></form>
       <div id="ask-coverage" hidden></div>
       <ol id="ask-results" class="ask-results"></ol>
-      <button id="ask-more" type="button" class="secondary" hidden>Load more parcels</button>
+      <button id="ask-more" type="button" class="secondary" hidden>Load more results</button>
       <div id="ask-context" hidden></div>
     </div>
   </section>

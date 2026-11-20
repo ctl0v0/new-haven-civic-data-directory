@@ -279,6 +279,7 @@ export function createServer() {
       review_completed_from: z.iso.date().optional(),
       review_completed_to: z.iso.date().optional(),
       contact_role: z.string().min(1).max(100).optional(),
+      permit_description_terms: z.array(z.string().min(1).max(80)).max(6).optional(),
       require_contact_role: z.boolean().optional(),
       scan_limit: z.number().int().min(1).max(12).optional(),
       cursor: z.string().max(1500).optional(),
