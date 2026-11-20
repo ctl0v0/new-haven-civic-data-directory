@@ -1,5 +1,5 @@
 import { recentCalendarDates, askIndexedParcels } from '../search-index/ask.js';
-import { indexConfigured } from '../search-index/db.js';
+import { indexConfigured, indexQuery } from '../search-index/db.js';
 import { searchIndexedParcels } from '../search-index/search.js';
 
 // A private Preview build checks that the read-only index can answer the
