@@ -147,6 +147,18 @@ console.log(JSON.stringify({ event: "recent_permit_link_water_heater", unlinked_
     .map(({ record_id, permit_number, source_url, reason, candidate }) =>
       ({ record_id, permit_number, source_url, reason, candidate })) }));
 
+const catalog = await indexQuery("SELECT r.record_id, r.fields->>'group' AS group_name " +
+  "FROM search_active_runs a JOIN search_records r ON r.run_id = a.run_id " +
+  "AND r.source_id = a.source_id WHERE a.source_id = 'municity-permit-types' AND a.scope_key = 'all'");
+const groups = new Map(catalog.map((row) => [text(row.record_id).toUpperCase(), row.group_name]));
+const noKey = reviewed.filter((row) => row.reason === "no_published_key").map((row) => ({
+  group: groups.get(text(row.published_type).toUpperCase()) ?? "No published catalog group",
+  permit_number_prefix: text(row.permit_number).match(/^[A-Z]+(?=-)/i)?.[0] ?? "No prefix",
+}));
+console.log(JSON.stringify({ event: "recent_permit_link_no_key_groups",
+  published_catalog_groups: summarize(noKey, "group"),
+  published_permit_number_prefixes: summarize(noKey, "permit_number_prefix") }));
+
 async function municipalRecord(entity, field, id) {
   const url = new URL("https://services5.municity5.com/M5Services/M5Service.svc/GetM5Data");
   for (const [name, value] of Object.entries({ Customer: "NewHavenCityCT",
@@ -159,6 +171,11 @@ async function municipalRecord(entity, field, id) {
       return { error: "The publisher did not return one exact " + field };
     return { row: data.rows[0] };
   } catch (error) { return { error: String(error?.message ?? error).slice(0, 140) }; }
+}
+function explicitParentKeys(row) {
+  const notes = [row?.ParcelNote, row?.ParcelNote2].map(text).join(" ");
+  return uniq([...notes.matchAll(/\b(?:PORTION\s+OF|PART\s+OF|P\/O)\s+(\d{3}[ /]+\d{4}[ /]+\d{5})\b/gi)]
+    .map((match) => key(match[1])));
 }
 const samples = new Map();
 for (const [reason] of summarize(reviewed, "reason")) {
@@ -186,9 +203,6 @@ for (const sample of [...samples.values()].slice(0, 28)) {
   const parent = vendorParcels.get(id);
   const parentFields = parent?.row ? Object.fromEntries(Object.entries(parent.row)
     .filter(([name, value]) => /^(?:Parent.*(?:ID|Key|MBLU)|PrintKey_Parcel|Parcel_ID|PrintKey)$/i.test(name) && text(value))) : null;
-  const notes = [parent?.row?.ParcelNote, parent?.row?.ParcelNote2].map(text).join(" ");
-  const parentNoteKeys = [...notes.matchAll(/\b(?:PORTION\s+OF|PART\s+OF|P\/O)\s+(\d{3}[ /]+\d{4}[ /]+\d{5})\b/gi)]
-    .map((match) => key(match[1]));
   console.log(JSON.stringify({ event: "recent_permit_link_official_sample",
     permit_id: sample.record_id, permit_number: sample.permit_number,
     permit_type: sample.published_type, reason: sample.reason, source_url: sample.source_url,
@@ -198,6 +212,38 @@ for (const sample of [...samples.values()].slice(0, 28)) {
     exact_permit: official.row ? { vendor_id: official.row.Parcel_ID ?? null,
       print_key: official.row.PrintKey ?? null, parent_key: official.row.PrintKey_Parcel ?? null,
       address_published: Boolean(text(official.row.LegalAddress)) } : { error: official.error },
-    exact_vendor_parcel: parentFields, explicit_parent_keys_in_notes: parentNoteKeys,
+    exact_vendor_parcel: parentFields, explicit_parent_keys_in_notes: explicitParentKeys(parent?.row),
     vendor_parcel_error: parent?.error ?? null }));
 }
+
+const missingByVendor = new Map();
+for (const row of reviewed) if (validVendorId(row.vendor_id)) add(missingByVendor, row.vendor_id, row);
+const parentChecks = [];
+for (const [id, permits] of missingByVendor) {
+  const lookup = vendorParcels.get(id) ?? await municipalRecord("Parcel", "Parcel_ID", id);
+  const directKey = key(lookup.row?.PrintKey);
+  const noteKeys = explicitParentKeys(lookup.row);
+  const linkedKeys = noteKeys.map((noteKey) => ({ key: noteKey,
+    matches: uniq((cityByKey.get(noteKey) ?? []).map((p) => parcelKey(p.pid, p.objectid)).filter(Boolean)) }));
+  const candidate = linkedKeys.length === 1 && linkedKeys[0].matches.length === 1
+    ? linkedKeys[0].matches[0] : null;
+  const structured = Object.fromEntries(Object.entries(lookup.row ?? {})
+    .filter(([name, value]) => /^(?:Parent.*(?:ID|Key|MBLU)|PrintKey_Parcel)$/i.test(name) && text(value)));
+  const finding = { vendor_parcel_id: id, permit_count: permits.length,
+    status: lookup.row ? "exact_vendor_parcel" : "unavailable_or_not_unique",
+    ...(lookup.error ? { error: lookup.error } : {}),
+    direct_key: directKey || null, structured_parent_fields: structured,
+    note_parent_keys: linkedKeys, note_city_candidate: candidate,
+    matching_address_candidates: candidate ? permits.filter((p) => p.candidate === candidate).length : 0,
+    example_source: permits[0].source_url };
+  parentChecks.push(finding);
+  console.log(JSON.stringify({ event: "recent_permit_link_parent_check", ...finding }));
+}
+const noteMatches = parentChecks.filter((row) => row.note_city_candidate);
+console.log(JSON.stringify({ event: "recent_permit_link_parent_summary", vendor_ids_checked: parentChecks.length,
+  checks_by_status: summarize(parentChecks, "status"),
+  vendor_ids_with_structured_parent: parentChecks.filter((row) => Object.keys(row.structured_parent_fields).length).length,
+  vendor_ids_with_notes_naming_parent: parentChecks.filter((row) => row.note_parent_keys.length).length,
+  vendor_ids_with_unique_city_note_parent: noteMatches.length,
+  permits_on_those_vendor_ids: noteMatches.reduce((sum, row) => sum + row.permit_count, 0),
+  permits_with_same_city_address_candidate: noteMatches.reduce((sum, row) => sum + row.matching_address_candidates, 0) }));
