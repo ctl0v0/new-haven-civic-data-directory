@@ -281,6 +281,8 @@ test("common permit and license QA questions retain exact search criteria withou
   const liquor = await askParcelData({ question: "Which parcels have Connecticut liquor permits linked to them? Show the business name, licensed address, and published status.", plan_only: true }, deps);
   assert.deepEqual(liquor.plan.requirements, [{ source_id: "ct-liquor-permits" }]);
   assert.ok(liquor.plan.include[0].fields.includes("permit_address"));
+  const description = await askParcelData({ question: "Show plumbing permits where the description actually says ‘replace.’", plan_only: true }, deps);
+  assert.deepEqual(description.plan.permit_description_terms, ["replace"]);
 });
 
 test("unsupported issuance, completion, cottage food, and radius queries never offer a broader search", async () => {
@@ -311,6 +313,20 @@ test("fallback plans keep the requested calendar and parcel-use meaning", async 
   assert.equal(response.status, "planned");
   assert.equal(response.plan.parcel_use_category, "business_space");
   assert.deepEqual(response.plan.requirements[0].date, { field: "PermitDate", from: "2026-10-01", to: "2026-10-31" });
+});
+
+test("application filing plans compile one supported parent type and use ApplicationDate", async () => {
+  const result = await askParcelData({ question: "Which kitchen hood applications were filed last month?", plan_only: true }, {
+    now, catalog, execute: assert.fail, interpret: async () => ({ intent: "search", scope: { kind: "city" },
+      requirements: [{ source_id: "municity-permit-activity", permit_selection: { kind: "type", name: "Hood - C" },
+        predicates: [{ field: "activity_kind", operator: "equals", value: "application" },
+          { field: "permit_type", operator: "equals", value: "Hood - C" }], date: { field: "ApplicationDate", days: 30 } }],
+      include: [], permit_description_terms: [] }),
+  });
+  assert.equal(result.status, "planned");
+  assert.deepEqual(result.plan.requirements[0], { source_id: "municity-permit-activity",
+    equals: { activity_kind: "application", permit_type: "Hood - C" },
+    date: { field: "ApplicationDate", from: "2026-10-01", to: "2026-10-31" } });
 });
 
 test("a plan-only permit-number lookup searches linked active inventory only after confirmation", async () => {

@@ -93,5 +93,5 @@ export function exactRecordQuestion(question, window) {
   return { exactType: named?.[1].trim(), plan: { scope: neighborhood ? { kind: "neighborhood", name: neighborhood } : city,
     requirements, include: [permitInclude, ...(withZoning ? [{ source_id: "parcels", fields: ["use_code"] }, { source_id: "zoning" }] : [])],
     ...(use ? { parcel_use_category: categoryByPhrase[use[1].toLowerCase()] } : {}),
-    ...(description ? { permit_description_terms: [description[1]] } : {}) } };
+    ...(description ? { permit_description_terms: [description[1].replace(/^([a-z]+)[.!?]$/i, "$1")] } : {}) } };
 }
