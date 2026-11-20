@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { askParcelData } from "../search-index/parcel-question.js";
 import { queryParcelData } from "../search-index/parcel-query.js";
+import { questionDates } from "../search-index/question-dates.js";
 import { parcelQueryCatalog } from "../parcel/query-contract.js";
 
 const question = "Show me Contractor contacts who did water heater replacements in the last 30 days";
@@ -215,7 +216,7 @@ test("language interpretation removes redundant trade text and respects explicit
 });
 
 test("a model plan keeps an exact permit type and rejects an extra type predicate", async () => {
-  const question = 'Show permits of type "Water Heater" from the last 30 days';
+  const question = 'Which permits of type "Water Heater" were recorded in the last 30 days?';
   const requirement = { source_id: "municity", permit_selection: { kind: "type", name: "Water Heater" },
     predicates: [], date: { field: "PermitDate", days: 30 } };
   const interpret = async () => ({ intent: "search", scope: { kind: "city" }, requirements: [requirement],
@@ -226,12 +227,134 @@ test("a model plan keeps an exact permit type and rejects an extra type predicat
   assert.equal(review.status, "planned");
   assert.deepEqual(review.plan.requirements[0].equals, { PermitType: "Water Heater" });
   assert.equal(review.plan.requirements[0].permit_group, undefined);
+  requirement.predicates = [{ field: "PermitType", operator: "equals", value: "Water Heater" }];
+  assert.equal((await askParcelData({ question, plan_only: true }, dependencies)).status, "planned");
 
   requirement.permit_selection = { kind: "group", name: "Plumbing" };
   requirement.predicates = [{ field: "PermitType", operator: "equals", value: "Water Heater" }];
   const invalid = await askParcelData({ question, plan_only: true }, dependencies);
-  assert.equal(invalid.status, "unavailable");
+  assert.equal(invalid.status, "clarify");
+  assert.equal(invalid.reason_code, "invalid_interpretation");
   assert.equal(invalid.plan, undefined);
+});
+
+test("calendar phrases use New Haven dates with inclusive bounds", () => {
+  const expectWindow = (question, expected, clock = now) => {
+    const { from, to } = questionDates(question, clock);
+    assert.deepEqual([from, to], expected);
+  };
+  expectWindow("pulled last month", ["2026-10-01", "2026-10-31"]);
+  expectWindow("any permits this past month?", ["2026-10-22", "2026-11-20"]);
+  expectWindow("applications filed this week", ["2026-11-16", "2026-11-20"]);
+  expectWindow("in the last two weeks", ["2026-11-07", "2026-11-20"]);
+  expectWindow("in the past six months", ["2026-05-21", "2026-11-20"]);
+  expectWindow("since January 1, 2026", ["2026-01-01", "2026-11-20"]);
+  expectWindow("in the last 1 day", ["2026-11-20", "2026-11-20"], new Date("2026-11-21T02:00:00Z"));
+  assert.ok(questionDates("during the same 30-day period", now).issue);
+  assert.ok(questionDates("since February 30, 2026", now).issue);
+});
+
+test("common permit and license QA questions retain exact search criteria without the model", async () => {
+  const fail = () => assert.fail("A recognized plan should bypass the model and wait for confirmation");
+  const deps = { now, interpret: fail, execute: fail, catalog: async () => ({ groups: [
+    { name: "Plumbing", types: [{ name: "Plumbing Permit" }, { name: "Water Heater - C" }] },
+    { name: "Building", types: [{ name: "Roofing - C" }] },
+    { name: "Mechanical", types: [{ name: "Hood - C" }] },
+  ] }) };
+  const cases = [
+    ["Any plumbing permits in East Rock this past month?", { kind: "neighborhood", name: "East Rock" }, "Plumbing", ["2026-10-22", "2026-11-20"]],
+    ["Pull electrical permits on commercial parcels from the past 30 days.", { kind: "city" }, "Electrical", ["2026-10-22", "2026-11-20"], "business_space"],
+    ["Show strictly commercial parcels with a Hood - C permit dated in October 2026.", { kind: "city" }, "Hood - C", ["2026-10-01", "2026-10-31"], "commercial_only"],
+    ["Find permits of the exact type Plumbing Permit from the last 30 days.", { kind: "city" }, "Plumbing Permit", ["2026-10-22", "2026-11-20"]],
+    ["Find electrical permits pulled last month. Give me the published permit date.", { kind: "city" }, "Electrical", ["2026-10-01", "2026-10-31"]],
+    ["Find Roofing - C permits, regardless of how the parcel is classified.", { kind: "city" }, "Roofing - C"],
+  ];
+  for (const [question, scope, selector, dates, use] of cases) {
+    const response = await askParcelData({ question, plan_only: true }, deps);
+    assert.equal(response.status, "planned", question);
+    assert.deepEqual(response.plan.scope, scope);
+    assert.equal(response.plan.parcel_use_category, use);
+    const [filter] = response.plan.requirements;
+    assert.equal(filter.permit_group ?? filter.equals?.PermitType, selector);
+    assert.deepEqual(filter.date, dates ? { field: "PermitDate", from: dates[0], to: dates[1] } : undefined);
+  }
+  const liquor = await askParcelData({ question: "Which parcels have Connecticut liquor permits linked to them? Show the business name, licensed address, and published status.", plan_only: true }, deps);
+  assert.deepEqual(liquor.plan.requirements, [{ source_id: "ct-liquor-permits" }]);
+  assert.ok(liquor.plan.include[0].fields.includes("permit_address"));
+});
+
+test("unsupported issuance, completion, cottage food, and radius queries never offer a broader search", async () => {
+  const fail = () => assert.fail("Do not call the model or search when a known constraint cannot be met");
+  for (const [question, status, code] of [
+    ["List permits issued last month. Give me the issuance date.", "clarify", "unverified_event_date"],
+    ["Who actually finished an addition in Westville this year?", "unsupported"],
+    ["Has the state issued any cottage food licenses in New Haven this year?", "unsupported", "unverified_source"],
+    ["Any food businesses licensed within a quarter mile of 965 State St in the past six months?", "unsupported", "unsupported_scope"],
+    ["Find all kinds of plumbing permits from the same 30-day period.", "clarify", "date_range"],
+  ]) {
+    const response = await askParcelData({ question }, { now, interpret: fail, execute: fail });
+    assert.equal(response.status, status);
+    assert.equal(response.reason_code, code);
+    assert.equal(response.plan, undefined);
+  }
+});
+
+test("fallback plans keep the requested calendar and parcel-use meaning", async () => {
+  const response = await askParcelData({ question: "Which commercial parcels had electrical permits pulled last month?", plan_only: true }, {
+    now,
+    catalog: async () => ({ groups: [{ name: "Electrical", types: [{ name: "Electrical Permit" }] }] }),
+    execute: assert.fail,
+    interpret: async () => ({ intent: "search", scope: { kind: "city" }, use_category: "commercial_only",
+      requirements: [{ source_id: "municity", permit_selection: { kind: "group", name: "Electrical" },
+        predicates: [], date: { field: "PermitDate", days: 30 } }], include: [], permit_description_terms: [] }),
+  });
+  assert.equal(response.status, "planned");
+  assert.equal(response.plan.parcel_use_category, "business_space");
+  assert.deepEqual(response.plan.requirements[0].date, { field: "PermitDate", from: "2026-10-01", to: "2026-10-31" });
+});
+
+test("a plan-only permit-number lookup searches linked active inventory only after confirmation", async () => {
+  const review = await askParcelData({ question: "What happened after permit M-23-00357 was filed? Show the linked application, reviews, inspections, and their dates.", plan_only: true }, {
+    now, execute: assert.fail, interpret: assert.fail,
+  });
+  assert.equal(review.status, "planned");
+  assert.deepEqual(review.plan.requirements[0].equals, { PermitNo: "M-23-00357" });
+  assert.deepEqual(review.plan.include.map(({ source_id }) => source_id),
+    ["municity", "permit-applications", "permit-reviews", "permit-inspections"]);
+  const result = await queryParcelData({ plan: review.plan }, {
+    query: async (sql, values) => {
+      assert.match(sql, /bool_and\(j\.join_status = 'exact'\)/);
+      assert.deepEqual(values, ["M-23-00357"]);
+      return [{ permit_type: "Hood - C", event_date: "2023-06-04" }];
+    },
+    catalog: async () => ({ groups: [{ name: "Mechanical", types: [{ name: "Hood - C" }] }] }),
+    search: async ({ requirements }) => {
+      assert.deepEqual(requirements[0].equals, { PermitNo: "M-23-00357", PermitType: "Hood - C" });
+      assert.equal(requirements[0].event_date_from, "2023-06-04");
+      return { items: [], coverage: { index_status: "partial" }, complete_for_query: false };
+    },
+  });
+  assert.deepEqual(result.plan, review.plan);
+});
+
+test("exact parcel permit results preserve address evidence and an omitted License category stays partial", async () => {
+  const resolve = async () => ({ candidates: [{ parcel_id: 42, objectid: 99, address: "42 State St" }] });
+  const records = async (id) => id === "municity" ? { status: "ok", items: [
+    { source_id: "municity", category: "Permit", source_record_id: "permit:8", attributes: { LegalAddress: "42 State Street" } },
+    { source_id: "municity", category: "Permit", source_record_id: "permit:9", attributes: { LegalAddress: "44 State Street" } },
+    { source_id: "municity", category: "Application", source_record_id: "application:16", attributes: {} },
+  ] } : { status: "no_records", count_established: false, warning: "The City vendor response omitted the License category.", items: [] };
+  const result = await askParcelData({ question: "What permits were pulled at 42 State St? Which records list that exact address?" }, {
+    now, interpret: assert.fail, execute: (input) => queryParcelData(input, { load: async () => cityParcel, records, resolve }),
+  });
+  assert.deepEqual(result.items[0].matching_sources[0].records.map((record) => [record.record_id, record.address_evidence?.matches_query]),
+    [["permit:8", true], ["permit:9", false]]);
+  const history = await askParcelData({ question: "What business licenses have been associated with 42 State St over time? Keep expired licenses visible." }, {
+    now, interpret: assert.fail, execute: (input) => queryParcelData(input, { load: async () => cityParcel, records, resolve }),
+  });
+  assert.equal(history.complete_for_query, false);
+  assert.equal(history.coverage.live_source_checks[0].count_established, false);
+  assert.equal(history.coverage.live_source_checks[0].status, "partial");
 });
 
 test("a contact query scans past an empty candidate batch and returns a linked contractor", async () => {

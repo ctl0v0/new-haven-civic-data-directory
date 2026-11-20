@@ -2625,8 +2625,8 @@ function renderUnifiedAnswer(response, question, version) {
     if (plan.contact_role) line(plan.require_contact_role ? "Required contact role" : "Returned contact role", plan.contact_role);
     if (plan.permit_description_terms?.length) line("Permit description contains any of", plan.permit_description_terms.join(", "));
     if (plan.radius_meters) line("Search radius", `${plan.radius_meters} meters`);
-    if (plan.include?.length) line("Return fields", plan.include.map(({ source_id, fields }) =>
-      `${sourceNames[source_id] ?? source_id}${fields ? ` (${fields.join(", ")})` : ""}`).join(" · "));
+    if (plan.include?.length) line("Return fields", plan.include.map(({ source_id, fields, record_category }) =>
+      `${sourceNames[source_id] ?? source_id}${record_category ? ` · ${record_category} records` : ""}${fields ? ` (${fields.join(", ")})` : ""}`).join(" · "));
     if (pending) {
       const confirm = el("button", "Run search");
       confirm.type = "button";

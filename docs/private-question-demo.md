@@ -1,15 +1,17 @@
 # Private cross-parcel question demo
 
-The protected `/parcel?view=ask` tab, `POST /api/v1/ask-parcels`, and MCP
-`ask_indexed_parcels` use the same indexed parcel search. The model only
-interprets the question into a small allowlist of filters. The service checks
-official type names, resolves New Haven calendar dates, expands a reviewed
-City use-code dictionary, and runs parameterized indexed search. Results keep
-the original City and municipal record links and source-run coverage. The
-model does not supply records or definitions. This question is the first
-capability test for a wider natural-language search contract; each new term
-needs a published field or group, a checked join, context, and an explicit
-coverage boundary.
+The protected `/parcel?view=ask` tab prepares a plan through
+`POST /api/v1/ask-parcel-data`. The user reviews the area, sources, date
+fields, and return fields before running the search. MCP callers can pass
+`plan_only: true` to `ask_parcel_data` and then send the reviewed plan to
+`query_parcel_data`. Results retain official record links and source coverage.
+
+The service uses published permit types, group names, record numbers, and
+City parcel-use codes. It resolves time windows in the New Haven timezone.
+“Last month” means the previous calendar month. “This past month” means
+the last 30 calendar dates, including today. “This week” begins on Monday.
+Permit issuance and approval questions require published event evidence.
+The planner asks for clarification when that date cannot be established.
 
 The **Test a question** tab is visible on the protected `codex/parcel-pilot`
 Preview branch for source review. It shows partial matches and gaps explicitly;
@@ -18,11 +20,9 @@ in production and other previews. Local development can set
 `QUERY_DEMO_ENABLED=true`. The API and MCP tools remain protected by the
 existing pilot credentials.
 
-The tester includes two example questions. The commercial example shows the
-official use-code blocker and keeps its interpreted filters visible. Unchecking
-Commercial use codes runs the edited fields through the same validation and
-indexed search without a second AI call. The Electrical-only example returns
-linked matches with source counts, unmatched counts, dates and source links.
+The tester includes examples for electrical permits, commercial use codes,
+City business-license issuance, and permit contractors. Field filters can
+run a typed query without a second model call.
 From the browse parcel map, **View full records without map** moves the loaded
 parcel into the wide Search records view and preserves the selected section;
 the `view=records` URL restores that map-free layout.
