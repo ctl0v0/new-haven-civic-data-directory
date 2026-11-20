@@ -6,7 +6,10 @@ import { recordedParcelUse } from "./data-context.js";
 export function parcelFeatureToGeoJSON(feature) {
   if (!Array.isArray(feature?.geometry?.rings) || !feature.geometry.rings.length)
     throw new SourceError("Parcel geometry unavailable");
-  const geometry = arcgisToGeoJSON(feature.geometry);
+  return parcelGeoJSON(feature.attributes, arcgisToGeoJSON(feature.geometry));
+}
+
+export function parcelGeoJSON(a, geometry) {
   const polygons = geometry?.type === "Polygon"
     ? [geometry.coordinates]
     : geometry?.type === "MultiPolygon"
@@ -39,7 +42,6 @@ export function parcelFeatureToGeoJSON(feature) {
     }
   }
 
-  const a = feature.attributes;
   return {
     type: "Feature",
     id: `${a.parcel_id}:${a.objectid}`,

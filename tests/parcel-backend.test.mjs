@@ -13,6 +13,7 @@ import { getGroup, getSourceRecords } from "../parcel/adapters.js";
 import { permitDetails, applicationDetails } from "../parcel/permit-details.js";
 import { searchMunicipalPermits, searchParcelPermits } from "../parcel/permit-search.js";
 import { arcgis } from "../parcel/http.js";
+import { browseParcels } from "../parcel/browse.js";
 import { findOfficialOwnerEntity, officialOwnerMatch } from "../parcel/business-registry.js";
 import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
 import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, parseNhpsSearch, schoolAddress, schoolRowsForAddress, snapshotIsCurrent } from "../parcel/school-attendance.js";
@@ -2341,6 +2342,49 @@ test("map browsing requests only bounded City parcel polygons until a parcel is 
   assert.equal((await browseParcelsRoute.fetch(new Request(
     "https://example.com/api/v1/browse-parcels?bbox=-73,41.3,-72.8,41.4", { headers },
   ))).status, 400);
+});
+
+test("a zoom 15 map uses one indexed viewport for parcel outlines and use colors", async () => {
+  const bounds = "-72.96,41.29,-72.89,41.33";
+  const city = parcel(10386);
+  city.attributes.use_code = "3030";
+  const fresh = "2026-11-20T07:53:00Z";
+  const rows = [{ attributes: city.attributes, geometry: parcelFeatureToGeoJSON(city).geometry, finished_at: fresh }];
+  const configured = () => true;
+  globalThis.fetch = async () => { assert.fail("the indexed map should not call the live City layer"); };
+  const data = await browseParcels(bounds, { zoom: "15", configured, query: async (sql, values) => {
+    assert.match(sql, /ST_Intersects/);
+    assert.match(sql, /r.returned_count = r.expected_count/);
+    assert.deepEqual(values.slice(0, 5), [-72.96, 41.29, -72.89, 41.33, 6]);
+    return rows;
+  } });
+  assert.equal(data.mode, "indexed");
+  assert.equal(data.indexed_at, fresh);
+  assert.equal(data.features[0].properties.recorded_use.category, "mixed_use");
+  assert.match(data.features[0].properties.source_url, /FeatureServer\/0\/10396$/);
+  assert.deepEqual(data.features[0].geometry, rows[0].geometry);
+  const empty = await browseParcels(bounds, { zoom: "15", configured,
+    query: async () => [{ attributes: null, geometry: null, finished_at: fresh }] });
+  assert.equal(empty.status, "no_records");
+  await assert.rejects(() => browseParcels(bounds, { zoom: "14", configured }), { status: 400 });
+});
+
+test("a wide map pages the official City layer when the parcel index has no eligible run", async () => {
+  const offsets = [];
+  globalThis.fetch = async (input) => {
+    const params = new URL(input).searchParams;
+    const offset = Number(params.get("resultOffset"));
+    offsets.push(offset);
+    assert.equal(params.get("orderByFields"), "objectid ASC");
+    assert.equal(params.get("geometryPrecision"), "6");
+    return response({ features: offset ? [parcel(7001)] : Array.from({ length: 1000 }, (_, id) => parcel(6001 + id)),
+      spatialReference: { wkid: 4326 }, exceededTransferLimit: !offset });
+  };
+  const data = await browseParcels("-72.96,41.29,-72.89,41.33", { zoom: "15", configured: () => true, query: async () => [] });
+  assert.deepEqual(offsets, [0, 1000]);
+  assert.equal(data.mode, "live");
+  assert.equal(data.status, "ok");
+  assert.equal(data.features.length, 1001);
 });
 
 test("selected parcel zoning reports mapped districts and preserves incomplete source states", async () => {

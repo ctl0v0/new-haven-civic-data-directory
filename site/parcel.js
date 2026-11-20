@@ -97,10 +97,13 @@ const municipalCategoryTitles = {
 let parcelMap = null;
 let browseMap = null;
 let browseLayer = null;
+let browseRenderer = null;
+let browsePaths = new Map();
 let browseSelectedLayer = null;
 let browseContextLayers = [];
 let browseTimer = null;
-let browseRequestVersion = 0;
+let browseRequest = null;
+let browseCoverage = null;
 let browseSelectionVersion = 0;
 let selectedBrowseParcel = null;
 let requestedParcelKey = null;
@@ -1452,7 +1455,10 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   if (guiding) void loadGuide(section);
   if (browsing) requestAnimationFrame(() => {
     if (!browseMap) initBrowseMap();
-    else browseMap.invalidateSize();
+    else {
+      browseMap.invalidateSize();
+      void loadBrowseParcels();
+    }
     if (selected && requestedParcelKey === parcelKey(selected) && !browseSelectedLayer) {
       void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
     }
@@ -1618,6 +1624,8 @@ const browseUseStyles = new Map([
   ["other", { label: "Other", color: "#696e7d", opacity: .28 }],
   ["unclassified", { label: "Unclassified", color: "#b0b7bc", opacity: .15 }],
 ]);
+const MIN_BROWSE_ZOOM = 15;
+const BROWSE_REUSE_MS = 60_000;
 
 function browseUseStyle(category) {
   return browseUseStyles.get(category) ?? browseUseStyles.get("unclassified");
@@ -1630,7 +1638,7 @@ function browseParcelStyle(feature) {
     String(p.objectid) === String(selectedBrowseParcel.objectid);
   const use = browseUseStyle(p.recorded_use?.category);
   const useMode = $("browse-parcel-display").value === "use";
-  return { color: active ? "#00d5d8" : "#173e35", weight: active ? 4 : 1.5,
+  return { color: active ? "#00d5d8" : "#173e35", weight: active ? 4 : 1.25, opacity: .92,
     fillColor: useMode ? use.color : active ? "#00d5d8" : "#f8c547",
     fillOpacity: useMode ? use.opacity : active ? .22 : .04 };
 }
@@ -1675,9 +1683,12 @@ async function selectBrowseParcel(feature) {
     resetMap();
   }
   const version = ++browseSelectionVersion;
+  const previous = browsePaths.get(parcelKey(selectedBrowseParcel));
   selectedBrowseParcel = { parcel_id: p.parcel_id, objectid: p.objectid,
     address: p.address, source_url: p.source_url };
-  browseLayer?.setStyle(browseParcelStyle);
+  previous?.setStyle(browseParcelStyle(previous.feature));
+  const path = browsePaths.get(key);
+  path?.setStyle(browseParcelStyle(feature)).bringToFront();
   const aside = $("browse-selection");
   if (window.matchMedia("(max-width: 44rem)").matches)
     aside.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1735,32 +1746,60 @@ async function selectBrowseParcel(feature) {
   }
 }
 async function loadBrowseParcels() {
-  if (!browseMap) return;
-  const version = ++browseRequestVersion;
+  if (!browseMap || $("browse-view").hidden || !$("browse-map").clientWidth) return;
   const status = $("browse-map-status");
-  if (browseMap.getZoom() < 17) {
-    if (browseLayer) browseMap.removeLayer(browseLayer);
+  const zoom = browseMap.getZoom();
+  if (zoom < MIN_BROWSE_ZOOM) {
+    browseRequest?.controller.abort();
+    browseRequest = browseCoverage = null;
+    browseLayer?.remove();
     browseLayer = null;
-    status.textContent = "Zoom in to level 17 to display City parcel outlines.";
+    browsePaths.clear();
+    status.textContent = "Zoom in to see parcel outlines.";
     return;
   }
-  const bounds = browseMap.getBounds();
+  const view = browseMap.getBounds();
+  const coversView = (entry) => entry && Math.abs(entry.zoom - zoom) < 2 && entry.bounds.contains(view);
+  if (coversView(browseRequest)) return;
+  if (coversView(browseCoverage) && Date.now() < browseCoverage.expires) {
+    browseRequest?.controller.abort();
+    browseRequest = null;
+    status.textContent = browseCoverage.message;
+    return;
+  }
+  browseRequest?.controller.abort();
+  const bounds = view.pad(.14);
+  const controller = new AbortController();
+  const request = { zoom, bounds, controller };
+  browseRequest = request;
   const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
   status.textContent = "Loading City parcel outlines for this map view…";
   try {
-    const data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox })}`);
-    if (version !== browseRequestVersion || !browseMap) return;
-    if (browseLayer) browseMap.removeLayer(browseLayer);
-    browseLayer = window.L.geoJSON({ type: "FeatureCollection", features: data.features }, {
-      style: browseParcelStyle,
-      onEachFeature: (feature, layer) => layer.on("click", () => { void selectBrowseParcel(feature); }),
-    }).addTo(browseMap);
-    status.textContent = data.warning ?? (data.features.length
-      ? `${data.features.length} City parcel outlines in view. Select one to preview it; full records have not been requested.`
+    const data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox, zoom })}`, { signal: controller.signal });
+    if (request !== browseRequest) return;
+    const paths = new Map();
+    const layer = window.L.geoJSON({ type: "FeatureCollection", features: data.features }, {
+      renderer: browseRenderer, style: browseParcelStyle,
+      onEachFeature: (feature, path) => {
+        paths.set(parcelKey(feature.properties), path);
+        path.on("click", () => { void selectBrowseParcel(feature); });
+      },
+    });
+    browseLayer?.remove();
+    browseLayer = layer.addTo(browseMap);
+    browsePaths = paths;
+    browsePaths.get(parcelKey(selectedBrowseParcel))?.bringToFront();
+    const message = data.warning ?? (data.features.length
+      ? "City parcel outlines loaded. Select one to preview it."
       : "No City parcel outlines returned for this view.");
+    status.textContent = message;
+    browseCoverage = { zoom, bounds: data.status === "partial" ? view : bounds,
+      message, expires: Date.now() + BROWSE_REUSE_MS };
   } catch (error) {
-    if (version === browseRequestVersion)
+    if (request === browseRequest)
       status.textContent = `Could not load City parcel outlines: ${error.message}`;
+  } finally {
+    if (request === browseRequest) browseRequest = null;
   }
 }
 function initBrowseMap() {
@@ -1784,11 +1823,12 @@ function initBrowseMap() {
     browseLayer?.setStyle(browseParcelStyle);
   });
   browseMap = leaflet.map($("browse-map"), { scrollWheelZoom: false, keyboard: true });
+  browseRenderer = leaflet.canvas({ padding: .2 });
   addMapBackgrounds(browseMap);
-  browseMap.setView([41.3083, -72.9279], 17);
+  browseMap.setView([41.3083, -72.9279], MIN_BROWSE_ZOOM);
   browseMap.on("moveend", () => {
     clearTimeout(browseTimer);
-    browseTimer = setTimeout(() => { void loadBrowseParcels(); }, 250);
+    browseTimer = setTimeout(() => { void loadBrowseParcels(); }, 75);
   });
   leaflet.control.scale({ metric: false, imperial: true }).addTo(browseMap);
   void loadBrowseParcels();

@@ -110,6 +110,26 @@ try {
     message: error?.message }));
 }
 
+// Check the initial downtown viewport at the wider browse zoom.
+try {
+  const { browseParcels } = await import('../parcel/browse.js');
+  const before = performance.now();
+  const result = await browseParcels('-72.952,41.292,-72.904,41.324', { zoom: '15' });
+  const milliseconds = Math.round(performance.now() - before);
+  const counts = Object.create(null);
+  for (const { properties } of result.features) {
+    const use = properties.recorded_use.category;
+    counts[use] = (counts[use] ?? 0) + 1;
+  }
+  if (result.features.length <= 500 || !counts.mixed_use)
+    throw new Error('The wider downtown view did not return the expected parcel outlines and recorded-use categories');
+  console.log(JSON.stringify({ event: 'preview_browse_zoom_15', mode: result.mode, status: result.status,
+    polygons: result.features.length, counts, milliseconds, bytes: Buffer.byteLength(JSON.stringify(result)),
+    warning: result.warning }));
+} catch (error) {
+  console.warn(JSON.stringify({ event: 'preview_browse_zoom_15_failed', name: error?.name, message: error?.message }));
+}
+
 // Exercise the same read-only query used by the feed UI, REST and MCP.
 try {
   const { listCityActivity } = await import('../search-index/city-activity.js');
