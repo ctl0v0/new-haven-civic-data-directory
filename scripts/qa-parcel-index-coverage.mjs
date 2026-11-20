@@ -75,7 +75,7 @@ await Promise.all([
       count(DISTINCT j.record_id) FILTER (WHERE j.join_status='exact')::int AS linked_permit_ids,
       count(DISTINCT (j.city_parcel_id,j.city_objectid)) FILTER (WHERE j.join_status='exact')::int AS linked_parcels
     FROM search_active_runs a JOIN search_source_runs rr ON rr.id=a.run_id
-    LEFT JOIN search_record_parcels j USING (run_id,source_id)
+    LEFT JOIN search_record_parcels j ON j.run_id=a.run_id AND j.source_id=a.source_id
     WHERE a.source_id='municity' AND a.scope_key LIKE 'permit-window:%'
     GROUP BY a.scope_key, rr.metadata->'parcel_link_summary' ORDER BY a.scope_key`)),
   check('activity_by_type', async () => indexQuery(`SELECT fields->>'permit_type' AS permit_type,
