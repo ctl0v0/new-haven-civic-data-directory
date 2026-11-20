@@ -85,8 +85,8 @@ function reviewedUseCodeIndex(dictionary) {
   for (const row of dictionary.codes) {
     const code = normalizeUseCode(row?.code);
     if (!code || index.has(code) || typeof row.published_label !== "string" ||
-        !row.published_label.trim() || typeof row.business_space !== "boolean" ||
-        !/^https:\/\/(?:[\w-]+\.)*(?:newhavenct\.gov|municityconnect\.com)\//i.test(row.official_source_url ?? ""))
+        !row.published_label.trim() || (row.business_space !== null && typeof row.business_space !== "boolean") ||
+        !/^https:\/\/(?:(?:[\w-]+\.)*(?:newhavenct\.gov|municityconnect\.com)|data\.ct\.gov)\//i.test(row.official_source_url ?? ""))
       return null;
     index.set(code, row);
   }
@@ -114,5 +114,8 @@ export function commercialUseCodes() {
 }
 
 export function reviewedUseCodeValues() {
-  return cityUseCodeIndex && new Set(cityUseCodeIndex.keys());
+  // A published label can be shown on the map even if it cannot support the
+  // commercial query. Keep those codes outside that query's reviewed set.
+  return cityUseCodeIndex && new Set([...cityUseCodeIndex]
+    .filter(([, row]) => typeof row.business_space === "boolean").map(([code]) => code));
 }

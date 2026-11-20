@@ -1,5 +1,5 @@
 import { recentCalendarDates, askIndexedParcels } from '../search-index/ask.js';
-import { indexConfigured, indexQuery } from '../search-index/db.js';
+import { indexConfigured } from '../search-index/db.js';
 import { searchIndexedParcels } from '../search-index/search.js';
 
 // A private Preview build checks that the read-only index can answer the
@@ -38,56 +38,20 @@ try {
 // Read-only evidence check for the parcel use and zoning Preview.
 try {
   const { browseParcels } = await import('../parcel/browse.js');
-  const { parcelZoning } = await import('../parcel/service.js');
+  const { parcelSummary, parcelZoning } = await import('../parcel/service.js');
   const bbox = '-72.931,41.306,-72.923,41.311';
   const map = await browseParcels(bbox);
   const sample = map.features[0]?.properties;
   const zoning = sample ? await parcelZoning(String(sample.parcel_id), String(sample.objectid)) : null;
+  const examples = await Promise.allSettled(['11236', '12846', '10386'].map(async (pid) => {
+    const { parcel } = await parcelSummary(pid);
+    return { pid, category: parcel.recorded_use.category, code: parcel.recorded_use.published_code };
+  }));
   console.log(JSON.stringify({ event: 'preview_parcel_use', polygons: map.features.length,
     classified: map.features.filter((feature) => feature.properties.recorded_use.category !== 'unclassified').length,
-    zoning_status: zoning?.status, zoning_codes: zoning?.district_codes }));
+    zoning_status: zoning?.status, zoning_codes: zoning?.district_codes,
+    examples: examples.map((item) => item.status === 'fulfilled' ? item.value : item.reason?.message) }));
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_parcel_use_failed', name: error?.name,
     message: error?.message }));
-}
-
-try {
-  const { fetchJson } = await import('../parcel/http.js');
-  const state = new URL('https://data.ct.gov/resource/rny9-6ak2.json');
-  state.searchParams.set('$select', 'pid,state_use,state_use_description');
-  state.searchParams.set('$where', "upper(property_city) = 'NEW HAVEN' AND pid IS NOT NULL AND state_use IS NOT NULL");
-  state.searchParams.set('$limit', '50000');
-  const [cityRows, stateRows] = await Promise.all([
-    indexQuery(`SELECT fields->>'parcel_id' AS pid, fields->>'use_code' AS code
-      FROM search_records WHERE source_id = 'parcels' AND run_id =
-      (SELECT run_id FROM search_active_runs WHERE source_id = 'parcels' AND scope_key = 'all')`),
-    fetchJson(state, { maxBytes: 8_000_000, timeout: 24000 }),
-  ]);
-  const stateByPid = new Map();
-  for (const row of stateRows) {
-    if (!stateByPid.has(row.pid)) stateByPid.set(row.pid, []);
-    stateByPid.get(row.pid).push(row);
-  }
-  const byCode = new Map();
-  for (const { pid, code } of cityRows) {
-    if (!code?.trim()) continue;
-    if (!byCode.has(code)) byCode.set(code, { code, city: 0, agrees: 0, conflicts: 0, labels: new Set() });
-    const group = byCode.get(code);
-    group.city++;
-    const candidates = stateByPid.get(pid);
-    if (!candidates) continue;
-    if (candidates.length !== 1 || candidates[0].state_use?.trim() !== code.trim()) {
-      group.conflicts++;
-      continue;
-    }
-    group.agrees++;
-    if (candidates[0].state_use_description?.trim()) group.labels.add(candidates[0].state_use_description.trim());
-  }
-  const summary = [...byCode.values()].sort((a,b) => b.agrees-a.agrees);
-  console.log(JSON.stringify({ event: 'preview_city_use_crosswalk_size', city: cityRows.length, state: stateRows.length }));
-  for (let i=0;i<summary.length;i+=30)
-    console.log(JSON.stringify({ event: 'preview_city_use_crosswalk', rows: summary.slice(i,i+30)
-      .map((group) => ({...group, labels:[...group.labels]})) }));
-} catch (error) {
-  console.warn(JSON.stringify({ event: 'preview_use_code_crosswalk_failed', name: error?.name, message: error?.message }));
 }

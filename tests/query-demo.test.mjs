@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { askIndexedParcels, interpretBaselineQuestion, questionPermitCatalog, recentCalendarDates } from "../search-index/ask.js";
 import { queryWorkbenchVisible } from "../api/pilot-page.js";
-import { getDataContext, commercialUseCodes, recordedParcelUse } from "../parcel/data-context.js";
+import { getDataContext, recordedParcelUse } from "../parcel/data-context.js";
 import { municipalDateSearchFormat, municipalPermitDateRows } from "../search-index/municity.js";
 import { buildIndexedSearchQuery, searchIndexedParcels } from "../search-index/search.js";
 import { auditCityUseCodes } from "../search-index/use-codes.js";
@@ -156,16 +156,22 @@ test("edited tester filters use the same catalog and search without another mode
 });
 
 test("commercial question stays blocked until all official City use codes are reviewed", async () => {
-  assert.equal(commercialUseCodes(), null);
+  process.env.SEARCH_DATABASE_URL = "postgresql://test:test@example.com/test?sslmode=require";
   let searched = false;
-  const answer = await askIndexedParcels({ question: "all commercial parcels with electrical permits" }, {
-    catalog, interpret: async () => ({ ...interpreted, commercial: true,
-      permit_type: null, permit_group: "Electrical" }),
-    search: async () => { searched = true; return {}; },
-  });
-  assert.equal(answer.status, "blocked");
-  assert.match(answer.reason, /official City use-code definitions/);
-  assert.equal(searched, false);
+  try {
+    const answer = await askIndexedParcels({ question: "all commercial parcels with electrical permits" }, {
+      catalog, interpret: async () => ({ ...interpreted, commercial: true,
+        permit_type: null, permit_group: "Electrical" }),
+      query: async () => [{ code: "3220" }, { code: "3030" }, { code: "TEST-UNREVIEWED" }],
+      search: async () => { searched = true; return {}; },
+    });
+    assert.equal(answer.status, "blocked");
+    assert.match(answer.reason, /2 published City use codes/);
+    assert.equal(searched, false);
+  } finally {
+    if (oldDatabase == null) delete process.env.SEARCH_DATABASE_URL;
+    else process.env.SEARCH_DATABASE_URL = oldDatabase;
+  }
 });
 
 test("interpreter cannot silently drop the commercial or recent-date constraint", async () => {

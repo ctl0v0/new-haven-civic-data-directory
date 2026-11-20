@@ -51,7 +51,9 @@ it is absent or stale.
    environment. Review every distinct City `use_code` against an official City
    code definition, then fill `data/city-use-codes.json` with `code`,
    `published_label`, `business_space` (boolean), and `official_source_url`
-   for every code and set `reviewed_on`. The audit and question endpoint both
+   for every code and set `reviewed_on`. A verified label can appear on the
+   parcel map with `business_space: null` while its eligibility for commercial
+   search remains unresolved. The audit and question endpoint both
    block commercial completeness when a new code appears. If the City layer
    has no coded-value domain or other official legend, request the dictionary
    from the City Assessor or GIS publisher. Do not infer the meaning from
@@ -106,8 +108,12 @@ converted into an automatic join. The other two permit records, 590646 and
 An address or key prefix alone remains diagnostic evidence, not a join.
 
 The City parcel layer publishes 246 distinct `use_code` values without a
-coded-value domain or official label in its layer metadata. The reviewed code
-dictionary remains empty. This blocks a complete answer to the **commercial**
-part of the example until an official New Haven code definition is obtained.
-The private question tester and protected API/MCP tools return coverage limits
-rather than representing these partial checks as all parcels.
+coded-value domain or official label in its layer metadata. On November 20,
+we compared those published codes with the exact New Haven PIDs and codes in
+the [State-published 2025 assessor export](https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data).
+The map uses only entries with a confirmed code and a single published label
+across the matched records. The export reports generic mixed-use labels for
+codes including `3030`. The map shows those labels with their source and leaves
+the category unclassified until the combination of residential and commercial
+use is confirmed. Commercial questions remain blocked while any published
+code has an unresolved commercial classification.

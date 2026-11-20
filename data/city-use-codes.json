@@ -1,5 +1,272 @@
 {
   "source_url": "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0",
-  "reviewed_on": null,
-  "codes": []
+  "reviewed_on": "2026-11-20",
+  "codes": [
+    {
+      "code": "1010",
+      "published_label": "Single Family",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1012",
+      "published_label": "SFR In-Law",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1013",
+      "published_label": "SFR Water",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1040",
+      "published_label": "Two Family",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1050",
+      "published_label": "Three Family",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "107C",
+      "published_label": "MIX USE R  MDL-94",
+      "category": "unclassified",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1110",
+      "published_label": "APT 4-Unit",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1111",
+      "published_label": "APT5 - 12 R  MDL-03",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "111C",
+      "published_label": "APT5 - 12  MDL-94",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "1120",
+      "published_label": "APT Over12  MDL-01",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "112C",
+      "published_label": "APT Over12  MDL-94",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "112I",
+      "published_label": "APT Over12  MDL-96",
+      "category": "residential",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3030",
+      "published_label": "MIXED USE  MDL-94",
+      "category": "unclassified",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "303I",
+      "published_label": "MIXED USE  MDL-96",
+      "category": "unclassified",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "303R",
+      "published_label": "MIXED USE  MDL-01",
+      "category": "unclassified",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3220",
+      "published_label": "STORE/SHOP  MDL-94",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3221",
+      "published_label": "RTL CONDO  MDL-06",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "322I",
+      "published_label": "STORE/SHOP  MDL-96",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "322S",
+      "published_label": "STORE/SHOP  MDL-95",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3250",
+      "published_label": "GAS MART  MDL-94",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "325V",
+      "published_label": "GAS MART  MDL-00",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3340",
+      "published_label": "GAS ST SRV  MDL-94",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "334S",
+      "published_label": "GAS ST SRV  MDL-95",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3350",
+      "published_label": "CAR WASH",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3400",
+      "published_label": "OFFICE BLD  MDL-94",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "340I",
+      "published_label": "OFFICE BLD  MDL-96",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "340R",
+      "published_label": "OFFICE BLD  MDL-01",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3410",
+      "published_label": "BANK BLDG",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "3420",
+      "published_label": "PROF BLDG",
+      "category": "commercial_only",
+      "business_space": true,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "4000",
+      "published_label": "INDUSTRIAL  MDL-96",
+      "category": "other",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "4010",
+      "published_label": "IND WHSES  MDL-96",
+      "category": "other",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "405S",
+      "published_label": "IND SHP/GR  MDL-95",
+      "category": "other",
+      "business_space": null,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "9026",
+      "published_label": "CITY SCHOO  MDL-94",
+      "category": "other",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "9033",
+      "published_label": "MUN SCHOOL  MDL-94",
+      "category": "other",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "904A",
+      "published_label": "PVT COLL  MDL-00",
+      "category": "other",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "904C",
+      "published_label": "PVT UNIV  MDL-94",
+      "category": "other",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "9060",
+      "published_label": "CHURCH  MDL-94",
+      "category": "other",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    },
+    {
+      "code": "906V",
+      "published_label": "CHURCH  MDL-00",
+      "category": "other",
+      "business_space": false,
+      "official_source_url": "https://data.ct.gov/Local-Government/2025-Connecticut-Parcel-and-CAMA-Data/rny9-6ak2/about_data"
+    }
+  ]
 }
