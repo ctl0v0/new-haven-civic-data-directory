@@ -81,6 +81,9 @@ test("City license validation reproduces an official IssueDate and excludes crea
   assert.deepEqual(format, { fieldtype: "text", encoding: "us" });
   assert.equal(normalizedBusinessLicenses([license])[0].event_date, "2026-11-14");
   assert.throws(() => normalizedBusinessLicenses([{ ...license, IssueDate: null }]), /issue date/i);
+  const [undated] = normalizedBusinessLicenses([{ ...license, IssueDate: null }], { requireIssueDate: false });
+  assert.equal(undated.event_date, null);
+  assert.equal(undated.fields.CreatedDate, "2026-11-02");
 });
 
 test("the business license question preserves East Rock, 30 dates and the City source", async () => {

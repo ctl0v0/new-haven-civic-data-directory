@@ -47,7 +47,8 @@ const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0,
 const dateCoverage = (run, requirement) => (!run.coverage_date_from && !run.coverage_date_to) ||
   Boolean(requirement?.event_date_from && requirement?.event_date_to &&
     requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
-    requirement.event_date_to <= dateOnly(run.coverage_date_to));
+    requirement.event_date_to <= dateOnly(run.coverage_date_to) &&
+    !run.metadata?.named_licenses_without_issue_date);
 async function missingAttempt(sourceId, scopeKey, query) {
   if (!scopeKey) return null;
   try {

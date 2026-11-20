@@ -3,7 +3,8 @@ import { municipalDate, municipalDateValue, municipalSearch, municipalWorkChildr
 export const MUNICIPAL_LICENSE_SOURCE = "municipal-business-licenses";
 export const MUNICIPAL_LICENSE_FIELDS = Object.freeze([
   "License_ID", "LicenseNumber", "LicenseType", "BusinessName", "Status",
-  "IssueDate", "ExpirationDate", "Parcel_ID", "PrintKey", "LegalAddress", "Addr1",
+  "IssueDate", "ExpirationDate", "RenewalDate", "Date", "CreatedDate",
+  "Parcel_ID", "PrintKey", "LegalAddress", "Addr1",
 ]);
 const WEB = "https://www.municityconnect.com/#/app/NewHavenCityCT/entity";
 const MAX_ROWS = 10000;
@@ -66,11 +67,12 @@ export async function readLicenseDay(date, format, search = municipalSearch) {
   return result.rows;
 }
 
-export function normalizedBusinessLicenses(rows) {
+export function normalizedBusinessLicenses(rows, { requireIssueDate = true } = {}) {
   const byId = new Map();
   for (const row of rows) {
     const recordId = id(row.License_ID);
-    if (!recordId || !municipalDate(row.IssueDate)) throw blocked("A City license lacked its published ID or issue date");
+    if (!recordId || (requireIssueDate && !municipalDate(row.IssueDate)))
+      throw blocked("A City license lacked its published ID or issue date");
     const existing = byId.get(recordId) ?? {};
     for (const field of [...MUNICIPAL_LICENSE_FIELDS, "Deleted"]) {
       const value = row[field];

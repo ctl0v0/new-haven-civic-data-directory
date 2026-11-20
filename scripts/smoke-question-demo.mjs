@@ -103,6 +103,17 @@ console.log(JSON.stringify({ event: "municipal_business_license_mcp_smoke",
   examples: licenseRows.slice(0, 3).map((row) => ({ parcel_id: row.city_parcel_id,
     address: row.city_address, date: row.event_date, source_url: row.source_url })),
   sources: license.search_result?.coverage?.source_checks }));
+const cityLicenses = await callMcp("search_indexed_records", {
+  source_id: "municipal-business-licenses", neighborhood: "East Rock", limit: 5,
+});
+if (cityLicenses.items.some((row) =>
+  !row.city_parcel_id || !row.fields?.BusinessName || (row.event_date && !row.fields.IssueDate)))
+  throw new Error("East Rock City license records had inconsistent joins or issue dates");
+console.log(JSON.stringify({ event: "municipal_license_geography_smoke",
+  count: cityLicenses.items.length, has_more: Boolean(cityLicenses.next_cursor),
+  examples: cityLicenses.items.map((row) => ({ parcel_id: row.city_parcel_id,
+    address: row.city_address, date: row.event_date, source_url: row.source_url })),
+  sources: cityLicenses.coverage.source_checks }));
 for (const source_id of ["ct-liquor-permits", "ct-child-care-licenses"]) {
   const answer = await callMcp("search_indexed_records", { source_id, neighborhood: "East Rock",
     event_date_from: window.from, event_date_to: window.to, limit: 5 });

@@ -35,6 +35,7 @@ export async function scanNeighborhoodLicenses(range) {
   const diagnostics = { neighborhood: NEIGHBORHOOD, neighborhood_parcels: parcels[0].neighborhood_parcels,
     selected_parcels: parcels.length, checked_parcels: 0, missing_vendor_parcel: 0,
     missing_license_category: 0, upstream_failures: 0, capped_license_categories: 0,
+    upstream_failures_by_status: {},
     named_licenses_seen: 0, named_licenses_without_issue_date: 0,
     named_licenses_issued_in_window: 0, conflicting_license_links: 0, published_date_fields: {} };
   const retained = new Map();
@@ -51,7 +52,9 @@ export async function scanNeighborhoodLicenses(range) {
         if (vendor) children = await municipalWorkChildren("Parcel", vendor.Parcel_ID);
       } catch (error) {
         diagnostics.upstream_failures++;
-        if (error?.upstreamStatus === 429) await new Promise((resolve) => setTimeout(resolve, 1000));
+        const status = error?.upstreamStatus ?? "request_failed";
+        diagnostics.upstream_failures_by_status[status] = (diagnostics.upstream_failures_by_status[status] ?? 0) + 1;
+        if (status === 429) await new Promise((resolve) => setTimeout(resolve, 1500));
         return;
       }
       if (!vendor) { diagnostics.missing_vendor_parcel++; return; }
@@ -66,16 +69,18 @@ export async function scanNeighborhoodLicenses(range) {
             diagnostics.published_date_fields[field] = (diagnostics.published_date_fields[field] ?? 0) + 1;
         }
         const date = municipalDate(raw.IssueDate);
-        if (!date) { diagnostics.named_licenses_without_issue_date++; continue; }
-        if (date < range.from || date > range.to) continue;
-        diagnostics.named_licenses_issued_in_window++;
+        if (!date) diagnostics.named_licenses_without_issue_date++;
+        if (date && date >= range.from && date <= range.to)
+          diagnostics.named_licenses_issued_in_window++;
         if (!/^[1-9]\d{0,11}$/.test(String(raw.License_ID ?? "")) ||
             (raw.Parcel_ID && String(raw.Parcel_ID) !== String(vendor.Parcel_ID)) ||
             (raw.PrintKey && licensePrintKey(raw.PrintKey) !== parcel.mblu)) {
           diagnostics.conflicting_license_links++;
           continue;
         }
-        const [record] = normalizedBusinessLicenses([{ ...raw, Parcel_ID: vendor.Parcel_ID }]);
+        const [record] = normalizedBusinessLicenses([{ ...raw, Parcel_ID: vendor.Parcel_ID }], {
+          requireIssueDate: false,
+        });
         record.fields.VerifiedParcelPrintKey = parcel.mblu;
         const prior = retained.get(record.record_id);
         if (prior && (prior.parcel.objectid !== parcel.objectid ||
