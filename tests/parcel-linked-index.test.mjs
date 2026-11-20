@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { askIndexedParcels } from "../search-index/ask.js";
 import { normalizedBusinessLicenses, verifyMunicipalLicenseDate } from "../search-index/municipal-licenses.js";
+import { municipalEntityRow, municipalParcelByPrintKey } from "../search-index/municity.js";
 import { filteredPermitLinkGaps } from "../search-index/parcel-only-permits.js";
 import { collectPermitActivity } from "../search-index/permit-activity-source.js";
 import { searchIndexedRecords } from "../search-index/search.js";
@@ -14,6 +15,23 @@ test("reviewed municipal subparcel evidence requires the published child, parent
   assert.equal(reviewedSubparcelEvidence(permit, { ...cityVendor, ParcelNote: null }), null);
   assert.equal(reviewedSubparcelEvidence(permit, { ...cityVendor, LegalAddress: "2 Example St" }), null);
   assert.equal(reviewedSubparcelEvidence({ ...permit, PrintKey_Parcel: "263 0135 00102" }, cityVendor), null);
+});
+
+test("exact official parcel and application requests send their published selectors", async () => {
+  const parcel = { Parcel_ID: 7, PrintKey: "12 34" };
+  assert.deepEqual(await municipalParcelByPrintKey("12/34", { get: async (url) => {
+    assert.equal(url.searchParams.get("entity"), "Parcel");
+    assert.equal(url.searchParams.get("searchfield"), "PrintKey");
+    assert.equal(url.searchParams.get("value"), "12 34");
+    return { total: 1, rows: [parcel] };
+  } }), parcel);
+  const app = { Application_ID: 8 };
+  assert.deepEqual(await municipalEntityRow("Application", 8, { get: async (url) => {
+    assert.equal(url.searchParams.get("entity"), "Application");
+    assert.equal(url.searchParams.get("searchfield"), "Application_ID");
+    assert.equal(url.searchParams.get("value"), "8");
+    return { total: 1, rows: [app] };
+  } }), app);
 });
 
 test("unrelated excluded permits do not create a gap in an exact permit filter", () => {

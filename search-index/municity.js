@@ -271,10 +271,10 @@ const workOptions = { headers: { SourceId: "2" }, timeout: 10000, maxBytes: 10_0
 
 async function exactMunicipalRow(entity, field, value, get) {
   const url = new URL(VENDOR);
-  for (const [key, value] of Object.entries({ Customer: "NewHavenCityCT",
+  for (const [key, param] of Object.entries({ Customer: "NewHavenCityCT",
     entity, entity_id: "", fieldtype: "text", mapid: "", mapobject: "",
     module: "", numrecs: "5", operator: "=", pid: "", searchfield: field,
-    section: "", value })) url.searchParams.set(key, value);
+    section: "", value })) url.searchParams.set(key, param);
   const data = await get(url, workOptions);
   if (Number(data.total) !== 1 || !Array.isArray(data.rows) || data.rows.length !== 1) return null;
   return data.rows[0];

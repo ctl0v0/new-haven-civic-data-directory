@@ -100,12 +100,16 @@ if (license.interpretation?.date_field !== "IssueDate" ||
   throw new Error("Business license results did not preserve the published dates and parcel joins");
 console.log(JSON.stringify({ event: "municipal_business_license_mcp_smoke",
   status: license.status, count: licenseRows.length, criteria: license.criteria,
+  examples: licenseRows.slice(0, 3).map((row) => ({ parcel_id: row.city_parcel_id,
+    address: row.city_address, date: row.event_date, source_url: row.source_url })),
   sources: license.search_result?.coverage?.source_checks }));
 for (const source_id of ["ct-liquor-permits", "ct-child-care-licenses"]) {
   const answer = await callMcp("search_indexed_records", { source_id, neighborhood: "East Rock",
     event_date_from: window.from, event_date_to: window.to, limit: 5 });
   console.log(JSON.stringify({ event: "state_license_mcp_smoke", source_id,
     count: answer.items.length, complete_for_query: answer.complete_for_query,
+    examples: answer.items.map((row) => ({ parcel_id: row.city_parcel_id, address: row.city_address,
+      date: row.event_date, source_url: row.source_url })),
     sources: answer.coverage.source_checks }));
 }
 for (const permit_type of ["Water Heater", "Hood - C"]) {
