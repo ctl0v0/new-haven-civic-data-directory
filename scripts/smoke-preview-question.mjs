@@ -110,22 +110,34 @@ try {
     message: error?.message }));
 }
 
-// Check the initial downtown viewport at the wider browse zoom.
+// Check both sections of the wider desktop view and reconcile them to City's IDs.
 try {
-  const { browseParcels } = await import('../parcel/browse.js');
+  const [{ browseParcels }, { LAYERS }, { arcgis }] = await Promise.all([
+    import('../parcel/browse.js'), import('../parcel/config.js'), import('../parcel/http.js'),
+  ]);
   const before = performance.now();
-  const result = await browseParcels('-72.952,41.292,-72.904,41.324', { zoom: '15' });
+  const parts = await Promise.all(['-72.952,41.292,-72.928,41.324', '-72.928,41.292,-72.904,41.324']
+    .map((bounds) => browseParcels(bounds, { zoom: '15' })));
   const milliseconds = Math.round(performance.now() - before);
+  const ids = new Set();
   const counts = Object.create(null);
-  for (const { properties } of result.features) {
-    const use = result.recorded_uses[properties.use_code].category;
-    counts[use] = (counts[use] ?? 0) + 1;
-  }
-  if (result.features.length <= 500 || !counts.mixed_use || result.viewport_limited)
-    throw new Error('The wider downtown view did not return the expected parcel outlines and recorded-use categories');
-  console.log(JSON.stringify({ event: 'preview_browse_zoom_15', mode: result.mode, status: result.status,
-    polygons: result.features.length, counts, milliseconds, bytes: Buffer.byteLength(JSON.stringify(result)),
-    warning: result.warning }));
+  for (const part of parts)
+    for (const { properties } of part.features) {
+      if (ids.has(properties.objectid)) continue;
+      ids.add(properties.objectid);
+      const use = part.recorded_uses[properties.use_code].category;
+      counts[use] = (counts[use] ?? 0) + 1;
+    }
+  const city = await arcgis(LAYERS.parcels, {
+    geometry: '-72.952,41.292,-72.904,41.324', geometryType: 'esriGeometryEnvelope', inSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects', returnIdsOnly: 'true',
+  });
+  const missing = city.objectIds.filter((id) => !ids.has(id)).length;
+  if (ids.size <= 500 || !counts.mixed_use || parts.some((part) => part.viewport_limited) || missing)
+    throw new Error(`Wider downtown sections returned ${ids.size} outlines with ${missing} City IDs missing`);
+  console.log(JSON.stringify({ event: 'preview_browse_zoom_15', modes: parts.map((part) => part.mode),
+    polygons: ids.size, counts, missing, milliseconds,
+    section_bytes: parts.map((part) => Buffer.byteLength(JSON.stringify(part))) }));
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_browse_zoom_15_failed', name: error?.name, message: error?.message }));
 }

@@ -1627,6 +1627,7 @@ const browseUseStyles = new Map([
 const MIN_BROWSE_ZOOM = 15;
 const BROWSE_REUSE_MS = 60_000;
 const BROWSE_MAX_SPLIT_DEPTH = 2;
+const BROWSE_SPLIT_AREA = .001;
 
 function browseUseStyle(category) {
   return browseUseStyles.get(category) ?? browseUseStyles.get("unclassified");
@@ -1751,17 +1752,21 @@ async function fetchBrowseViewport(bounds, zoom, signal, depth = 0) {
   const south = bounds.getSouth();
   const east = bounds.getEast();
   const north = bounds.getNorth();
-  const bbox = [west, south, east, north].join(",");
-  const data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox, zoom })}`, { signal });
-  for (const { properties } of data.features) {
-    if (data.recorded_uses) properties.recorded_use = data.recorded_uses[properties.use_code];
-    if (data.source_url) properties.source_url = `${data.source_url}/${properties.objectid}`;
-  }
-  if (!data.viewport_limited || depth >= BROWSE_MAX_SPLIT_DEPTH) return data;
-
   const longitude = (west + east) / 2;
   const latitude = (south + north) / 2;
   const width = (east - west) * Math.cos(latitude * Math.PI / 180);
+  // Wide screens at the first browse zoom can exceed one response's capacity.
+  // Split these views up front so the request does not download a partial copy.
+  let data;
+  if (width * (north - south) <= BROWSE_SPLIT_AREA || depth >= BROWSE_MAX_SPLIT_DEPTH) {
+    const bbox = [west, south, east, north].join(",");
+    data = await api(`/api/v1/browse-parcels?${new URLSearchParams({ bbox, zoom })}`, { signal });
+    for (const { properties } of data.features) {
+      if (data.recorded_uses) properties.recorded_use = data.recorded_uses[properties.use_code];
+      if (data.source_url) properties.source_url = `${data.source_url}/${properties.objectid}`;
+    }
+    if (!data.viewport_limited || depth >= BROWSE_MAX_SPLIT_DEPTH) return data;
+  }
   const sections = width >= north - south
     ? [[[south, west], [north, longitude]], [[south, longitude], [north, east]]]
     : [[[south, west], [latitude, east]], [[latitude, west], [north, east]]];
@@ -1769,9 +1774,10 @@ async function fetchBrowseViewport(bounds, zoom, signal, depth = 0) {
     fetchBrowseViewport(window.L.latLngBounds(section), zoom, signal, depth + 1)));
   signal.throwIfAborted();
   const available = parts.flatMap((part) => part.status === "fulfilled" ? [part.value] : []);
+  if (!data && !available.length) throw parts[0].reason;
   const limited = available.length < sections.length || available.some((part) => part.viewport_limited);
   const features = new Map();
-  for (const part of limited ? [data, ...available] : available)
+  for (const part of limited && data ? [data, ...available] : available)
     for (const feature of part.features) features.set(parcelKey(feature.properties), feature);
   return {
     features: [...features.values()],
