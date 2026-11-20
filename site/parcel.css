@@ -610,6 +610,7 @@ details.display-section > summary strong { margin-right: auto; }
 .query-mode-bar button[aria-pressed="true"] { background: #e1efe5; border-color: #17624a; color: #143e31; }
 .query-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .65rem .8rem; margin: .7rem 0; }
 .query-grid input, .query-grid select, .query-workbench-form input, .query-workbench-form select { margin-top: .25rem; width: 100%; min-width: 0; }
+.query-grid select, .query-workbench-form select { min-height: 2.6rem; padding: .4rem .55rem; color: inherit; font: inherit; border: 1px solid #8ca3a6; border-radius: .28rem; background: #fff; }
 .query-catalog-group { border-top: 1px solid #d2ded5; }
 .query-catalog-group > summary { padding: .75rem 0; font-weight: 700; cursor: pointer; }
 .query-catalog-group > p { margin: 0 0 .65rem; }
@@ -618,9 +619,7 @@ details.display-section > summary strong { margin-right: auto; }
 .query-catalog-list code { overflow-wrap: anywhere; }
 .query-catalog-list .meta { margin: .15rem 0 0; display: block; }
 .query-catalog-list button { flex-shrink: 0; }
-.query-export-link { display: block; margin: .6rem 0; }
-.guide-example .query-export-link:first-of-type { margin-top: .65rem; }
-.guide-example button + h3 { margin-top: 1.4rem; }
+.query-exports { margin: .8rem 0 1rem; gap: .45rem 1rem; }
 .query-values button { margin: .3rem .25rem 0 0; }
 .query-workbench-form { padding: 1rem 0; display: grid; gap: .85rem; }
 .query-workbench-form > label { max-width: 28rem; }

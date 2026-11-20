@@ -74,6 +74,7 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
   const matches = (...parts) => parts.join(" ").toLowerCase().includes(browser.term.trim().toLowerCase());
   const labeled = (name, control) => {
     const label = el("label", name);
+    control.setAttribute("aria-label", name);
     label.append(control);
     return label;
   };
@@ -141,18 +142,17 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
     });
     const sourceLabel = labeled("Official source", sourceSelect);
     controls.append(labeled("Browse", browseBy), labeled("Find a type or field", search), sourceLabel);
-    parent.append(controls, browseTarget);
+    const exports = el("div", null, "query-actions query-exports");
+    for (const [format, name] of [["csv", "Download license CSV"], ["json", "View license export and coverage"]]) {
+      const download = el("a", name, "meta");
+      download.href = `/api/v1/license-export?format=${format}`;
+      if (format === "json") { download.target = "_blank"; download.rel = "noopener"; }
+      exports.append(download);
+    }
+    parent.append(controls, exports, browseTarget);
     sidebar.append(el("h3", "Test a search"), el("p",
       "Use the exact published spelling shown here. Field filters can also combine sources, such as City neighborhood and State liquor permits."));
     sidebar.append(button("Open field filters", () => openTest()));
-    sidebar.append(el("h3", "License export"), el("p",
-      "Download the indexed City and State license records with verified parcel links. The JSON also includes source coverage."));
-    for (const [format, name] of [["csv", "Download license CSV"], ["json", "View license export and coverage"]]) {
-      const download = el("a", name, "query-export-link");
-      download.href = `/api/v1/license-export?format=${format}`;
-      if (format === "json") { download.target = "_blank"; download.rel = "noopener"; }
-      sidebar.append(download);
-    }
     let version = 0;
     async function refresh() {
       const current = ++version;
@@ -221,7 +221,7 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
       matched += fields.length;
       const details = el("details", null, "query-catalog-group");
       details.open = browser.source !== "all" || Boolean(browser.term.trim());
-      details.append(el("summary", `${title} · ${fields.length} fields`));
+      details.append(el("summary", `${title} · ${fields.length} field${fields.length === 1 ? "" : "s"}`));
       const sourceLine = el("p", null, "meta");
       sourceLine.append(el("code", sourceId));
       if (spec.event_date_field) sourceLine.append(document.createTextNode(` · Date range uses ${spec.event_date_field}`));
@@ -274,7 +274,7 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
         matched += fields.length;
         const details = el("details", null, "query-catalog-group");
         details.open = Boolean(browser.term.trim());
-        details.append(el("summary", `Permit activity · ${fields.length} filters`),
+        details.append(el("summary", `Permit activity · ${fields.length} filter${fields.length === 1 ? "" : "s"}`),
           el("p", `Indexed permit types · ${capabilities.permit_activity_types.join(", ")}`, "meta"),
           button("Test permit activity", () => test("activity")));
         const list = el("ul", null, "query-catalog-list");
@@ -296,7 +296,8 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
       button("Test permit contacts", () => test("contacts")));
       target.append(group);
     }
-    target.prepend(el("p", matched ? `${matched} matching fields and filters.` : "No fields match those filters.", "meta"));
+    target.prepend(el("p", matched ? `${matched} matching field${matched === 1 ? " or filter" : "s and filters"}.`
+      : "No fields match those filters.", "meta"));
   }
 
   function renderExamples(target) {
