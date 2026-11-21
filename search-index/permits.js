@@ -48,7 +48,7 @@ const check = (sourceId, scopeKey, row, maxAge, latest = null, from = null, to =
     latest_attempt_warning: row.latest_attempt_warning ?? null };
 };
 
-export async function searchIndexedPermits(input = {}, { query = indexQuery } = {}) {
+export async function searchIndexedPermits(input = {}, { query = indexQuery, parcelKeys = null } = {}) {
   const allTypes = input.permit_types == null ||
     (Array.isArray(input.permit_types) && input.permit_types.length === 0);
   if (!allTypes && (!Array.isArray(input.permit_types) || input.permit_types.length > 6))
@@ -156,7 +156,8 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
   const runIds = Object.fromEntries(checks.filter((item) => item.run_id != null)
     .map((item) => [`${item.source_id}:${item.scope_key}`, item.run_id]));
   const sourceHash = fingerprint(runIds);
-  const cursor = readSearchCursor(input.cursor, fingerprint(criteria), sourceHash);
+  const queryHash = fingerprint(parcelKeys ? [criteria, parcelKeys] : criteria);
+  const cursor = readSearchCursor(input.cursor, queryHash, sourceHash);
   const availableTypeRuns = recent ? [Number(recent.run_id)] : types.map((type) => runIds[`municity:permit-type:${type}`])
     .filter((runId) => runId != null);
   if (!availableTypeRuns.length) return { criteria, items: [], next_cursor: null,
@@ -166,6 +167,10 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
     runIds["parcels:all"]];
   const add = (value) => { values.push(value); return `$${values.length}`; };
   const filters = [];
+  if (parcelKeys) filters.push(`EXISTS (SELECT 1 FROM unnest(
+    ${add(parcelKeys.map(({ parcel_id }) => parcel_id))}::bigint[],
+    ${add(parcelKeys.map(({ objectid }) => objectid))}::bigint[]) AS selected(parcel_id, objectid)
+    WHERE selected.parcel_id = j.city_parcel_id AND selected.objectid = j.city_objectid)`);
   if (recent && !allTypes) filters.push(`upper(trim(r.published_type)) = ANY(${add(types)}::text[])`);
   if (status) filters.push(`upper(trim(r.published_status)) = upper(${add(status)})`);
   if (from) filters.push(`r.event_date >= ${add(from)}::date`);
@@ -213,7 +218,7 @@ export async function searchIndexedPermits(input = {}, { query = indexQuery } = 
   }
   const hasMore = rows.length > limit;
   return { criteria, items: rows.slice(0, limit),
-    next_cursor: hasMore ? makeSearchCursor({ v: 1, query: fingerprint(criteria),
+    next_cursor: hasMore ? makeSearchCursor({ v: 1, query: queryHash,
       source: sourceHash, offset: cursor.offset + limit,
       expires: Date.now() + 30 * 60_000 }) : null,
     complete_for_query: !hasMore && allComplete,

@@ -1,5 +1,5 @@
 {
-  "reviewed_on": "2026-11-20",
+  "reviewed_on": "2026-11-21",
   "citysquared_menu_status": "unverified",
   "citysquared_menu_note": "The public portal entry was checked. The current applicant menu and any sign-in-only instructions still need a permitted walkthrough.",
   "sources": {
@@ -68,6 +68,11 @@
       "url": "https://www.newhavenct.gov/government/departments-divisions/transportation-traffic-parking/permits-applications-and-fees",
       "kind": "city_directory"
     },
+    "food-service": {
+      "title": "New Haven Health Department food licensing and inspection",
+      "url": "https://nhvhealth.org/food-licensing-inspection/",
+      "kind": "city_instructions"
+    },
     "citysquared": {
       "title": "New Haven CitySquared entry",
       "url": "https://www.citysquared.com/#/app/NewHavenCityCT/landing",
@@ -75,6 +80,16 @@
     }
   },
   "applications": [
+    {
+      "id": "food-service-establishment",
+      "title": "Food service establishment license",
+      "department": "Health Department",
+      "source": "food-service",
+      "route": "citysquared",
+      "instructions": [
+        {"source": "food-service", "text": "Review the City's food licensing instructions, fee schedule and inspection process. Apply through New Haven CitySquared."}
+      ]
+    },
     {
       "id": "building-permits",
       "title": "Building Department online permitting",

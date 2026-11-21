@@ -41,6 +41,7 @@ import {
 } from "../parcel/service.js";
 import { searchIndexedPermitActivity } from "../search-index/permit-activity.js";
 import { PERMIT_ACTIVITY_TYPES } from "../search-index/permit-activity-source.js";
+import { commercialRenterTools } from "../search-index/commercial-renter.js";
 
 function reply(value) {
   return {
@@ -349,10 +350,14 @@ export function createServer() {
     server,
     "ask_parcel_data",
     "Ask about New Haven parcel records",
-    "Translate a natural-language question into a search plan. Set plan_only to true to present the plan for confirmation before searching parcel records. Execute the returned plan with query_parcel_data. Without plan_only the tool also returns parcels, official records and coverage. To answer a clarification, resend the question, plan_only setting, and returned clarification ID and option ID.",
+    "Translate a natural-language question into a search plan. Set plan_only to true to present the plan for confirmation before searching parcel records. Execute the returned plan with query_parcel_data. Without plan_only the tool also returns parcels, official records and coverage. To answer a clarification, resend the question, plan_only setting, and returned clarification ID and option ID. In private Preview, pass storefront for renter follow-ups and execute a returned renter_plan with its named tool after confirmation.",
     askParcelDataSchema,
     askParcelData,
   );
+  if (pilotPreviewEnabled()) {
+    for (const [name, { title, description, schema, run }] of Object.entries(commercialRenterTools))
+      tool(server, name, title, description, schema, run);
+  }
   tool(
     server,
     "query_parcel_data",

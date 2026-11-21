@@ -1,6 +1,7 @@
 import { brief, eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate } from "./parcel-record-text.js";
 import { statusTone } from "./plat/status.js";
 import { initVacancyLayer } from "./vacancy-layer.js";
+import { initCommercialRenter } from "./commercial-renter.js";
 import { consumeVacancyLaunch } from "./vacancy-session.js";
 import { createParcelMap, createStreetLayer, mapColor, mapLayerColor, recordedUseStyles, watchBrowseMapColors } from "./parcel-map-sources.js";
 
@@ -3212,6 +3213,7 @@ function clearAskResult() {
   $("ask-without-commercial").hidden = true;
   $("ask-results").replaceChildren();
   $("ask-coverage").hidden = true;
+  $("ask-coverage").replaceChildren();
   $("ask-interpretation").hidden = true;
   $("ask-filter-form").hidden = true;
   $("ask-more").hidden = true;
@@ -3220,6 +3222,8 @@ function clearAskResult() {
   askCriteria = null;
   askCursor = null;
 }
+const renter = initCommercialRenter({ api, el, link, setStatus: setAskStatus, clearResults: clearAskResult,
+  invalidate: () => { askVersion++; }, sourceNames });
 function displaySearchResult(result, { append = false } = {}) {
   askCursor = result.next_cursor;
   appendAskItems(result.items);
@@ -3376,8 +3380,10 @@ async function runAsk(question, filters = null, clarification = null) {
   try {
     const response = await api(filters ? "/api/v1/ask-parcels" : "/api/v1/ask-parcel-data", { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(filters ? { filters } : { question, plan_only: true, ...(clarification ? { clarification } : {}) }) });
+      body: JSON.stringify(filters ? { filters } : { question, plan_only: true, storefront: renter.selectedStorefront(),
+        ...(clarification ? { clarification } : {}) }) });
     if (version !== askVersion) return;
+    if (response.renter_plan) { renter.renderPlan(response, () => version === askVersion); return; }
     if (!filters) { renderUnifiedAnswer(response, question, version); return; }
     const parsed = response.interpretation;
     if (parsed) {

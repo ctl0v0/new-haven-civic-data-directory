@@ -9,7 +9,7 @@ const routes = ["citysquared", "department_portal", "in_person", "email", "mail"
 const associations = ["verified_application", "shared_instructions", "no_verified_application"];
 const text = z.string().trim().min(1).max(160);
 const identity = (value) => String(value ?? "").trim().toLowerCase();
-const allowedHosts = new Set(["www.newhavenct.gov", "www.citysquared.com", "www.newhavenadu.com", "portal.ct.gov"]);
+const allowedHosts = new Set(["www.newhavenct.gov", "www.citysquared.com", "www.newhavenadu.com", "portal.ct.gov", "nhvhealth.org"]);
 
 export const permitApplicationQuerySchema = z.strictObject({
   view: z.enum(["permit_types", "directory"]).default("permit_types"),

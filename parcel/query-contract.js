@@ -5,6 +5,7 @@ import { PERMIT_ACTIVITY_KINDS, PERMIT_ACTIVITY_SOURCE, PERMIT_ACTIVITY_TYPES } 
 import { NUMBER_FIELDS, PARCEL_QUERY_FIELDS } from "../search-index/search.js";
 import { STATE_ADDRESS_SOURCES } from "../search-index/socrata.js";
 import { SOURCES } from "./config.js";
+import { renterStorefrontSchema } from "../search-index/renter-question.js";
 
 export const QUERY_CATALOG_VERSION = 1;
 export const queryDateFields = { parcels: "sale_date", municity: "PermitDate",
@@ -131,6 +132,7 @@ export const queryParcelDataSchema = z.strictObject({
 export const askParcelDataSchema = z.strictObject({
   question: z.string().trim().min(1).max(1000),
   plan_only: z.boolean().optional(),
+  storefront: renterStorefrontSchema.optional(),
   clarification: z.strictObject({
     id: z.enum(["work_date", "parcel"]), choice: label,
   }).optional(),

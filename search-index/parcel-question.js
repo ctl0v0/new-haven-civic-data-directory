@@ -2,6 +2,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { getDataContext, parcelUseCodesForSearch } from "../parcel/data-context.js";
 import { SourceError } from "../parcel/http.js";
+import { pilotPreviewEnabled } from "../parcel/auth.js";
 import { askParcelDataSchema, parcelQueryCatalog, parcelQueryPlanSchema } from "../parcel/query-contract.js";
 import { normalizeAddress } from "../parcel/resolve.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
@@ -13,6 +14,7 @@ import { parcelQueryPlanProblem, queryParcelData } from "./parcel-query.js";
 import { questionDates } from "./question-dates.js";
 import { contactFields, exactRecordQuestion, explicitParcelUse, permitFields, registrationWords } from "./question-routes.js";
 import { PERMIT_ACTIVITY_SOURCE, PERMIT_ACTIVITY_TYPES } from "./permit-activity-source.js";
+import { planRenterQuestion } from "./renter-question.js";
 
 const COMPLETION_GAP = "There is no verified work-completion date for this search. A permit date, a listed contractor, and an inspection close date record different events. You can instead search by published PermitDate.";
 const workDate = { id: "work_date", question: "Which date should the search use?",
@@ -254,8 +256,12 @@ export async function askParcelData(input, { execute = queryParcelData, interpre
   catalog = questionPermitCatalog, now = new Date() } = {}) {
   const checked = askParcelDataSchema.safeParse(input);
   if (!checked.success) throw new SourceError("Invalid parcel question or clarification", 400);
-  const { clarification, plan_only } = checked.data;
+  const { clarification, plan_only, storefront } = checked.data;
   const question = checked.data.question.replace(/\s+/g, " ");
+  if (pilotPreviewEnabled()) {
+    const renter = planRenterQuestion(question, storefront);
+    if (renter) return renter;
+  }
   if (/\b(?:state|connecticut|ct) business licenses?\b/i.test(question) &&
       !/\b(?:liquor|cannabis|child care|youth camp|public charit(?:y|ies))\b/i.test(question))
     return { status: "clarify", question, reason_code: "state_business_record_type",

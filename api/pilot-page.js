@@ -273,6 +273,29 @@ const app = `
         <button id="ask-fields-mode" type="button" class="secondary" aria-pressed="false">Field filters</button>
       </div><a id="ask-query-guide" href="/parcel?view=guide&amp;guide=query-explorer">Browse fields and permit types</a></div>
       <div id="ask-language">
+      ${previewToolsVisible ? `<section class="renter-workspace" aria-labelledby="renter-heading">
+        <h2 id="renter-heading">Find a storefront</h2>
+        <div class="ask-examples">
+          <button type="button" data-ask-example="Show me listed storefronts in New Haven">Browse vacancy listings</button>
+          <button type="button" data-ask-example="Which listed storefronts in East Rock have a commercial hood permit on record?">East Rock storefronts with hood records</button>
+        </div>
+        <div id="renter-selection" hidden>
+          <div class="renter-target"><strong id="renter-address"></strong><button id="renter-change" class="secondary" type="button">Change storefront</button></div>
+          <div class="ask-examples" aria-label="Follow-up questions">
+            <button type="button" data-ask-example="Was the hood permit issued, and did it pass inspection?">Hood and inspection records</button>
+            <button type="button" data-ask-example="Was there a restaurant here before?">Prior restaurant records</button>
+            <button type="button" data-ask-example="How much space is there? Is there ground-floor retail space or a basement?">Building and subareas</button>
+            <button type="button" data-ask-example="What’s the zoning here, and who can tell me if I can open a restaurant?">Zoning and City contact</button>
+            <button type="button" data-ask-example="How many Thai restaurants are within a quarter mile? Which ones are they?">Thai restaurants within ¼ mile</button>
+            <button type="button" data-ask-example="What permits or applications should I look at to open here?">Applications and instructions</button>
+            <button type="button" data-ask-example="Would the landlord take a one-year lease or a pop-up? What about five years?">Lease terms</button>
+          </div>
+        </div>
+        <form id="renter-address-form">
+          <label for="renter-address-input">Or enter a storefront address</label>
+          <div class="ask-form-row"><input id="renter-address-input" type="search" maxlength="160" required placeholder="New Haven street address"><button type="submit" class="secondary">Select address</button></div>
+        </form>
+      </section>` : ""}
       <form id="ask-form"><label for="ask-question">Question</label><div class="ask-form-row"><input id="ask-question" type="search" maxlength="1000" required placeholder="Show commercial parcels with electrical permits pulled in the past 30 days"><button type="submit">Preview search</button></div></form>
       <div class="ask-examples"><span>Examples</span><button type="button" data-ask-example="Show parcels with electrical permits pulled in the past 30 days">Electrical permits · 30 days</button><button type="button" data-ask-example="Show commercial parcels with electrical permits pulled in the past 30 days">Commercial + electrical</button><button type="button" data-ask-example="Show me new business licenses in East Rock neighborhood in the last 30 days">East Rock license issuance</button><button type="button" data-ask-example="Show me Contractor contacts who did water heater replacements in the last 30 days">Water Heater contractors</button></div>
       </div>

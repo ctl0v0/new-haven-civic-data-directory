@@ -33,6 +33,21 @@ The tester reads the fresh, validated municipal permit-type catalog from the
 private index when available and falls back to the live official catalog when
 it is absent or stale.
 
+## Find a storefront
+
+Open **Test a question** and choose **Browse vacancy listings** or the East Rock hood example. The shortlist uses the approved address export configured in Preview or imported from **Browse parcel map** in the same tab. Select a result or enter a New Haven street address. Follow-up questions keep that address until you choose **Change storefront**.
+
+For MCP, pass the selected `storefront` with its address and both City parcel IDs to `ask_parcel_data`. If you only have the address, the server can resolve it and return City parcel choices when needed. Execute the returned `renter_plan.tool` with its `arguments` after reviewing the plan.
+
+| Tool | Returns |
+|---|---|
+| `search_commercial_vacancies` | Five linked listing addresses per page, along with City neighborhood and optional indexed hood permit evidence. |
+| `get_commercial_storefront_evidence` | Published hood permits and inspections, prior business records, assessor areas, zoning, or application instructions for one storefront. Lease terms are unknown until supplied. |
+| `count_nearby_places` | One live Google Maps count from a verified City address point. The default radius is 402 meters. |
+| `list_nearby_places` | One page of Google Maps names and links after an explicit request for a search with 1–100 matches. |
+
+Check the address label on permit and business rows. Records linked only to the parcel can describe a different storefront. Current availability and hood condition require confirmation. Google results are returned on demand with attribution and stay in the current view.
+
 ## Release gates for the Electrical Permit example
 
 1. Run the index migration, then refresh City parcels and the recent Electrical
