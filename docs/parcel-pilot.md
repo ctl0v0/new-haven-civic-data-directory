@@ -80,7 +80,7 @@ An address search remains visible as an address focus after parcel selection. Re
 
 ### Property report
 
-Choose **Generate property report** in a loaded parcel’s header to open a private HTML report. It includes the verified photo when available, the parcel boundary and surrounding map, dated history, and grouped records from the existing parcel sources. Source coverage shows incomplete or unavailable results. **Print report** expands the record sections for printing or saving from the browser.
+Choose **Generate property report** in a loaded parcel’s header to open a private HTML report. It includes the verified photo when available, the parcel boundary and surrounding map, dated history, and grouped records from the existing parcel sources. Record sections, history years, and source coverage open by default. Source coverage shows incomplete or unavailable results. **Print report** opens any sections you’ve collapsed for printing or saving from the browser.
 
 ## REST API
 

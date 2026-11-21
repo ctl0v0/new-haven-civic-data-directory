@@ -158,7 +158,7 @@ function timeline(items) {
   if (!dated.length) return "";
   const years = Map.groupBy(dated, ({ item }) => item.event_date.slice(0, 4));
   return `<section id="history" class="report-section"><h2>Parcel history</h2>
-    ${[...years].map(([year, rows], index) => `<details class="history-year"${index === 0 ? " open" : ""}>
+    ${[...years].map(([year, rows]) => `<details class="history-year" open>
       <summary>${escape(year)} <span>${rows.length} dated ${rows.length === 1 ? "record" : "records"}</span></summary>
       <ol>${rows.map(({ item, id, title }) => `<li>
         <time datetime="${escape(item.event_date)}">${escape(shortDate(item.event_date))}</time>
@@ -171,7 +171,7 @@ function recordChapter(key, entries) {
   const sections = Map.groupBy(entries, ({ item }) =>
     item.source_id === "municity" && item.category ? categories[item.category] ?? item.category : sourceTitle(item.source_id));
   return `<section id="${key}" class="report-section"><h2>${chapters[key]}</h2>
-    ${[...sections].map(([heading, rows]) => `<details class="record-section"${rows.length <= 4 ? " open" : ""}>
+    ${[...sections].map(([heading, rows]) => `<details class="record-section" open>
       <summary><h3>${escape(heading)}</h3><span>${rows.length}</span></summary>
       ${rows.map(({ item, id, title, fields }) => recordRow(item, id, title, fields)).join("")}
       </details>`).join("")}</section>`;
@@ -186,10 +186,10 @@ function coverageSection(groups, addresses, photo, context) {
     ${entry.warning || entry.note || entry.coverage ? `<p>${escape(entry.warning ?? entry.note ?? entry.coverage)}</p>` : ""}</td></tr>`;
   return `<section id="sources" class="report-section"><h2>Sources and coverage</h2>
     <p class="caption">Source dates describe the published records. This report was generated from the records available at the time of the request.</p>
-    <details class="record-section"><summary><h3>Parcel records</h3></summary>
+    <details class="record-section" open><summary><h3>Parcel records</h3></summary>
     <table><thead><tr><th scope="col">Source</th><th scope="col">Response</th></tr></thead>
     <tbody>${groups.flatMap(({ sources }) => sources).map((entry) => row(entry, sourceTitle(entry.source_id))).join("")}</tbody></table></details>
-    <details class="record-section"><summary><h3>Photo and map</h3></summary>
+    <details class="record-section" open><summary><h3>Photo and map</h3></summary>
     <table><thead><tr><th scope="col">Source</th><th scope="col">Response</th></tr></thead><tbody>
     ${row(photo, "Parcel photograph")}${row(addresses, "City-mapped addresses")}
     ${context?.layers.map((layer) => row(layer, layer.title)).join("") ??

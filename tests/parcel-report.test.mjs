@@ -44,6 +44,7 @@ test("report retains historical rows beyond one result page, with factual links 
   assert.match($(".mapped-addresses").text(), /138 Bradley St.*Unit 2/);
   assert.equal($("#activity .record").length, 30);
   assert.equal($("#history li").length, 32);
+  assert.equal($(".report details:not([open])").length, 0);
   assert.equal($("#history li").first().find("time").attr("datetime"), "2024-11-19");
   assert.equal($("#history li").last().find("time").attr("datetime"), "1995-01-02");
   assert.match($("#business .record").text(), /BRADLEY STREET BICYCLE CO-OP/);
