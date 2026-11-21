@@ -9,7 +9,7 @@ export const REGISTRATION_FIELDS = Object.freeze([
   "id", "name", "accountnumber", "business_type", "status", "sub_status", REGISTRATION_DATE,
   "billingstreet", "billing_unit", "billingcity", "billingstate", "billingpostalcode", "naics_code",
 ]);
-export const REGISTRATION_WHERE = "upper(trim(billingcity))='NEW HAVEN' AND upper(trim(billingstate))='CT'";
+export const REGISTRATION_WHERE = "upper(billingcity)='NEW HAVEN' AND upper(billingstate)='CT'";
 
 export function validBusinessRegistration(row) {
   return /^[a-z0-9]{15,18}$/i.test(String(row.id ?? "")) && String(row.name ?? "").trim() &&

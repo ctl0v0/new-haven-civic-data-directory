@@ -28,7 +28,7 @@ async function parcelRegistrationRows(localPoints) {
   const batches = Array.from({ length: Math.ceil(Math.min(numbers.length, 100) / 25) }, (_, index) =>
     numbers.slice(index * 25, index * 25 + 25));
   const results = await Promise.allSettled(batches.map((batch) => cached(`ct-registration-houses:${batch.join(",")}`, async () => {
-    const prefixes = batch.map((number) => `upper(trim(billingstreet)) LIKE '${number} %'`).join(" OR ");
+    const prefixes = batch.map((number) => `upper(billingstreet) LIKE '${number} %'`).join(" OR ");
     const url = `${REGISTRATION_API}?${new URLSearchParams({ $where: `${REGISTRATION_WHERE} AND (${prefixes})`,
       $select: REGISTRATION_FIELDS.join(","), $order: "id", $limit: String(limit) })}`;
     const rows = await fetchJson(url, { timeout: 12000, maxBytes: 1_000_000 });

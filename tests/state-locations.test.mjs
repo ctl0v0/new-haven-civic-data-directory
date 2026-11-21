@@ -32,7 +32,7 @@ test("State registrations use the official business street, retain units, and ex
     const url = new URL(input);
     const where = url.searchParams.get("$where") ?? url.searchParams.get("where") ?? "";
     if (url.pathname.endsWith("/n7gp-d28j.json")) {
-      assert.match(where, /NEW HAVEN.*billingstate.*'CT'/);
+      assert.match(where, /^upper\(billingcity\)='NEW HAVEN' AND upper\(billingstate\)='CT'/);
       assert.match(where, /'820 %'/);
       assert.match(where, /'4 %'/);
       return json([

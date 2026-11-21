@@ -451,12 +451,13 @@ body.browse-expanded .browse-workspace { grid-template-columns: min(46rem, 55vw)
 #vacancy-upload { margin-block: var(--space-2); }
 #vacancy-upload summary { cursor: pointer; color: var(--civic); }
 #vacancy-import { margin-top: var(--space-2); }
-.leaflet-marker-icon.vacancy-pin {
-  border: 2px solid var(--on-civic);
+.leaflet-marker-icon.vacancy-pin, .vacancy-pin-key {
+  border: 2px solid #fff;
   border-radius: 50%;
-  background: var(--civic);
-  box-shadow: 0 0 0 1px var(--ink);
+  background: #d91b6a;
+  box-shadow: 0 0 0 1px #381126, 0 1px 4px #38112670;
 }
+.vacancy-pin-key { width: .8rem; height: .8rem; flex: none; }
 #browse-context-layers h2 { font-size: .95rem; margin: var(--space-4) 0 var(--space-2); }
 body.browse-mode #record-content { margin-top: 1rem; }
 body.browse-mode #parcel-summary, body.browse-mode #parcel-map-section { display: none; }

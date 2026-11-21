@@ -68,10 +68,14 @@ export function initVacancyLayer({ map, leaflet, api, el, selectListing, showAct
     }).addTo(map);
   }
 
-  function pick(entry, recenter) {
-    selectedId = entry.id;
+  function setSelection(id) {
+    selectedId = id;
     for (const button of list.querySelectorAll("button"))
       button.setAttribute("aria-current", String(button.dataset.listingId === selectedId));
+  }
+
+  function pick(entry, recenter) {
+    setSelection(entry.id);
     void selectListing(entry, recenter);
   }
 
@@ -145,6 +149,7 @@ export function initVacancyLayer({ map, leaflet, api, el, selectListing, showAct
   $("vacancy-fit").addEventListener("click", fit);
   $("vacancy-activity-link").addEventListener("click", () => showActivity(neighborhood.value, search.value.trim()));
   return {
+    clearSelection: () => setSelection(null),
     open() {
       panel.open = true;
       if (!data) void load(savedVacancyAddresses(), true);

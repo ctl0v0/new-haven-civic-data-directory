@@ -176,7 +176,8 @@ const app = `
           <div id="browse-selection-summary" aria-live="polite"><h2 id="browse-selection-title">Select a parcel</h2><p class="meta">Choose a property on the map to preview its address and official photo.</p></div>
           <div id="browse-selection-actions" class="browse-selection-actions" hidden>
             <button id="browse-request-records" type="button">Request parcel data</button>
-            <button id="browse-open-records" class="secondary" type="button" hidden>View full records without map</button>
+            <button id="browse-open-records" class="secondary" type="button" hidden>View full records</button>
+            <button id="browse-clear-selection" class="secondary" type="button">Clear selection</button>
           </div>
           <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
           <div id="browse-selection-preview" class="browse-selection-preview" hidden></div>
@@ -191,7 +192,7 @@ const app = `
               <label>Neighborhood <select id="vacancy-neighborhood"><option value="">All neighborhoods</option></select></label>
             </div>
             <div class="vacancy-actions">
-              <label><input type="checkbox" id="vacancy-show-pins" checked> Show listing pins</label>
+              <label><input type="checkbox" id="vacancy-show-pins" checked><span class="vacancy-pin-key" aria-hidden="true"></span> Show listing pins</label>
               <button id="vacancy-fit" type="button" class="secondary">Fit pins</button>
               <button id="vacancy-activity-link" type="button" class="secondary">View listing activity</button>
             </div>

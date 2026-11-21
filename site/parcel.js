@@ -5,6 +5,7 @@ import { consumeVacancyLaunch } from "./vacancy-session.js";
 import { createParcelMap, createStreetLayer, mapColor, mapLayerColor, recordedUseStyles, watchBrowseMapColors } from "./parcel-map-sources.js";
 
 const $ = (id) => document.getElementById(id);
+const emptyBrowseSummary = [...$("browse-selection-summary").childNodes];
 const groups = [
   ["property", "Building and addresses", "City parcel fields, assessor detail, address points, and address-level NHPS School Choice attendance zones."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
@@ -729,10 +730,7 @@ async function openRecordDetail(item, trigger) {
   detail.replaceChildren();
   detail.hidden = false;
   if (document.body.classList.contains("browse-mode")) {
-    document.body.classList.add("browse-expanded");
-    $("browse-panel-toggle").setAttribute("aria-expanded", "true");
-    $("browse-panel-toggle").textContent = "Narrow panel";
-    requestAnimationFrame(() => browseMap?.invalidateSize());
+    setBrowsePanelExpanded(true);
   }
   const back = el("button", `← Back to ${groups.find(([id]) => id === activeRecordGroup)?.[1] ?? "records"}`, "detail-back secondary");
   back.type = "button";
@@ -1341,9 +1339,10 @@ async function loadBrowseSelectedMap(qs, version, recenter = false) {
     const bounds = browseSelectedLayer.getBounds();
     if (!bounds.isValid()) throw Error("City parcel boundary has no map extent");
     if (recenter) browseMap.fitBounds(bounds.pad(2), { maxZoom: 18 });
-    browseContextLayers = await loadMapContext(browseMap, qs, version, bounds, {
+    const layers = await loadMapContext(browseMap, qs, version, bounds, {
       list, notes: $("browse-map-context-notes"),
     });
+    if (version === viewVersion) browseContextLayers = layers;
   } catch (error) {
     if (version !== viewVersion) return;
     list.replaceChildren(el("p", `Could not show selected parcel layers: ${error.message}`, "map-layer-warning"));
@@ -1723,6 +1722,7 @@ async function loadBrowseZoning(qs, version, detail) {
 async function selectBrowseParcel(feature, { listing = null } = {}) {
   const p = feature.properties ?? {};
   if (p.parcel_id == null || p.objectid == null) return;
+  if (!listing) vacancyBrowser?.clearSelection();
   browseListingBoundary?.remove();
   browseListingBoundary = null;
   const key = parcelKey(p);
@@ -1825,6 +1825,36 @@ async function selectBrowseParcel(feature, { listing = null } = {}) {
     if (version === browseSelectionVersion)
       photoStatus.textContent = "Parcel photo sources unavailable.";
   }
+}
+
+function clearBrowseSelection() {
+  const previous = browsePaths.get(parcelKey(selectedBrowseParcel));
+  ++browseSelectionVersion;
+  ++viewVersion;
+  selectedBrowseParcel = null;
+  selected = null;
+  requestedParcelKey = null;
+  searchedAddress = "";
+  previous?.setStyle(browseParcelStyle(previous.feature));
+  browseMap?.closePopup();
+  vacancyBrowser?.clearSelection();
+  clearBrowseDataMap();
+  resetMap();
+  $("record-content").hidden = true;
+  $("records-view").classList.remove("has-parcel");
+  $("browse-open-records").hidden = true;
+  $("browse-request-records").onclick = null;
+  $("browse-selection-actions").hidden = true;
+  $("browse-selection-preview").hidden = true;
+  $("browse-selection-preview").replaceChildren();
+  $("browse-selection-summary").replaceChildren(...emptyBrowseSummary);
+  status("");
+  const url = new URL(location.href);
+  for (const key of ["parcel_id", "objectid", "query_address", "section", ...filterKeys]) url.searchParams.delete(key);
+  history.replaceState(null, "", `${url.pathname}${url.search}`);
+  setBrowsePanelExpanded(false);
+  setMobileBrowseView("map");
+  $("browse-map").focus({ preventScroll: true });
 }
 
 async function selectVacancyListing(listing, recenter) {
@@ -3459,12 +3489,14 @@ function setMobileBrowseView(view) {
 }
 $("mobile-map-tab").addEventListener("click", () => setMobileBrowseView("map"));
 $("mobile-records-tab").addEventListener("click", () => setMobileBrowseView("records"));
-$("browse-panel-toggle").addEventListener("click", () => {
-  const expanded = document.body.classList.toggle("browse-expanded");
+function setBrowsePanelExpanded(expanded) {
+  document.body.classList.toggle("browse-expanded", expanded);
   $("browse-panel-toggle").setAttribute("aria-expanded", String(expanded));
   $("browse-panel-toggle").textContent = expanded ? "Narrow panel" : "Expand panel";
   requestAnimationFrame(() => browseMap?.invalidateSize());
-});
+}
+$("browse-panel-toggle").addEventListener("click", () => setBrowsePanelExpanded(!document.body.classList.contains("browse-expanded")));
+$("browse-clear-selection").addEventListener("click", clearBrowseSelection);
 $("records-tab").parentElement.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
@@ -3490,16 +3522,17 @@ if (initial.get("view") === "records") showExplorerTab("records", { noMap: true 
 if (initial.get("view") === "map") {
   showExplorerTab("browse");
   if (initial.has("parcel_id")) requestAnimationFrame(async () => {
+    const version = browseSelectionVersion;
     try {
       const qs = new URLSearchParams({ parcel_id: initial.get("parcel_id") });
       if (initial.has("objectid")) qs.set("objectid", initial.get("objectid"));
       const feature = await api(`/api/v1/geometry?${qs}`);
-      if (!browseMap || !feature?.geometry || !feature?.properties) return;
+      if (version !== browseSelectionVersion || !browseMap || !feature?.geometry || !feature?.properties) return;
       const bounds = window.L.geoJSON(feature).getBounds();
       if (bounds.isValid()) browseMap.fitBounds(bounds.pad(2), { maxZoom: 18 });
       await selectBrowseParcel(feature);
     } catch (error) {
-      $("browse-map-status").textContent = `Could not restore this City parcel: ${error.message}`;
+      if (version === browseSelectionVersion) $("browse-map-status").textContent = `Could not restore this City parcel: ${error.message}`;
     }
   });
 }
