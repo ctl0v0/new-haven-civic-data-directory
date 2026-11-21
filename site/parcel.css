@@ -854,6 +854,7 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
   body.browse-mode .record-review-workspace #group-nav .data-nav-button { display: none; }
   .record-review-workspace #group-nav .mobile-section-label { display: block; margin: 0; font-size: .78rem; }
   .record-review-workspace #group-nav .mobile-section-picker { margin-top: .15rem; }
+  .record-review-workspace:has(#nearby-business-research:not([hidden])) #group-nav { position: static; }
   body.browse-mode .record-review-workspace #group-nav { display: block; overflow: visible; padding: .5rem .65rem; }
   .record-review-main { padding: 1rem 0 2rem; }
   .record-review-main #parcel-summary,
