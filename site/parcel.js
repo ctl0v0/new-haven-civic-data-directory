@@ -2,6 +2,7 @@ import { brief, eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate
 import { statusTone } from "./plat/status.js";
 import { initVacancyLayer } from "./vacancy-layer.js";
 import { initCommercialRenter } from "./commercial-renter.js";
+import { appendPropertyRecords } from "./property-records.js";
 import { consumeVacancyLaunch } from "./vacancy-session.js";
 import { createParcelMap, createStreetLayer, mapColor, mapLayerColor, recordedUseStyles, watchBrowseMapColors } from "./parcel-map-sources.js";
 
@@ -658,6 +659,13 @@ function matchEvidence(item) {
   const fields = `${match.parcel_field.toUpperCase()} = source ${match.source_field} ${match.value}`;
   return match.address_confirmed ? `Parcel match: ${fields}; property address also matches` : `Parcel match: ${fields}`;
 }
+function recordEvidence(parent, item) {
+  if (item.address_evidence)
+    parent.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "record-note"));
+  const evidence = matchEvidence(item);
+  if (evidence) parent.append(el("p", evidence, "record-note"));
+  if (item.note) parent.append(el("p", item.note, "record-note"));
+}
 function permitDetailTitle(item) {
   const a = item.attributes;
   if (item.category === "Fee") return [a.FeeType ?? a.FeeCategory ?? "Fee", a.Amount != null ? `Amount ${a.Amount}` : null].filter(Boolean).join(" · ");
@@ -876,6 +884,8 @@ function appendRecord(parent, item) {
     : item.source_id === "business-master" ? [
       ["ALEI", item.attributes.alei],
       ["Registry status", item.attributes.registry_status],
+      ["NAICS code", item.attributes.entity_naics_code],
+      ["NAICS subcode", item.attributes.entity_naics_sub_code],
       ["Entity business email", item.attributes.business_email],
       ["City owner mailing address", item.attributes.city_owner_mailing_address],
     ].filter(([, value]) => value)
@@ -917,6 +927,8 @@ function appendRecord(parent, item) {
       ["Suite or unit", item.attributes.billing_unit],
       ["State entity number", item.attributes.accountnumber],
       ["Entity type", item.attributes.business_type],
+      ["NAICS code", item.attributes.naics_code],
+      ["NAICS subcode", item.attributes.naics_sub_code],
       ["Published status", item.attributes.status],
     ].filter(([, value]) => value)
     : item.source_id === "ct-public-charities" ? [
@@ -944,11 +956,7 @@ function appendRecord(parent, item) {
       .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
       .slice(0, 4);
   if (preview.length) body.append(recordFacts(preview));
-  if (item.address_evidence)
-    body.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "record-note"));
-  const evidence = matchEvidence(item);
-  if (evidence) body.append(el("p", evidence, "record-note"));
-  if (item.note) body.append(el("p", item.note, "record-note"));
+  recordEvidence(body, item);
   const actions = el("div", null, "p-record__foot record-actions");
   if (item.source_url) actions.append(link(item.source_url, item.category === "Document" && item.source_url.includes("municitymedia.com") ? "Open document" : "Open source"));
   const details = el("details", null, "p-fields source-fields");
@@ -2422,7 +2430,7 @@ async function loadGroup(id, section, qs, version, cursor = null) {
       coverage.append(sourceList);
       section.append(coverage);
       const grouped = ["activity", "business", "ownership"].includes(id);
-      const records = el("div", null, grouped ? "activity-sections" : "record-list");
+      const records = el("div", null, id === "property" ? "property-tables" : grouped ? "activity-sections" : "record-list");
       records.id = `records-${id}`;
       section.append(records);
       if (grouped) prepareHierarchy(records, id, data);
@@ -2430,11 +2438,15 @@ async function loadGroup(id, section, qs, version, cursor = null) {
         section.append(el("p", "No returned records match these filters. Review source coverage for gaps.", "empty-state"));
     }
     const records = $(`records-${id}`);
-    for (const item of data.items) {
-      if (["activity", "business", "ownership"].includes(id)) appendHierarchicalRecord(records, item);
-      else appendRecord(records, item);
+    if (id === "property") {
+      appendPropertyRecords(records, data.items, { el, link, sourceName, fieldList, sourceFields, recordEvidence });
+    } else {
+      for (const item of data.items) {
+        if (["activity", "business", "ownership"].includes(id)) appendHierarchicalRecord(records, item);
+        else appendRecord(records, item);
+      }
     }
-    const shown = records.querySelectorAll(".record-card").length;
+    const shown = records.querySelectorAll(".record-card, .property-record-row").length;
     const count = section.querySelector(".group-heading .group-count");
     if (count) count.textContent = `Showing ${shown} of ${data.total} ${data.total === data.returned_total ? "returned records" : "matching records"}`;
     if (data.next_cursor) {

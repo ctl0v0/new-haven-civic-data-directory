@@ -7,7 +7,7 @@ export const REGISTRATION_API = `https://data.ct.gov/resource/${REGISTRATION_DAT
 export const REGISTRATION_DATE = "date_registration";
 export const REGISTRATION_FIELDS = Object.freeze([
   "id", "name", "accountnumber", "business_type", "status", "sub_status", REGISTRATION_DATE,
-  "billingstreet", "billing_unit", "billingcity", "billingstate", "billingpostalcode", "naics_code",
+  "billingstreet", "billing_unit", "billingcity", "billingstate", "billingpostalcode", "naics_code", "naics_sub_code",
 ]);
 export const REGISTRATION_WHERE = "upper(billingcity)='NEW HAVEN' AND upper(billingstate)='CT'";
 

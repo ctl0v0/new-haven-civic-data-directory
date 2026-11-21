@@ -41,7 +41,7 @@ for (const entry of entries) {
 await writeFile(new URL('dist/catalog.json',root),JSON.stringify(entries,null,2)+'\n');
 for (const source of parcelSources) if (source.directoryId && !entries.some(entry=>entry.id===source.directoryId)) throw new Error('Unknown parcel directory source '+source.directoryId);
 await writeFile(new URL('dist/parcel-source-catalog.json',root),JSON.stringify(parcelSources,null,2)+'\n');
-for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js','readiness.js','build-readiness.html','source-checks.json','parcel.css','parcel.js','city-activity.js','vacancy-layer.js','vacancy-session.js','query-explorer.js','permit-applications.js','storefront-opportunity.js','commercial-renter.js','parcel-report.css','parcel-report.js','parcel-record-text.js','parcel-map-sources.js']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
+for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js','readiness.js','build-readiness.html','source-checks.json','parcel.css','parcel.js','city-activity.js','vacancy-layer.js','vacancy-session.js','query-explorer.js','permit-applications.js','storefront-opportunity.js','commercial-renter.js','parcel-report.css','parcel-report.js','parcel-record-text.js','parcel-map-sources.js','property-records.js']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
 await mkdir(new URL('dist/plat/fonts/', root), { recursive: true });
 for (const name of ['plat-tokens.css', 'plat-fonts.css', 'plat-base.css', 'plat-map.css', 'plat.css', 'status.js'])
   await copyFile(new URL('site/plat/' + name, root), new URL('dist/plat/' + name, root));

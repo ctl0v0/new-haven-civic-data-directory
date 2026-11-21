@@ -116,6 +116,8 @@ export function recordTitle(item) {
 }
 
 export function fieldLabel(key) {
+  if (key === "naics_code" || key === "entity_naics_code") return "NAICS code";
+  if (key === "naics_sub_code" || key === "entity_naics_sub_code") return "NAICS subcode";
   return key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ")
     .replace(/\s+/g, " ").trim().replace(/^./, (first) => first.toUpperCase());
 }

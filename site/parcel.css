@@ -275,6 +275,35 @@ summary:focus-visible {
 .source-coverage p { margin: .35rem 0; }
 .source-coverage a { display: inline-block; margin-right: .8rem; font-size: .8rem; }
 .record-list { display: grid; gap: var(--space-2); }
+.property-tables { display: grid; gap: 1.45rem; min-width: 0; margin-top: 1rem; }
+.property-table-section { gap: .5rem; }
+.property-table-section h3 { margin: 0; }
+.property-table-wrap { container-type: inline-size; max-width: 100%; overflow-x: auto; border: 1px solid var(--line); }
+.property-ledger :is(th, td) { padding: .55rem .75rem; overflow-wrap: anywhere; }
+.property-ledger tbody th { width: auto; min-width: 7rem; }
+.property-ledger .property-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.property-ledger .address-badge { display: block; width: fit-content; margin-top: .35rem; }
+.property-ledger .property-detail-row > td { background: var(--surface-sunken); }
+.property-facts { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(6rem, 1.4fr); gap: .18rem .65rem; margin: 0; }
+.property-facts dt { color: var(--ink-muted); }
+.property-facts dd { margin: 0; overflow-wrap: anywhere; }
+.property-record-actions { width: 1%; white-space: nowrap; }
+.property-record-actions a { display: block; }
+.property-fields-toggle { display: block; width: auto; padding: 0; margin-top: .2rem; text-align: left; font: inherit; font-size: .8rem; color: var(--civic); background: transparent; border: 0; text-decoration: underline; text-underline-offset: .14em; }
+.property-fields-toggle:hover { background: transparent; color: var(--civic-hover); }
+.property-mobile-label { display: none; }
+@container (max-width: 32rem) {
+  .property-ledger, .property-ledger :is(tbody, tr, th, td) { display: block; }
+  .property-ledger thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .property-ledger .property-record-row { border-top: 1px solid var(--line); padding: .55rem .7rem; }
+  .property-ledger tbody:first-of-type .property-record-row { border-top: 0; }
+  .property-ledger .property-record-row :is(th, td) { padding: .14rem 0; border: 0; min-width: 0; width: auto; }
+  .property-ledger td:has(.property-mobile-label) { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(0, 1.4fr); gap: .65rem; }
+  .property-ledger .property-mobile-label { display: inline; color: var(--ink-muted); }
+  .property-ledger .property-number { text-align: left; white-space: normal; }
+  .property-ledger .property-record-actions { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: baseline; }
+  .property-fields-toggle { margin-top: 0; }
+}
 .record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .7rem; }
 .record-head h3 { margin: 0; font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
 .status-pill { display: inline-block; background: var(--status-closed-soft); color: var(--ink); border-radius: var(--radius-tag); padding: .12rem .5rem; font-size: .72rem; font-weight: 700; white-space: normal; text-align: center; }

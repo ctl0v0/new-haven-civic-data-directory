@@ -32,11 +32,15 @@ test("State registrations use the official business street, retain units, and ex
     const url = new URL(input);
     const where = url.searchParams.get("$where") ?? url.searchParams.get("where") ?? "";
     if (url.pathname.endsWith("/n7gp-d28j.json")) {
+      const fields = url.searchParams.get("$select").split(",");
+      assert.ok(fields.includes("naics_code"));
+      assert.ok(fields.includes("naics_sub_code"));
       assert.match(where, /^upper\(billingcity\)='NEW HAVEN' AND upper\(billingstate\)='CT'/);
       assert.match(where, /'820 %'/);
       assert.match(where, /'4 %'/);
       return json([
-        business(1, "820 State Street, Suite 2", { billing_unit: "STE 2", status: "Active", date_registration: "2020-06-01T00:00:00.000" }),
+        business(1, "820 State Street, Suite 2", { billing_unit: "STE 2", status: "Active", date_registration: "2020-06-01T00:00:00.000",
+          naics_code: "72", naics_sub_code: "722511" }),
         business(2, "4 Pearl St", { date_registration: "0001-01-01T00:00:00.000" }),
         business(3, "820 State St", { billing_unit: "3" }),
         business(4, "24 Main St", { mailing_address: "820 State St" }),
@@ -63,6 +67,9 @@ test("State registrations use the official business street, retain units, and ex
   assert.deepEqual(result.items.map(({ event_date }) => event_date), ["2020-06-01", null, null]);
   const [confirmed, , noCityUnit] = result.items;
   assert.equal(confirmed.category, "Registration");
+  assert.equal(confirmed.attributes.naics_code, "72");
+  assert.equal(confirmed.attributes.naics_sub_code, "722511");
+  assert.equal(noCityUnit.attributes.naics_sub_code, undefined);
   assert.equal(confirmed.match.verified_city_unit, "2");
   assert.equal(confirmed.match.city_parcel_id, 11483);
   assert.deepEqual(confirmed.match.city_address_point_objectids, [10]);

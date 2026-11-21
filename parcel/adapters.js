@@ -1777,6 +1777,7 @@ async function registryMasterRecords(parcel) {
     registry_substatus: entity.sub_status ?? null,
     registration_date: entity.date_registration ?? null,
     entity_naics_code: entity.naics_code ?? null,
+    entity_naics_sub_code: entity.naics_sub_code ?? null,
     business_email: entity.business_email_address ?? null,
     billing_street: entity.billingstreet ?? null,
     billing_city: entity.billingcity ?? null,
