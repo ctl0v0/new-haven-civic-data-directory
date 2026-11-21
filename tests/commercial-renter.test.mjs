@@ -59,6 +59,32 @@ test("vacancy shortlist intersects exact City parcel pairs and labels a hood per
   assert.equal(result.items[0].availability, "unverified");
 });
 
+test("a New Haven city qualifier preserves a later storefront neighborhood filter", async () => {
+  const listings = [
+    { address: "10 Example St", parcel_id: "10", objectid: "20", neighborhoods: ["WESTVILLE"], neighborhood_aliases: ["Westville"] },
+    { address: "20 Example St", parcel_id: "11", objectid: "21", neighborhoods: ["EAST-ROCK"], neighborhood_aliases: ["East Rock"] },
+  ].map((listing) => ({ ...listing, status: "linked" }));
+  const layer = async () => ({ status: "ok", listings, neighborhood_indexed_at: "2026-11-21" });
+
+  for (const question of [
+    "Show me listed storefronts in New Haven that are in Westville",
+    "Show me listed storefronts in the City of New Haven which are in Westville",
+    "Show me listed storefronts in New Haven, CT, in the Westville neighborhood",
+    "Show me listed storefronts in Westville in New Haven",
+    "Show me listed storefronts in New Haven’s Westville neighborhood",
+  ]) {
+    const { renter_plan } = planRenterQuestion(question);
+    assert.equal(renter_plan.arguments.neighborhood, "Westville", question);
+    const result = await searchCommercialVacancies(renter_plan.arguments, { layer });
+    assert.deepEqual(result.items.map(({ storefront }) => storefront.address), ["10 Example St"], question);
+  }
+
+  const { renter_plan } = planRenterQuestion("Show me listed storefronts in New Haven");
+  assert.equal(renter_plan.arguments.neighborhood, undefined);
+  const result = await searchCommercialVacancies(renter_plan.arguments, { layer });
+  assert.equal(result.total_matches, 2);
+});
+
 test("storefront evidence keeps the published permit date and linked inspection without asserting equipment condition", async () => {
   const result = await getCommercialStorefrontEvidence({ storefront, section: "hood" }, {
     resolve, catalog, load: async () => ({}),

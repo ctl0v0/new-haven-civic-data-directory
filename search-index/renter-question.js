@@ -35,9 +35,11 @@ function radiusFor(question) {
 }
 
 function neighborhoodFor(question) {
-  const match = question.match(/\bin\s+(?:the\s+)?([a-z][a-z .’'-]{0,79}?)(?=\s+(?:neighborhood|with|have|that|for|where)\b|[?!.,]|$)/i);
-  const name = match?.[1]?.trim();
-  return name && !/^new haven$/i.test(name) ? name : undefined;
+  const locations = question.matchAll(/\bin\s+(?:the\s+)?([a-z][a-z .’'-]{0,79}?)(?=\s+(?:neighborhood|with|have|that|which|for|where|in)\b|[?!.,]|$)/gi);
+  for (const [, location] of locations) {
+    const name = location.trim().replace(/^new haven['’]s\s+/i, "");
+    if (!/^(?:city of\s+)?new haven(?:\s+(?:ct|connecticut))?$/i.test(name)) return name;
+  }
 }
 
 function sectionFor(question) {
