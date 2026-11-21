@@ -201,6 +201,18 @@ try {
       throw new Error('An expanded business type did not match the verified City search');
     console.log(JSON.stringify({ event: 'preview_nearby_business_categories', status: 'ok', categories }));
   }
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-group-smoke]')) {
+    const group = 'Restaurants & cuisines';
+    const subcategories = ['indian_restaurant', 'thai_restaurant'];
+    const [broad, narrowed] = await Promise.all([
+      nearbyBusinessCount({ ...parcel, group }),
+      nearbyBusinessCount({ ...parcel, group, subcategories }),
+    ]);
+    if ([broad, narrowed].some((item) => item.group !== group || item.origin.id !== origin?.id) ||
+        broad.subcategories.length || narrowed.subcategories.join() !== subcategories.join() || broad.count < narrowed.count)
+      throw new Error('The live category search did not match its expected scope');
+    console.log(JSON.stringify({ event: 'preview_nearby_business_group', status: 'ok', group, subcategories }));
+  }
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status, message: error?.message }));
 }

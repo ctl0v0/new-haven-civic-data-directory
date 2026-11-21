@@ -2469,11 +2469,12 @@ function closeNearbyBusinessResearch() {
   $("nearby-business-result").hidden = true;
 }
 
-const nearbyBusinessType = $("nearby-business-type");
+const nearbyBusinessGroup = $("nearby-business-category");
 const nearbyBusinessTypeFilter = $("nearby-business-type-filter");
-const nearbyBusinessTypeGroups = nearbyBusinessType ? [...nearbyBusinessType.children] : [];
-const defaultNearbyBusinessType = nearbyBusinessType?.value;
-let chosenNearbyBusinessType = defaultNearbyBusinessType;
+const nearbyBusinessTypeList = $("nearby-business-type-list");
+const nearbyBusinessTypeCatalog = new Map(
+  Array.from($("nearby-business-type-catalog")?.content.children ?? [], (group) => [group.dataset.group, group]),
+);
 
 function normalizedBusinessType(value) {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -2481,27 +2482,36 @@ function normalizedBusinessType(value) {
 
 function filterNearbyBusinessTypes() {
   const words = normalizedBusinessType(nearbyBusinessTypeFilter.value).split(" ").filter(Boolean);
-  const matches = [];
-  for (const group of nearbyBusinessTypeGroups) {
-    const options = [...group.children].filter((option) => {
-      const searchText = normalizedBusinessType(`${group.label} ${option.textContent} ${option.value}`);
-      return words.every((word) => searchText.includes(word));
-    });
-    if (!options.length) continue;
-    const copy = group.cloneNode(false);
-    copy.append(...options.map((option) => option.cloneNode(true)));
-    matches.push(copy);
+  let matched = false;
+  for (const choice of nearbyBusinessTypeList.children) {
+    const searchText = normalizedBusinessType(`${choice.textContent} ${choice.firstElementChild.value}`);
+    choice.hidden = !words.every((word) => searchText.includes(word));
+    if (!choice.hidden) matched = true;
   }
-  const prompt = new Option(matches.length ? "Choose a business type" : "No matching business types", "");
-  prompt.disabled = true;
-  nearbyBusinessType.replaceChildren(prompt, ...matches);
-  nearbyBusinessType.value = chosenNearbyBusinessType;
-  if (nearbyBusinessType.selectedIndex < 0) nearbyBusinessType.value = "";
+  $("nearby-business-no-types").hidden = matched;
+}
+
+function checkedNearbyBusinessTypes() {
+  return [...nearbyBusinessTypeList.querySelectorAll("input:checked")];
+}
+
+function updateNearbyBusinessSelection() {
+  const count = checkedNearbyBusinessTypes().length;
+  $("nearby-business-selection").textContent = count ? `${count} selected` : "All types";
+  $("nearby-business-clear-types").hidden = count === 0;
+}
+
+function resetNearbyBusinessTypes() {
+  const options = nearbyBusinessTypeCatalog.get(nearbyBusinessGroup.value);
+  nearbyBusinessTypeList.replaceChildren(...options.cloneNode(true).children);
+  nearbyBusinessTypeFilter.value = "";
+  filterNearbyBusinessTypes();
+  updateNearbyBusinessSelection();
 }
 
 function updateNearbyBusinessCountButton(form) {
   $("nearby-business-count").disabled = !nearbyBusinessConfigured ||
-    !form.elements.origin.value || !form.elements.category.value;
+    !form.elements.origin.value || !nearbyBusinessGroup.value;
 }
 
 function clearNearbyBusinessResults(form) {
@@ -2511,15 +2521,17 @@ function clearNearbyBusinessResults(form) {
   if (nearbyBusinessConfigured) $("nearby-business-status").textContent = "";
 }
 
-nearbyBusinessTypeFilter?.addEventListener("input", () => {
-  const previous = nearbyBusinessType.value;
-  filterNearbyBusinessTypes();
-  if (nearbyBusinessType.value !== previous) clearNearbyBusinessResults(nearbyBusinessType.form);
-});
+nearbyBusinessTypeFilter?.addEventListener("input", filterNearbyBusinessTypes);
 nearbyBusinessTypeFilter?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
   event.preventDefault();
-  nearbyBusinessType.focus();
+  nearbyBusinessTypeList.querySelector("label:not([hidden]) input")?.focus();
+});
+$("nearby-business-clear-types")?.addEventListener("click", () => {
+  for (const choice of checkedNearbyBusinessTypes()) choice.checked = false;
+  nearbyBusinessTypeFilter.focus();
+  updateNearbyBusinessSelection();
+  clearNearbyBusinessResults(nearbyBusinessGroup.form);
 });
 
 $("nearby-business-open")?.addEventListener("click", async () => {
@@ -2536,8 +2548,8 @@ $("nearby-business-open")?.addEventListener("click", async () => {
   $("nearby-business-title").focus();
   const form = $("nearby-business-form");
   form.reset();
-  chosenNearbyBusinessType = defaultNearbyBusinessType;
-  filterNearbyBusinessTypes();
+  $("nearby-business-subcategories").open = false;
+  resetNearbyBusinessTypes();
   const origin = form.elements.origin;
   origin.replaceChildren(new Option("Choose a City address or parcel center", ""));
   const status = $("nearby-business-status");
@@ -2578,7 +2590,8 @@ $("nearby-business-open")?.addEventListener("click", async () => {
 
 $("nearby-business-form")?.addEventListener("change", (event) => {
   if (event.target === nearbyBusinessTypeFilter) return;
-  if (event.target === nearbyBusinessType) chosenNearbyBusinessType = nearbyBusinessType.value;
+  if (event.target === nearbyBusinessGroup) resetNearbyBusinessTypes();
+  if (event.target.name === "subcategory") updateNearbyBusinessSelection();
   clearNearbyBusinessResults(event.currentTarget);
 });
 
@@ -2657,8 +2670,9 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!maplessRecords || $("nearby-business-research").hidden || nearbyBusinessRequest || !nearbyBusinessConfigured) return;
   const form = event.currentTarget;
-  const { origin, category, radius_meters } = form.elements;
-  if (!origin.value || !category.value || !selected) return;
+  const { origin, group, radius_meters } = form.elements;
+  if (!origin.value || !group.value || !selected) return;
+  const types = checkedNearbyBusinessTypes();
   const request = new AbortController();
   nearbyBusinessRequest = request;
   const status = $("nearby-business-status");
@@ -2669,14 +2683,15 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
   $("nearby-business-fields").disabled = true;
   try {
     const search = { ...Object.fromEntries(selectedQuery()), origin: origin.value,
-      category: category.value, radius_meters: Number(radius_meters.value) };
+      group: group.value, subcategories: types.map((type) => type.value), radius_meters: Number(radius_meters.value) };
     const data = await api("/api/v1/nearby-business-count", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
       body: JSON.stringify(search),
     });
     if (request !== nearbyBusinessRequest) return;
-    const heading = el("p", data.category_label, "nearby-business-result-heading");
+    const heading = el("p", "matching businesses", "nearby-business-result-heading");
     heading.prepend(el("strong", `${data.count} `));
+    const scope = el("p", `${data.category_label} · ${types.map((type) => type.nextElementSibling.textContent).join(", ") || "All types"}`, "meta");
     const originLabel = data.origin.address ?? "the City parcel's mapped center";
     const detail = el("p", `Listed as operating within ${data.radius_label} of ${originLabel}.`);
     const source = el("p", null, "meta");
@@ -2686,7 +2701,7 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
     }).format(checked));
     time.dateTime = data.retrieved_at;
     source.append(link(data.source_url, data.attribution), document.createTextNode(" · Checked "), time);
-    output.replaceChildren(heading, detail, source);
+    output.replaceChildren(heading, scope, detail, source);
     offerNearbyBusinessMatches(output, data.count, search);
     output.hidden = false;
     status.textContent = "";

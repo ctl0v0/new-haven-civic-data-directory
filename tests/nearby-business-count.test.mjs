@@ -163,24 +163,51 @@ test("the route requires pilot access, Preview scope, and supported radius and c
   assert.equal(requests.length, 0);
 });
 
-test("the grouped Preview dropdown exposes the same supported categories as the API", async () => {
+test("the Preview exposes a short category menu and all supported subcategories", async () => {
   const { default: pilot } = await import("../api/pilot-page.js");
   const response = await pilot.fetch(new Request(`${host}/parcel`, { headers: auth }));
   const $ = load(await response.text());
-  const options = $("#nearby-business-type optgroup > option").toArray().map((option) => $(option).val());
+  const catalog = load($("#nearby-business-type-catalog").html(), {}, false);
+  const options = catalog("input[name=subcategory]").toArray().map((option) => catalog(option).val());
   assert.deepEqual(options, Object.keys(businessCategories));
-  assert.deepEqual($("#nearby-business-type optgroup").toArray().map((group) => $(group).attr("label")),
+  assert.deepEqual($("#nearby-business-category option").toArray().map((group) => $(group).val()),
     Object.keys(businessCategoryGroups));
-  assert.equal($("#nearby-business-type-filter").attr("aria-controls"), "nearby-business-type");
+  assert.equal($("#nearby-business-type-filter").attr("aria-controls"), "nearby-business-type-list");
+  assert.equal($("#nearby-business-subcategories").attr("open"), undefined);
   const count = await (await countRequest({ category: "thai_restaurant" })).json();
   assert.equal(count.category_label, "Thai restaurants");
   assert.deepEqual(requests.at(-1).filter.typeFilter.includedTypes, ["thai_restaurant"]);
 });
 
+test("a category queries all its types or the selected subset in one count request", async () => {
+  const group = "Restaurants & cuisines";
+  const types = Object.keys(businessCategoryGroups[group]);
+  const query = { category: undefined, group };
+  assert.equal((await countRequest({ group })).status, 400);
+  assert.equal((await countRequest({ ...query, subcategories: ["plumber"] })).status, 400);
+  assert.equal(requests.length, 0);
+
+  const broad = await countRequest(query);
+  assert.equal(broad.status, 200);
+  const result = await broad.json();
+  assert.equal(result.group, group);
+  assert.deepEqual(result.subcategories, []);
+  assert.deepEqual(requests[0].filter.typeFilter.includedTypes, types);
+  assert.equal((await countRequest({ ...query, subcategories: types })).status, 200);
+
+  const selected = await countRequest({ ...query, subcategories: ["thai_restaurant", "indian_restaurant", "thai_restaurant"] });
+  assert.equal(selected.status, 200);
+  const expected = ["indian_restaurant", "thai_restaurant"];
+  assert.deepEqual((await selected.json()).subcategories, expected);
+  assert.deepEqual(requests[2].filter.typeFilter.includedTypes, expected);
+  assert.equal(requests.length, 3);
+});
+
 test("one verified search returns live business names in bounded pages for the same match set", async () => {
   const ids = Array.from({ length: 12 }, (_, index) => String(index).padStart(2, "0"));
   places = placeMatches(ids);
-  const query = { query_address: "14 Sample Street", radius_meters: 805 };
+  const query = { query_address: "14 Sample Street", radius_meters: 805, category: undefined,
+    group: "Coffee, bakeries & sweets", subcategories: ["ice_cream_shop", "bakery"] };
   await countRequest(query);
   assert.deepEqual(detailsRequests, []);
   const response = await matchRequest(query);
@@ -192,12 +219,14 @@ test("one verified search returns live business names in bounded pages for the s
   assert.deepEqual(first.results[0], { name: "Business 00", address: "30 Sample Street, New Haven, CT", maps_url: "https://maps.google.com/?cid=1" });
   assert.deepEqual(requests[1].insights, ["INSIGHT_COUNT", "INSIGHT_PLACES"]);
   assert.deepEqual(requests[1].filter, requests[0].filter);
+  assert.deepEqual(requests[1].filter.typeFilter.includedTypes, ["bakery", "ice_cream_shop"]);
   places = placeMatches([...ids].reverse());
-  const second = await (await matchRequest({ ...query, cursor: first.next_cursor })).json();
+  const second = await (await matchRequest({ ...query, subcategories: [...query.subcategories].reverse(), cursor: first.next_cursor })).json();
   assert.equal(second.results.length, 2);
   assert.equal(second.next_cursor, null);
   assert.deepEqual(detailsRequests, ids);
   assert.equal((await matchRequest({ ...query, radius_meters: 402, cursor: first.next_cursor })).status, 409);
+  assert.equal((await matchRequest({ ...query, subcategories: ["bakery"], cursor: first.next_cursor })).status, 409);
   places = placeMatches([...ids.slice(0, -1), "new_match"]);
   assert.equal((await matchRequest({ ...query, cursor: first.next_cursor })).status, 409);
   assert.equal(detailsRequests.length, 12);

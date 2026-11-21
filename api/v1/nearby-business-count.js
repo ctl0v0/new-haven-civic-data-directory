@@ -1,7 +1,7 @@
 import { guarded, params } from "../../parcel/api.js";
 import { pilotPreviewEnabled } from "../../parcel/auth.js";
 import { readRequestText, SourceError } from "../../parcel/http.js";
-import { nearbyBusinessCount, nearbyBusinessOrigins } from "../../parcel/nearby-business-count.js";
+import { BUSINESS_SEARCH_BODY_LIMIT, nearbyBusinessCount, nearbyBusinessOrigins } from "../../parcel/nearby-business-count.js";
 
 export default guarded(async (request) => {
   if (!pilotPreviewEnabled()) throw new SourceError("Nearby business research is available in the private Preview.", 404);
@@ -11,7 +11,7 @@ export default guarded(async (request) => {
   }
   if (!(request.headers.get("content-type") ?? "").startsWith("application/json"))
     throw new SourceError("Expected JSON", 415);
-  const text = await readRequestText(request, 2048);
+  const text = await readRequestText(request, BUSINESS_SEARCH_BODY_LIMIT);
   let input;
   try { input = JSON.parse(text); }
   catch { throw new SourceError("Invalid JSON", 400); }

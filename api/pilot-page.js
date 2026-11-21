@@ -23,19 +23,31 @@ const nearbyBusinessResearch = previewToolsVisible ? `
       <fieldset id="nearby-business-fields" aria-label="Nearby business filters" disabled>
         <div class="nearby-business-field"><label for="nearby-business-origin">Search from</label><select id="nearby-business-origin" name="origin" required><option value="">Choose a City address</option></select></div>
         <div class="nearby-business-field nearby-business-type-field">
-          <label for="nearby-business-type">Business type</label>
-          <input id="nearby-business-type-filter" type="search" aria-label="Filter business types" aria-controls="nearby-business-type" placeholder="Filter types" autocomplete="off" maxlength="80">
-          <select id="nearby-business-type" name="category" required>
-            ${Object.entries(businessCategoryGroups).map(([group, entries]) => `<optgroup label="${escapeHtml(group)}">${
-              Object.entries(entries).map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join("")}</optgroup>`).join("")}
+          <label for="nearby-business-category">Business category</label>
+          <select id="nearby-business-category" name="group" required>
+            ${Object.keys(businessCategoryGroups).map((group) => `<option>${escapeHtml(group)}</option>`).join("")}
           </select>
         </div>
         <div class="nearby-business-field"><label for="nearby-business-radius">Radius</label><select id="nearby-business-radius" name="radius_meters">
           ${Object.entries(businessRadii).map(([meters, label]) => `<option value="${meters}"${Number(meters) === DEFAULT_BUSINESS_RADIUS ? " selected" : ""}>${label}</option>`).join("")}
         </select></div>
+        <details id="nearby-business-subcategories">
+          <summary>Subcategories <span id="nearby-business-selection">All types</span></summary>
+          <p class="meta">Matches any checked type. Leave all unchecked to search the full category.</p>
+          <div class="nearby-business-subcategory-tools">
+            <input id="nearby-business-type-filter" type="search" aria-label="Filter subcategories" aria-controls="nearby-business-type-list" placeholder="Filter subcategories" autocomplete="off" maxlength="80">
+            <button type="button" id="nearby-business-clear-types" class="secondary" hidden>Clear selections</button>
+          </div>
+          <div id="nearby-business-type-list" role="group" aria-label="Subcategories"></div>
+          <p id="nearby-business-no-types" class="meta" role="status" hidden>No subcategories match.</p>
+        </details>
         <button type="submit" id="nearby-business-count" disabled>Count businesses</button>
       </fieldset>
     </form>
+    <template id="nearby-business-type-catalog">
+      ${Object.entries(businessCategoryGroups).map(([group, entries]) => `<div data-group="${escapeHtml(group)}">${
+        Object.entries(entries).map(([id, label]) => `<label><input type="checkbox" name="subcategory" value="${id}"> <span>${escapeHtml(label)}</span></label>`).join("")}</div>`).join("")}
+    </template>
     <p id="nearby-business-origin-note" class="meta" hidden></p>
     <p id="nearby-business-status" role="status"></p>
     <div id="nearby-business-result" aria-live="polite" hidden></div>

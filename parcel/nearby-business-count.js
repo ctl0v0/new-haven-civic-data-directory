@@ -12,6 +12,7 @@ export const businessCategories = Object.freeze(Object.assign({}, ...Object.valu
 export const businessRadii = Object.freeze({ 402: "¼ mile", 805: "½ mile", 1609: "1 mile", 3219: "2 miles" });
 export const DEFAULT_BUSINESS_RADIUS = 1609;
 export const GOOGLE_BUSINESS_MATCH_LIMIT = 100;
+export const BUSINESS_SEARCH_BODY_LIMIT = 8192;
 
 const GOOGLE_URL = "https://areainsights.googleapis.com/v1:computeInsights";
 const GOOGLE_SOURCE = "https://developers.google.com/maps/documentation/places-aggregate/overview";
@@ -20,6 +21,8 @@ const matchPageSize = 10;
 const matchCursorLifetimeMs = 10 * 60 * 1000;
 const placeNamePattern = /^places\/[a-zA-Z0-9_-]+$/;
 const addressLimit = 200;
+const businessType = z.enum(Object.keys(businessCategories));
+const largestBusinessGroup = Math.max(...Object.values(businessCategoryGroups).map((group) => Object.keys(group).length));
 const parcelIdentity = z.union([z.string().regex(/^\d{1,12}$/), z.number().int().min(0).max(999999999999)]);
 const parcelInput = z.strictObject({
   parcel_id: parcelIdentity,
@@ -27,7 +30,9 @@ const parcelInput = z.strictObject({
   query_address: z.string().optional(),
 });
 const countInput = parcelInput.extend({
-  category: z.enum(Object.keys(businessCategories)),
+  category: businessType.optional(),
+  group: z.enum(Object.keys(businessCategoryGroups)).optional(),
+  subcategories: z.array(businessType).max(largestBusinessGroup).optional(),
   radius_meters: z.number().int().refine((radius) => Object.hasOwn(businessRadii, radius)).default(DEFAULT_BUSINESS_RADIUS),
   origin: z.string().regex(/^(?:city-address-\d{1,12}|parcel-center)$/).optional(),
 });
@@ -97,16 +102,34 @@ export async function nearbyBusinessOrigins(input, env = process.env) {
   return { ...await resolveOrigins(parsed.data), configured: Boolean(env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim()) };
 }
 
+function selectBusinessTypes({ category, group, subcategories }) {
+  if (category && !group && subcategories === undefined)
+    return { includedTypes: [category], category_label: businessCategories[category] };
+  if (!group || category) throw new SourceError("Choose one business category or a single business type.", 400);
+  const entries = businessCategoryGroups[group];
+  const requested = new Set(subcategories);
+  if ([...requested].some((type) => !Object.hasOwn(entries, type)))
+    throw new SourceError("Choose subcategories from the selected business category.", 400);
+  const allTypes = Object.keys(entries);
+  const selected = allTypes.filter((type) => requested.has(type));
+  return {
+    includedTypes: selected.length ? selected : allTypes,
+    subcategories: selected,
+    category_label: group,
+  };
+}
+
 async function businessSearch(input, schema, env) {
   const parsed = schema.safeParse(input);
-  if (!parsed.success) throw new SourceError("Provide a valid parcel, business type, radius and search origin", 400);
+  if (!parsed.success) throw new SourceError("Provide a valid parcel, business category, radius and search origin", 400);
+  const types = selectBusinessTypes(parsed.data);
   const apiKey = env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
   if (!apiKey) throw new SourceError("Nearby business research is awaiting a Places Aggregate API key for this Preview.", 503);
 
   const selected = await resolveOrigins(parsed.data);
   const origin = selected.origins.find(({ id }) => id === (parsed.data.origin ?? selected.default_origin));
   if (!origin) throw new SourceError("Choose a verified City address or an available parcel center before running the count.", 422);
-  return { ...parsed.data, apiKey, origin, parcel_id: selected.parcel_id, objectid: selected.objectid };
+  return { ...parsed.data, ...types, apiKey, origin, parcel_id: selected.parcel_id, objectid: selected.objectid };
 }
 
 function googleError(error, apiName) {
@@ -118,7 +141,7 @@ function googleError(error, apiName) {
   return new SourceError("Google Maps is unavailable for this search.");
 }
 
-async function businessInsights({ apiKey, origin, category, radius_meters: radius }, insights) {
+async function businessInsights({ apiKey, origin, includedTypes, radius_meters: radius }, insights) {
   const { latitude, longitude } = origin;
   let data;
   try {
@@ -127,7 +150,7 @@ async function businessInsights({ apiKey, origin, category, radius_meters: radiu
       headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey },
       body: JSON.stringify({ insights, filter: {
         locationFilter: { circle: { latLng: { latitude, longitude }, radius } },
-        typeFilter: { includedTypes: [category] },
+        typeFilter: { includedTypes },
         operatingStatus: ["OPERATING_STATUS_OPERATIONAL"],
       } }),
     });
@@ -141,11 +164,12 @@ async function businessInsights({ apiKey, origin, category, radius_meters: radiu
 
 export async function nearbyBusinessCount(input, { env = process.env } = {}) {
   const search = await businessSearch(input, countInput, env);
-  const { origin, category, radius_meters: radius } = search;
+  const { origin, category, group, subcategories, category_label, radius_meters: radius } = search;
   const { count } = await businessInsights(search, ["INSIGHT_COUNT"]);
   return {
     parcel_id: search.parcel_id, objectid: search.objectid,
-    category, category_label: businessCategories[category], radius_meters: radius, radius_label: businessRadii[radius],
+    ...(group ? { group, subcategories } : { category }), category_label,
+    radius_meters: radius, radius_label: businessRadii[radius],
     origin, count, retrieved_at: new Date().toISOString(),
     attribution: "Google Maps", source_url: GOOGLE_SOURCE,
   };
@@ -174,7 +198,7 @@ async function businessDetails(place, apiKey) {
 
 export async function nearbyBusinessMatches(input, { env = process.env } = {}) {
   const search = await businessSearch(input, matchInput, env);
-  const { apiKey, parcel_id, objectid, origin, category, radius_meters, cursor } = search;
+  const { apiKey, parcel_id, objectid, origin, category, includedTypes, radius_meters, cursor } = search;
   const { count, placeInsights } = await businessInsights(search, ["INSIGHT_COUNT", "INSIGHT_PLACES"]);
   if (count > GOOGLE_BUSINESS_MATCH_LIMIT) {
     if (cursor) throw new SourceError("Google Maps matches changed. Run the count again to refresh the results.", 409);
@@ -184,7 +208,8 @@ export async function nearbyBusinessMatches(input, { env = process.env } = {}) {
     .filter((place) => typeof place === "string" && placeNamePattern.test(place));
   const places = [...new Set(placeResources)].sort();
   if (places.length > count) throw new SourceError("Google Maps returned more matches than its count.");
-  const query = fingerprint(["nearby-business-matches", parcel_id, objectid, origin.id, origin.latitude, origin.longitude, category, radius_meters]);
+  const query = fingerprint(["nearby-business-matches", parcel_id, objectid, origin.id, origin.latitude, origin.longitude,
+    category ?? includedTypes, radius_meters]);
   const source = fingerprint([count, places]);
   const { offset } = readSearchCursor(cursor, query, source);
   const page = places.slice(offset, offset + matchPageSize);
