@@ -90,6 +90,7 @@ const photo = document.getElementById("report-photo");
 if (photo) {
   const showMissingPhoto = () => {
     document.getElementById("report-photo-frame").hidden = true;
+    photo.closest(".p-hero").setAttribute("data-photo-unavailable", "");
     document.getElementById("report-photo-status").textContent = "Photo could not be loaded";
   };
   photo.addEventListener("error", showMissingPhoto, { once: true });

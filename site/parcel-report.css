@@ -14,11 +14,37 @@ body.plat { margin: 0; }
 .p-fact__miss { font-size: .875rem; color: var(--ink-muted); }
 .p-calc { white-space: normal; }
 .p-factsband { margin-bottom: var(--space-5); }
-.p-hero:not([data-no-boundary]) { align-items: start; }
-.p-hero[data-no-boundary] { grid-template-rows: auto; }
-.p-hero[data-no-boundary] .p-hero__plat { grid-row: auto; }
-#report-map { width: 100%; aspect-ratio: 560 / 340; isolation: isolate; }
+.p-hero--overview {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  align-items: start;
+  gap: var(--space-5) var(--space-4);
+}
+.p-hero--overview .p-hero__plat { grid-row: auto; }
+.p-hero--overview .p-figure__frame { aspect-ratio: 640 / 460; }
+.p-hero--overview .p-plat svg, .p-hero--overview .p-figure__photo img { width: 100%; height: 100%; }
+.p-hero--overview .p-figure__photo img { object-fit: contain; aspect-ratio: auto; }
+.p-hero--overview .p-plat .dim { font-size: 17px; }
+.p-hero--overview .p-plat .addr-label { font-size: 15px; }
+.p-hero--overview .p-plat .scale-text { font-size: 13px; }
+.p-hero--overview[data-photo-unavailable] .p-figure__photo { order: 1; grid-column: 1 / -1; }
+.p-hero--overview[data-photo-unavailable] .p-figure__photo .report-hero-label { display: none; }
+.p-hero--overview .p-layers .p-chip { min-height: 28px; padding: 3px 8px; }
+@media screen and (min-width: 680px) {
+  .p-hero--overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .p-hero--overview:not([data-photo-unavailable]) .report-locator { grid-column: 1 / -1; }
+  .p-hero--overview:not([data-photo-unavailable]) .report-locator .p-figure__frame { aspect-ratio: 2 / 1; }
+}
+@media screen and (min-width: 1050px) {
+  .p-hero--overview:not([data-photo-unavailable], [data-no-boundary]) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .p-hero--overview:not([data-photo-unavailable]) .report-locator { grid-column: auto; }
+  .p-hero--overview:not([data-photo-unavailable]) .report-locator .p-figure__frame { aspect-ratio: 640 / 460; }
+}
+#report-map { position: absolute; inset: 0; isolation: isolate; background: var(--surface-sunken); }
+.p-locator:has(#report-map[hidden]) { display: none; }
 .p-locator .leaflet-control-attribution { color: var(--ink-muted); background: var(--surface); }
+.p-locator .leaflet-control-attribution a { color: var(--civic); }
+.p-rail ol { position: relative; }
 #report-map-status:empty, #profile-status:empty, #profile-output:empty { display: none; }
 .p-layers input { accent-color: var(--civic); margin: 0; }
 .p-section, .p-record, .p-panel[id], .report-anchor, #map, #nearby-profile, .p-fields__record[id] {
@@ -81,11 +107,9 @@ body.plat { margin: 0; }
   .plat { background: var(--surface); }
   .p-sheet { border: none; }
   .p-masthead, .p-hero, .p-factsband, .p-foot { padding-inline: 0; }
-  .p-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .p-hero__plat { grid-row: span 2; }
+  .p-hero--overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .p-hero--overview:is([data-photo-unavailable], [data-no-boundary]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .p-figure, .p-facts, .p-valbar, .p-panel__head { break-inside: avoid; }
-  .p-figure__photo img { max-height: 50mm; }
-  #report-map { max-height: 48mm; }
   .p-section { margin-top: var(--space-6); gap: var(--space-4); }
   .p-section h2, .p-panel h3, .p-fields summary { break-after: avoid; }
   .p-fields__body { padding: 4px 6px; }

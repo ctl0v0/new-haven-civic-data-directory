@@ -105,6 +105,7 @@ export function platDrawing(feature, layers, sourceUrl) {
   const scaleFeet = scaleMeters * feetPerMeter;
   const feetLabel = scaleFeet < 1 ? scaleFeet.toPrecision(1) : format.format(Math.round(scaleFeet));
   return `<figure class="p-figure p-hero__plat">
+    <p class="t-label report-hero-label">Parcel outline</p>
     <div class="p-figure__frame p-plat" id="plat-drawing"><svg viewBox="0 0 640 460" role="img" aria-label="City parcel boundary drawn to scale, with computed edge lengths and mapped address points">
       <path class="grid" d="${grid}" fill="none"/>
       <path class="parcel" d="${boundary}" fill-rule="evenodd"/>
@@ -114,10 +115,10 @@ export function platDrawing(feature, layers, sourceUrl) {
       <rect x="19" y="429" width="${bar}" height="6" class="scale-bar"/>
       <text x="19" y="422" class="scale-text">${format.format(scaleMeters)} m · ${feetLabel} ft</text>
     </svg></div>
-    <figcaption class="p-figure__cap t-caption"><span>City parcel boundary drawn to scale. ${calc("Dimensions from mapped geometry")}</span>
+    <figcaption class="p-figure__cap t-caption"><span>${calc("Dimensions from mapped geometry")}</span>
       ${sourceLink(sourceUrl, "City GIS parcel")}</figcaption>
     ${addresses || stops ? `<fieldset class="p-layers"><legend class="sr-only">Plat drawing layers</legend>
-      ${addresses ? '<label class="p-chip"><input type="checkbox" data-plat-layer="addresses" checked> City address points</label>' : ""}
+      ${addresses ? '<label class="p-chip"><input type="checkbox" data-plat-layer="addresses" checked> Address points</label>' : ""}
       ${stops ? '<label class="p-chip"><input type="checkbox" data-plat-layer="stops" checked> Transit stops</label>' : ""}
     </fieldset>` : ""}</figure>`;
 }

@@ -622,29 +622,34 @@ function servicesView(rows, coverage) {
 function reportHero(geometry, context, parcel, photo) {
   const heading = '<h2 class="sr-only" tabindex="-1">Parcel and surrounding streets</h2>';
   const photoUrl = photo.status === "ok" ? safeUrl(photo.photo_url) : null;
+  const photoState = photoUrl ? "" : " data-photo-unavailable";
   const photoFigure = `<figure class="p-figure p-figure__photo">
+    <p class="t-label report-hero-label">Parcel photo</p>
     ${photoUrl ? `<div class="p-figure__frame" id="report-photo-frame">
       <img id="report-photo" src="${escape(photoUrl)}" alt="Official parcel photograph of ${escape(parcel.address ?? parcel.parcel_id)}"></div>` : ""}
     <figcaption class="p-figure__cap t-caption">
-      <span id="report-photo-status">${photoUrl ? "Photo date unpublished. It may not show the entire parcel or current conditions." : "No verified parcel photograph was returned."}</span>
+      <span id="report-photo-status">${photoUrl ? "Photo date unpublished." : "No verified parcel photograph was returned."}</span>
       ${sourceLink(photo.source_url, photo.photo_source_id === "assessor" ? "Assessor photograph" : "City parcel photograph")}
     </figcaption></figure>`;
   const layers = (context?.layers ?? []).filter(({ features }) => features.length);
   const radius = context?.nearby_radius_m ?? 400;
   const drawing = platDrawing(geometry, layers, parcel.source_url);
-  if (!geometry || !drawing) return `<section id="map" class="p-hero report-section" data-no-boundary>${heading}
+  if (!geometry || !drawing) return `<section id="map" class="p-hero p-hero--overview report-section" data-no-boundary${photoState}>${heading}
     <div class="p-figure p-hero__plat"><p>City parcel geometry was unavailable for this report.</p>
       ${sourceLink(parcel.source_url, "Open City parcel record")}</div>${photoFigure}</section>`;
   const data = JSON.stringify({ geometry, layers, radius }).replaceAll("<", "\\u003c");
-  return `<section id="map" class="p-hero report-section">${heading}${drawing}${photoFigure}
-    <figure class="p-figure"><div class="p-figure__frame p-locator">
+  const layerLabels = { "parcel-addresses": "Address points", zoning: "Zoning", "transit-stops": "Transit stops",
+    "metered-parking-spaces": "Metered parking" };
+  return `<section id="map" class="p-hero p-hero--overview report-section"${photoState}>${heading}${drawing}${photoFigure}
+    <figure class="p-figure report-locator"><p class="t-label report-hero-label">Street map</p><div class="p-figure__frame p-locator">
       <div id="report-map" role="region" aria-label="Map of the selected parcel and surrounding streets" tabindex="0"></div></div>
       <figcaption class="p-figure__cap t-caption"><span>Street locator · ${radius} m from the parcel map center</span>
       ${sourceLink(parcel.source_url, "City GIS parcel")}</figcaption>
       <p id="report-map-status" class="t-caption" role="status">Loading street map…</p>
       ${layers.length ? `<fieldset class="p-layers map-options"><legend class="sr-only">Street locator layers</legend>
-        ${layers.map((layer) => `<label class="p-chip"><input type="checkbox" value="${escape(layer.id)}"${["parcel-addresses", "transit-stops"].includes(layer.id) ? " checked" : ""}>
-        ${escape(layer.title)}</label>`).join("")}</fieldset>` : ""}
+      ${layers.map((layer) => `<label class="p-chip" title="${escape(layer.title)}"><input type="checkbox" value="${escape(layer.id)}"
+        ${["parcel-addresses", "transit-stops"].includes(layer.id) ? "checked" : ""}>
+        ${escape(layerLabels[layer.id] ?? layer.title)}</label>`).join("")}</fieldset>` : ""}
       <noscript><p>Enable JavaScript to view the street locator.</p></noscript>
     </figure><script type="application/json" id="report-map-data">${data}</script>
   </section>`;
