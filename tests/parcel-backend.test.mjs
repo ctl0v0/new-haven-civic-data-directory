@@ -27,6 +27,7 @@ import geometryRoute from "../api/v1/geometry.js";
 import mapContextRoute from "../api/v1/map-context.js";
 import browseParcelsRoute from "../api/v1/browse-parcels.js";
 import parcelRoute from "../api/v1/parcel.js";
+import parcelAddressesRoute from "../api/v1/parcel-addresses.js";
 import parcelZoningRoute from "../api/v1/parcel-zoning.js";
 import parcelPhotoRoute from "../api/v1/parcel-photo.js";
 import permitDetailsRoute from "../api/v1/permit-details.js";
@@ -1991,6 +1992,37 @@ test("overview keeps source gaps and links visible without raw source fields", a
   assert.match(property.sources.find((s) => s.source_id === "land-records").source_url, /city-clerk/);
   assert.equal(out.recent_events[0].source_id, "parcel-sale");
   assert.doesNotMatch(JSON.stringify(out), /sale_date|property_address/);
+});
+
+test("parcel header address lookup preserves distinct numbers and units from City GIS", async () => {
+  const id = 999159;
+  const house = (objectid, house_number, street, unit = null) => ({
+    attributes: { objectid, house_number, full_street_name: street, unit },
+  });
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.includes("Parcel_Viewer")) return response({ features: [parcel(id)] });
+    if (url.pathname.includes("Addresses_")) {
+      assert.equal(url.searchParams.get("geometryType"), "esriGeometryPolygon");
+      return response({ features: [
+        house(1, 138, "TEST ST", "10"), house(2, 136, "TEST ST"),
+        house(3, 138, "TEST STREET", "2"), house(4, 138, "TEST ST", "2"),
+      ] });
+    }
+    throw Error("Address lookup must only check City GIS");
+  };
+  const url = `https://example.com/api/v1/parcel-addresses?parcel_id=${id}&query_address=136+TEST+ST`;
+  assert.equal((await parcelAddressesRoute.fetch(new Request(url))).status, 401);
+  const result = await parcelAddressesRoute.fetch(new Request(url, {
+    headers: { authorization: "Bearer " + process.env.PILOT_API_TOKEN },
+  }));
+  assert.equal(result.status, 200);
+  const data = await result.json();
+  assert.equal(data.status, "ok");
+  assert.deepEqual(data.addresses, [
+    { address: "136 TEST ST", units: [] },
+    { address: "138 TEST ST", units: ["2", "10"] },
+  ]);
 });
 
 test("ArcGIS uses a form body for long spatial queries and source dates accept epoch milliseconds", async () => {

@@ -1,6 +1,6 @@
 import { GROUPS, SOURCES } from "./config.js";
 import { cached, SourceError } from "./http.js";
-import { loadParcel, resolveParcel } from "./resolve.js";
+import { loadParcel, normalizeAddress, resolveParcel } from "./resolve.js";
 import { parcelFeatureToGeoJSON } from "./geometry.js";
 import { parcelMapContext } from "./map-context.js";
 import { checkedQueryAddress, markAddressEvidence } from "./address-evidence.js";
@@ -71,6 +71,31 @@ export async function parcelSummary(id, objectid = null) {
       "Assessment values are not current tax bills.",
       "Source dates and retrieval dates have different meanings.",
     ],
+  };
+}
+
+export async function parcelAddresses(id, objectid = null) {
+  const feature = await loadParcel(id, objectid);
+  const { items, status, source_url, warning } = await getSourceRecords("addresses", feature);
+  const byAddress = new Map();
+  for (const { attributes: row } of items) {
+    const number = String(row.house_number ?? "").trim();
+    const street = String(row.full_street_name ?? "").trim() ||
+      [row.street_name, row.suffix_type].filter(Boolean).join(" ").trim();
+    if (!number || !street) continue;
+    const address = `${number} ${street}`;
+    const key = normalizeAddress(address);
+    if (!byAddress.has(key)) byAddress.set(key, { address, units: new Set() });
+    const unit = String(row.unit ?? "").trim();
+    if (unit) byAddress.get(key).units.add(unit);
+  }
+  const sort = (a, b) => a.localeCompare(b, "en-US", { numeric: true });
+  return {
+    status, source_url,
+    warning: status === "unavailable" ? warning : status === "partial"
+      ? "The City address query reached its result limit." : null,
+    addresses: [...byAddress.values()].map(({ address, units }) => ({ address, units: [...units].sort(sort) }))
+      .sort((a, b) => sort(a.address, b.address)),
   };
 }
 

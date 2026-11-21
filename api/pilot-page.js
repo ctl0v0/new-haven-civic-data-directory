@@ -111,6 +111,10 @@ const app = `
       <h2 id="parcel-title" tabindex="-1"></h2>
       <p id="parcel-identifiers" class="meta"></p>
       <p id="parcel-match" class="match-note" hidden></p>
+      <div class="parcel-addresses">
+        <h3>City-mapped addresses</h3>
+        <div id="parcel-address-list" aria-live="polite"></div>
+      </div>
       <p class="small parcel-overview-note">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
       ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby places</button>' : ""}
       ${previewToolsVisible ? '<button id="storefront-opportunity-open" class="secondary" type="button" aria-controls="storefront-opportunity" aria-expanded="false">Analyze a vacant storefront</button>' : ""}

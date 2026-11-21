@@ -1033,6 +1033,37 @@ function normalizedAddress(value) {
     .replace(/\s+/g, " ")
     .trim();
 }
+async function loadParcelAddresses(qs, version) {
+  const container = $("parcel-address-list");
+  try {
+    const { addresses, source_url, status, warning } = await api(`/api/v1/parcel-addresses?${qs}`);
+    if (version !== viewVersion) return;
+    container.replaceChildren();
+    if (addresses.length) {
+      const list = el("ul");
+      for (const { address, units } of addresses) {
+        const row = el("li");
+        row.append(el("strong", address));
+        if (units.length) row.append(el("span", ` · ${units.length === 1 ? "Unit" : "Units"} ${units.join(", ")}`, "meta"));
+        list.append(row);
+      }
+      container.append(list);
+    }
+    if (warning || !addresses.length) {
+      container.append(el("p", warning || (status === "unavailable"
+        ? "City-mapped addresses are temporarily unavailable."
+        : "The City returned no address points on this parcel."), "meta"));
+    }
+    if (source_url) {
+      const source = el("p", null, "meta");
+      source.append(link(source_url, "New Haven GIS address points"));
+      container.append(source);
+    }
+  } catch {
+    if (version === viewVersion)
+      container.replaceChildren(el("p", "City-mapped addresses are temporarily unavailable.", "meta"));
+  }
+}
 async function choose(item, searchedQuery = null, viewer = "records", restoreState = false) {
   const version = ++viewVersion;
   closeNearbyBusinessResearch();
@@ -1085,6 +1116,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   $("groups").replaceChildren();
   $("group-nav").replaceChildren();
   $("record-detail").hidden = true;
+  $("parcel-address-list").replaceChildren(el("p", "Loading City address points…", "meta"));
   $("overview-counts").replaceChildren();
   $("snapshot-grid").replaceChildren(el("p", "Loading source-linked overview…", "meta"));
   $("school-attendance-results").replaceChildren(el("p", "Loading official school attendance zones…", "meta"));
@@ -1124,7 +1156,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
         $("parcel-match").append(el("span", "Matched to this parcel by a City address point.", "parcel-match-evidence"));
     }
     status("Records are loading by source.");
-    const tasks = [];
+    const tasks = [loadParcelAddresses(qs, version)];
     if (!browsing) tasks.push(loadHeroPhoto(qs, version));
     if (browsing) tasks.push(loadBrowseSelectedMap(qs, version));
     else if (!maplessRecords) tasks.push(loadMap(qs, version));
