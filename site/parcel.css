@@ -330,7 +330,7 @@ main { max-width: 82rem; }
 body.browse-mode main { max-width: none; padding: 0; }
 body.record-only-mode main { max-width: none; padding: 1.5rem clamp(1rem, 3vw, 3rem) 4rem; }
 body.record-only-mode #parcel-map-section { display: none; }
-#nearby-business-open { margin-top: .55rem; }
+#nearby-business-open, #storefront-opportunity-open { margin-top: .55rem; }
 #nearby-business-research { border-block: 1px solid #cbdacf; padding: 1rem 0; margin: 0 0 1.4rem; }
 #nearby-business-title { margin: 0 0 .85rem; font-size: 1.25rem; }
 #nearby-business-fields { display: flex; flex-wrap: wrap; align-items: end; gap: .65rem; border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -357,6 +357,30 @@ body.record-only-mode #parcel-map-section { display: none; }
 .nearby-business-matches { list-style: none; padding: 0; margin: .65rem 0 0; }
 .nearby-business-matches li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .2rem 1rem; padding: .55rem 0; border-top: 1px solid #cbdacf; }
 .nearby-business-matches .meta { display: block; }
+#storefront-opportunity { border-block: 1px solid #cbdacf; padding: 1rem 0; margin: 0 0 1.4rem; }
+#storefront-opportunity h2 { margin: 0 0 .85rem; font-size: 1.25rem; }
+#storefront-opportunity-fields { display: grid; gap: .65rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.storefront-input { width: min(100%, 24rem); }
+.storefront-input label { font-size: .88rem; }
+.storefront-input :is(select, input) { width: 100%; border: 1px solid #a4bcb0; border-radius: .3rem; padding: .48rem .55rem; background: #fff; color: inherit; font: inherit; }
+.storefront-check { display: flex; gap: .45rem; align-items: baseline; margin: .3rem 0; font-size: .88rem; }
+.storefront-check input { width: 1rem; height: 1rem; margin: 0; flex: 0 0 auto; accent-color: #0b624d; }
+.storefront-space-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .2rem .55rem; }
+#storefront-run { justify-self: start; }
+#storefront-status:empty { display: none; }
+#storefront-report { margin-top: 1rem; }
+#storefront-report h3, #storefront-report h4 { margin: 0 0 .45rem; }
+#storefront-report p { margin: .38rem 0; }
+.storefront-shortlists { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .8rem 1.25rem; margin: 1rem 0; }
+.storefront-shortlist { border-top: 2px solid #285c46; padding-top: .6rem; min-width: 0; }
+.storefront-shortlist ol { margin: .45rem 0; padding-left: 1.25rem; }
+.storefront-section { border-top: 1px solid #cbdacf; padding: .6rem 0; }
+#storefront-opportunity summary { padding: .25rem 0; color: #194b38; font-weight: 700; cursor: pointer; }
+.storefront-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .88rem; }
+.storefront-table th, .storefront-table td { border-bottom: 1px solid #d6e3d9; padding: .5rem .35rem; overflow-wrap: anywhere; vertical-align: top; text-align: left; }
+.storefront-table th:first-child { width: 52%; }
+.storefront-table small { display: block; }
+.storefront-notice { padding: .42rem .6rem; background: #f7efdc; border-left: 3px solid #8c631e; }
 body.browse-mode .parcel-tabs { padding: 0 1.4rem; margin: 0; }
 .browse-workspace { display: grid; grid-template-columns: clamp(28rem, 36vw, 34rem) minmax(0, 1fr); gap: 0; min-height: calc(100dvh - 8rem); }
 body.browse-expanded .browse-workspace { grid-template-columns: min(46rem, 55vw) minmax(0, 1fr); }
@@ -854,7 +878,7 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
   body.browse-mode .record-review-workspace #group-nav .data-nav-button { display: none; }
   .record-review-workspace #group-nav .mobile-section-label { display: block; margin: 0; font-size: .78rem; }
   .record-review-workspace #group-nav .mobile-section-picker { margin-top: .15rem; }
-  .record-review-workspace:has(#nearby-business-research:not([hidden])) #group-nav { position: static; }
+  .record-review-workspace:has(:is(#nearby-business-research, #storefront-opportunity):not([hidden])) #group-nav { position: static; }
   body.browse-mode .record-review-workspace #group-nav { display: block; overflow: visible; padding: .5rem .65rem; }
   .record-review-main { padding: 1rem 0 2rem; }
   .record-review-main #parcel-summary,

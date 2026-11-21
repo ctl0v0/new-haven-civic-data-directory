@@ -15,7 +15,7 @@ export const GOOGLE_BUSINESS_MATCH_LIMIT = 100;
 export const BUSINESS_SEARCH_BODY_LIMIT = 8192;
 
 const GOOGLE_URL = "https://areainsights.googleapis.com/v1:computeInsights";
-const GOOGLE_SOURCE = "https://developers.google.com/maps/documentation/places-aggregate/overview";
+export const GOOGLE_PLACES_SOURCE = "https://developers.google.com/maps/documentation/places-aggregate/overview";
 const GOOGLE_DETAILS_URL = "https://places.googleapis.com/v1/";
 const matchPageSize = 10;
 const matchCursorLifetimeMs = 10 * 60 * 1000;
@@ -143,13 +143,17 @@ function googleError(error, apiName) {
 
 async function businessInsights({ apiKey, origin, includedTypes, radius_meters: radius }, insights) {
   const { latitude, longitude } = origin;
+  return placeInsights(apiKey, { circle: { latLng: { latitude, longitude }, radius } }, includedTypes, insights);
+}
+
+async function placeInsights(apiKey, locationFilter, includedTypes, insights, timeout = 8000) {
   let data;
   try {
     data = await fetchJson(GOOGLE_URL, {
-      method: "POST", timeout: 8000, maxBytes: 48_000,
+      method: "POST", timeout, maxBytes: 48_000,
       headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey },
       body: JSON.stringify({ insights, filter: {
-        locationFilter: { circle: { latLng: { latitude, longitude }, radius } },
+        locationFilter,
         typeFilter: { includedTypes },
         operatingStatus: ["OPERATING_STATUS_OPERATIONAL"],
       } }),
@@ -162,6 +166,14 @@ async function businessInsights({ apiKey, origin, includedTypes, radius_meters: 
   return { count, placeInsights: data?.placeInsights };
 }
 
+export async function countPlacesInWalkingArea(apiKey, ring, includedTypes, timeout) {
+  const locationFilter = {
+    customArea: { polygon: { coordinates: ring.map(([longitude, latitude]) => ({ latitude, longitude })) } },
+  };
+  const { count } = await placeInsights(apiKey, locationFilter, includedTypes, ["INSIGHT_COUNT"], timeout);
+  return count;
+}
+
 export async function nearbyBusinessCount(input, { env = process.env } = {}) {
   const search = await businessSearch(input, countInput, env);
   const { origin, category, group, subcategories, category_label, radius_meters: radius } = search;
@@ -171,7 +183,7 @@ export async function nearbyBusinessCount(input, { env = process.env } = {}) {
     ...(group ? { group, subcategories } : { category }), category_label,
     radius_meters: radius, radius_label: businessRadii[radius],
     origin, count, retrieved_at: new Date().toISOString(),
-    attribution: "Google Maps", source_url: GOOGLE_SOURCE,
+    attribution: "Google Maps", source_url: GOOGLE_PLACES_SOURCE,
   };
 }
 

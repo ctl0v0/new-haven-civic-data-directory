@@ -178,6 +178,9 @@ try {
 }
 
 // Only run a billable Google check on an explicitly marked Preview build.
+const { opportunityAvailability } = await import('../parcel/storefront-opportunity.js');
+console.log(JSON.stringify({ event: 'preview_storefront_opportunity', ...opportunityAvailability() }));
+
 try {
   const { nearbyBusinessCount, nearbyBusinessMatches, nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
   const parcel = { parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' };

@@ -52,6 +52,31 @@ const nearbyBusinessResearch = previewToolsVisible ? `
     <p id="nearby-business-status" role="status"></p>
     <div id="nearby-business-result" aria-live="polite" hidden></div>
   </section>` : "";
+const storefrontResearch = previewToolsVisible ? `
+  <section id="storefront-opportunity" aria-labelledby="storefront-opportunity-title" hidden>
+    <h2 id="storefront-opportunity-title" tabindex="-1">Vacant storefront analysis</h2>
+    <form id="storefront-opportunity-form">
+      <fieldset id="storefront-opportunity-fields" disabled>
+        <div class="storefront-input">
+          <label for="storefront-origin">Storefront address</label>
+          <select name="origin" id="storefront-origin" required></select>
+        </div>
+        <label class="storefront-check"><input type="checkbox" name="confirmed_vacancy" required> I’ve confirmed this storefront is vacant.</label>
+        <details>
+          <summary>Space and site checks <span class="meta">Optional</span></summary>
+          <div class="storefront-input">
+            <label for="storefront-area">Verified usable storefront area in square feet</label>
+            <input type="number" name="storefront_sq_ft" id="storefront-area" min="1" max="1000000" step="1">
+          </div>
+          <p class="meta">Check a use if you’ve verified the space and basic building requirements for it.</p>
+          <div id="storefront-space-checks" class="storefront-space-checks"></div>
+        </details>
+        <button id="storefront-run" type="submit" disabled>Run neighborhood analysis</button>
+      </fieldset>
+    </form>
+    <p id="storefront-status" role="status"></p>
+    <div id="storefront-report" aria-live="polite" hidden></div>
+  </section>` : "";
 const app = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
@@ -85,12 +110,14 @@ const app = `
       <p id="parcel-match" class="match-note" hidden></p>
       <p class="small parcel-overview-note">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
       ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby places</button>' : ""}
+      ${previewToolsVisible ? '<button id="storefront-opportunity-open" class="secondary" type="button" aria-controls="storefront-opportunity" aria-expanded="false">Analyze a vacant storefront</button>' : ""}
     </div><figure id="parcel-photo" class="parcel-photo" hidden>
       <img id="parcel-photo-image" alt="Verified parcel photo">
       <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>
     </figure></div>
   </section>
   ${nearbyBusinessResearch}
+  ${storefrontResearch}
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
     <h2 id="snapshot-title">At a glance</h2>
     <div id="snapshot-grid" class="snapshot-grid"></div>

@@ -135,7 +135,7 @@ async function api(path, options) {
   const r = await fetch(path, { credentials: "same-origin", ...options });
   const body = await r
     .json()
-    .catch(() => ({ error: "Invalid server response" }));
+    .catch(() => ({ error: r.status === 429 ? "Too many requests. Try again in a minute." : "Invalid server response" }));
   if (!r.ok) throw Error(body.error ?? `HTTP ${r.status}`);
   return body;
 }
@@ -197,7 +197,10 @@ function restoredFilters(params) {
 function showDataSection(id, updateUrl = true) {
   if (!(["overview", "timeline"].includes(id) || groups.some(([key]) => key === id))) id = "overview";
   activeDataSection = id;
-  if (id !== "overview") closeNearbyBusinessResearch();
+  if (id !== "overview") {
+    closeNearbyBusinessResearch();
+    closeStorefrontOpportunity();
+  }
   $("record-detail").hidden = true;
   $("parcel-map-section").hidden = id !== "overview" || maplessRecords;
   $("school-attendance-summary").hidden = id !== "overview";
@@ -1033,6 +1036,7 @@ function normalizedAddress(value) {
 async function choose(item, searchedQuery = null, viewer = "records", restoreState = false) {
   const version = ++viewVersion;
   closeNearbyBusinessResearch();
+  closeStorefrontOpportunity();
   const priorParams = restoreState ? new URL(location.href).searchParams : null;
   const browsing = viewer === "browse";
   $("browse-record-actions").hidden = true;
@@ -1430,7 +1434,10 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   const activity = tab === "activity" && !$("activity-tab").hidden;
   const readingRecords = !browsing && !guiding && !asking && !activity;
   maplessRecords = readingRecords && noMap;
-  if (!maplessRecords) closeNearbyBusinessResearch();
+  if (!maplessRecords) {
+    closeNearbyBusinessResearch();
+    closeStorefrontOpportunity();
+  }
   document.body.classList.toggle("browse-mode", browsing);
   document.body.classList.toggle("record-only-mode", maplessRecords);
   const url = new URL(location.href);
@@ -2392,6 +2399,7 @@ async function loadFeed(qs, version, cursor = null) {
 $("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   closeNearbyBusinessResearch();
+  closeStorefrontOpportunity();
   maplessRecords = false;
   document.body.classList.remove("record-only-mode");
   const version = ++viewVersion;
@@ -2541,6 +2549,7 @@ $("nearby-business-open")?.addEventListener("click", async () => {
     closeNearbyBusinessResearch();
     return;
   }
+  closeStorefrontOpportunity();
   showExplorerTab("records", { noMap: true });
   showDataSection("overview");
   panel.hidden = false;
@@ -2711,6 +2720,138 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
     if (request === nearbyBusinessRequest) {
       nearbyBusinessRequest = null;
       $("nearby-business-fields").disabled = false;
+    }
+  }
+});
+
+let storefrontRequest = null;
+let storefrontConfigured = false;
+
+function closeStorefrontOpportunity() {
+  const panel = $("storefront-opportunity");
+  if (!panel || panel.hidden) return;
+  storefrontRequest?.abort();
+  storefrontRequest = null;
+  storefrontConfigured = false;
+  panel.hidden = true;
+  $("storefront-opportunity-open").setAttribute("aria-expanded", "false");
+  $("storefront-report").replaceChildren();
+  $("storefront-report").hidden = true;
+}
+
+function updateStorefrontRun(form) {
+  $("storefront-run").disabled = !storefrontConfigured || !form.elements.origin.value ||
+    !form.elements.confirmed_vacancy.checked;
+}
+
+$("storefront-opportunity-open")?.addEventListener("click", async () => {
+  if (!selected || requestedParcelKey !== parcelKey(selected)) return;
+  const panel = $("storefront-opportunity");
+  if (!panel.hidden) {
+    closeStorefrontOpportunity();
+    return;
+  }
+  closeNearbyBusinessResearch();
+  showExplorerTab("records", { noMap: true });
+  showDataSection("overview");
+  panel.hidden = false;
+  $("storefront-opportunity-open").setAttribute("aria-expanded", "true");
+  $("storefront-opportunity-title").focus();
+  const form = $("storefront-opportunity-form");
+  form.reset();
+  form.elements.storefront_sq_ft.required = false;
+  form.querySelector("details").open = false;
+  const origin = form.elements.origin;
+  origin.replaceChildren(new Option("Choose a City address", ""));
+  const status = $("storefront-status");
+  const checks = $("storefront-space-checks");
+  checks.replaceChildren();
+  storefrontConfigured = false;
+  updateStorefrontRun(form);
+  $("storefront-opportunity-fields").disabled = true;
+  status.textContent = "Checking City address points…";
+  const request = new AbortController();
+  storefrontRequest = request;
+  try {
+    const data = await api(`/api/v1/parcel-opportunity?${selectedQuery()}`, { signal: request.signal });
+    if (storefrontRequest !== request) return;
+    for (const point of data.origins) {
+      const repeated = data.origins.filter(({ address }) => address === point.address).length > 1;
+      origin.add(new Option(repeated ? `${point.address} · City point ${point.objectid}` : point.address, point.id));
+    }
+    origin.value = data.default_origin ?? "";
+    for (const option of data.space_checks) {
+      const label = el("label", null, "storefront-check");
+      const checkbox = el("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "space_checked_for";
+      checkbox.value = option.id;
+      label.append(checkbox, document.createTextNode(option.label));
+      checks.append(label);
+    }
+    storefrontConfigured = data.configured;
+    status.textContent = data.reason ?? data.warning ??
+      (data.origins.length ? "" : "No verified City street address is available for this parcel.");
+    updateStorefrontRun(form);
+  } catch (error) {
+    if (storefrontRequest === request) status.textContent = error.message;
+  } finally {
+    if (storefrontRequest === request) {
+      storefrontRequest = null;
+      $("storefront-opportunity-fields").disabled = false;
+    }
+  }
+});
+
+$("storefront-opportunity-form")?.addEventListener("change", (event) => {
+  const form = event.currentTarget;
+  const selectedChecks = form.querySelector('input[name="space_checked_for"]:checked');
+  const area = form.elements.storefront_sq_ft;
+  area.required = Boolean(selectedChecks);
+  if (area.required && !area.validity.valid) form.querySelector("details").open = true;
+  $("storefront-report").replaceChildren();
+  $("storefront-report").hidden = true;
+  updateStorefrontRun(form);
+});
+
+$("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (storefrontRequest || !storefrontConfigured || !selected ||
+      $("storefront-opportunity").hidden || !maplessRecords) return;
+  const { elements } = event.currentTarget;
+  if (!elements.origin.value || !elements.confirmed_vacancy.checked) return;
+  const area = elements.storefront_sq_ft.valueAsNumber;
+  const payload = {
+    ...Object.fromEntries(selectedQuery()), origin: elements.origin.value, confirmed_vacancy: true,
+    storefront_sq_ft: Number.isFinite(area) ? area : undefined,
+    space_checked_for: [...event.currentTarget.querySelectorAll('input[name="space_checked_for"]:checked')]
+      .map(({ value }) => value),
+  };
+  const request = new AbortController();
+  storefrontRequest = request;
+  const status = $("storefront-status");
+  const report = $("storefront-report");
+  report.hidden = true;
+  status.textContent = "Calculating walking areas and checking nearby places…";
+  $("storefront-opportunity-fields").disabled = true;
+  try {
+    const [{ renderStorefrontReport }, data] = await Promise.all([
+      import("/storefront-opportunity.js"),
+      api("/api/v1/parcel-opportunity", {
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
+        body: JSON.stringify(payload),
+      }),
+    ]);
+    if (storefrontRequest !== request) return;
+    renderStorefrontReport(report, data, { el, link, sourceNames });
+    report.hidden = false;
+    status.textContent = "";
+  } catch (error) {
+    if (storefrontRequest === request) status.textContent = error.message;
+  } finally {
+    if (storefrontRequest === request) {
+      storefrontRequest = null;
+      $("storefront-opportunity-fields").disabled = false;
     }
   }
 });

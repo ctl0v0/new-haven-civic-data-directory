@@ -2,6 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm ci",
+  "functions": { "api/v1/parcel-opportunity.js": { "maxDuration": 90 } },
   "rewrites": [{"source":"/mcp","destination":"/api/mcp"},{"source":"/parcel","destination":"/api/pilot-page"}],
   "framework": null
 }
