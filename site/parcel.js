@@ -1476,6 +1476,8 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   const asking = tab === "ask" && !$('ask-tab').hidden;
   const activity = tab === "activity" && !$("activity-tab").hidden;
   const readingRecords = !browsing && !guiding && !asking && !activity;
+  const tabButton = $(browsing ? "browse-tab" : guiding ? "guide-tab" : asking ? "ask-tab" : activity ? "activity-tab" : "records-tab");
+  const tabChanged = tabButton.getAttribute("aria-selected") !== "true";
   maplessRecords = readingRecords && noMap;
   if (!maplessRecords) {
     closeNearbyBusinessResearch();
@@ -1507,6 +1509,10 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   $("browse-tab").setAttribute("aria-selected", String(browsing));
   $("guide-tab").setAttribute("aria-selected", String(guiding));
   $("ask-tab").setAttribute("aria-selected", String(asking));
+  if (tabChanged) {
+    window.scrollTo(0, 0);
+    tabButton.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
   if (guiding) void loadGuide(section);
   if (browsing) requestAnimationFrame(() => {
     if (!browseMap) initBrowseMap();
@@ -1854,6 +1860,7 @@ function clearBrowseSelection() {
   history.replaceState(null, "", `${url.pathname}${url.search}`);
   setBrowsePanelExpanded(false);
   setMobileBrowseView("map");
+  if (window.matchMedia("(max-width: 44rem)").matches) window.scrollTo(0, 0);
   $("browse-map").focus({ preventScroll: true });
 }
 
@@ -3497,6 +3504,12 @@ function setBrowsePanelExpanded(expanded) {
 }
 $("browse-panel-toggle").addEventListener("click", () => setBrowsePanelExpanded(!document.body.classList.contains("browse-expanded")));
 $("browse-clear-selection").addEventListener("click", clearBrowseSelection);
+const explorerChrome = document.querySelector(".explorer-chrome");
+const chromeSize = new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty("--explorer-chrome-height", `${entry.target.offsetHeight}px`);
+  if (!$("browse-view").hidden) browseMap?.invalidateSize();
+});
+chromeSize.observe(explorerChrome);
 $("records-tab").parentElement.addEventListener("keydown", (event) => {
   if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
   event.preventDefault();

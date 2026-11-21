@@ -8,7 +8,8 @@ import { businessCategoryGroups, businessRadii, DEFAULT_BUSINESS_RADIUS,
   DEFAULT_STOREFRONT_RADIUS, GOOGLE_BUSINESS_MATCH_LIMIT, STOREFRONT_RADII } from "../parcel/nearby-business-count.js";
 
 const header =
-  '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Parcel pilot · New Haven Civic Data</title><link rel="stylesheet" href="/leaflet/leaflet.css"><link rel="stylesheet" href="/parcel.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a href="/index.html">New Haven Civic Data Directory</a><span>Private parcel pilot</span></header><main id="main">';
+  '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Parcel pilot · New Haven Civic Data</title><link rel="stylesheet" href="/leaflet/leaflet.css"><link rel="stylesheet" href="/parcel.css"></head><body><a class="skip" href="#main">Skip to content</a>';
+const masthead = '<header><a href="/index.html">New Haven Civic Data Directory</a><span>Private parcel pilot</span></header>';
 const footer =
   "</main><footer>Independent research preview. Confirm consequential facts with the original source.</footer></body></html>";
 const login =
@@ -89,14 +90,15 @@ const storefrontResearch = previewToolsVisible ? `
     <p id="storefront-status" role="status"></p>
     <div id="storefront-report" aria-live="polite" hidden></div>
   </section>` : "";
-const app = `
+const navigation = `
   <nav class="parcel-tabs" role="tablist" aria-label="Parcel explorer views">
     <button id="records-tab" type="button" role="tab" aria-selected="true" aria-controls="records-view">Search records</button>
     <button id="browse-tab" type="button" role="tab" aria-selected="false" aria-controls="browse-view">Browse parcel map</button>
     <button id="activity-tab" type="button" role="tab" aria-selected="false" aria-controls="activity-view"${askHidden}>Activity</button>
     <button id="guide-tab" type="button" role="tab" aria-selected="false" aria-controls="guide-view">Data guide</button>
     <button id="ask-tab" type="button" role="tab" aria-selected="false" aria-controls="ask-view"${askHidden}>Test a question</button>
-  </nav>
+  </nav>`;
+const app = `
   <div id="records-view" role="tabpanel" aria-labelledby="records-tab">
   <section class="search-panel" aria-labelledby="page-title">
     <p class="eyebrow">New Haven parcel explorer</p>
@@ -305,10 +307,13 @@ export default {
       new URL(request.url).searchParams.get("access") === "denied"
         ? '<p role="alert">Passcode not accepted.</p>'
         : "";
-    const body = authorized(request) ? app : login + denied + "</section>";
+    const configured = pilotConfigured();
+    const showExplorer = configured && authorized(request);
+    const chrome = showExplorer ? `<div class="explorer-chrome">${masthead}${navigation}</div>` : masthead;
+    const body = showExplorer ? app : login + denied + "</section>";
     return new Response(
-      header +
-        (!pilotConfigured()
+      header + chrome + `<main id="main"${showExplorer ? ' class="parcel-workspace"' : ""}>` +
+        (!configured
           ? `<p>Pilot access is not configured. ${pilotConfigurationIssues().join(", ")}. Runtime: ${escapeHtml(process.env.VERCEL_ENV ?? "local")}; branch: ${escapeHtml(process.env.VERCEL_GIT_COMMIT_REF ?? "unknown")}.</p>`
           : body) +
         footer,
