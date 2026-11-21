@@ -15,10 +15,24 @@ const categories = {
   Permit: "Permits", Application: "Applications", License: "Licenses", Complaint: "Complaints",
   Certificate: "Certificates", Document: "Documents", Occupant: "Occupants", Contact: "Contacts",
 };
+const businessRecordTypes = {
+  "municipal-business-licenses": "City business license",
+  "municipal-occupants": "City occupant record",
+  "ct-public-charities": "State charity registration",
+  "ct-liquor-permits": "State liquor permit",
+  "ct-child-care-licenses": "State child care or youth camp license",
+  "ct-cannabis-retail": "State cannabis retail listing",
+};
+const chapterExplanations = {
+  ownership: "Sale prices come from the City parcel or assessor records. A published $0 is kept as recorded. Use official land records to confirm title and transfers.",
+  activity: "Dates and statuses come from the municipal record. Check a permit’s inspection or closeout records to verify completion.",
+  business: "City licenses and State permits show the address on the credential. State charity registrations show the organization’s registered address. Check current occupancy separately.",
+};
 const timelineMirrors = new Set(["municipal-business-licenses", "municipal-occupants"]);
 const labels = {
   mblu: "MBLU", dba: "DBA", owner_name_1: "Owner", owner_name_2: "Co-owner", co_line: "Care of",
   book_page: "Book and page", year_building_built: "Year built", total_land_area_acres: "Land area (acres)",
+  site_address_as_published: "Site address",
   gross_area_sq_ft: "Gross area (sq ft)", living_area_sq_ft: "Living area (sq ft)",
   k8_attendance_zone_school: "K–8 school preference", high_school_attendance_zone_school: "High school preference",
   registered_address_as_published: "Registered address", fullcredentialcode: "Registration number",
@@ -62,9 +76,9 @@ const safeUrl = (value) => {
     return url.protocol === "https:" && !url.username && !url.password ? url.href : null;
   } catch { return null; }
 };
-const external = (url, text) => {
+const external = (url, text, accessibleName) => {
   const href = safeUrl(url);
-  return href ? `<a href="${escape(href)}" rel="noreferrer">${escape(text)}</a>` : "";
+  return href ? `<a href="${escape(href)}" rel="noreferrer"${accessibleName ? ` aria-label="${escape(accessibleName)}"` : ""}>${escape(text)}</a>` : "";
 };
 const page = (title, body) => `<!doctype html><html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -83,7 +97,7 @@ function valueText(value, key = "") {
   const text = String(value).trim();
   if (!text || blank.test(text)) return "";
   if (/^year_(?:building_)?built$/.test(key) && /^0+$/.test(text)) return "";
-  if (typeof value === "number" && /^(?:price|total_assessed_)/i.test(key))
+  if (typeof value === "number" && /^(?:price|sale_price|total_assessed_)/i.test(key))
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
   if (/date/i.test(key) && /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(text)) return shortDate(text.slice(0, 10));
   if (/date/i.test(key) && /^\/Date\(\d+(?:[+-]\d{4})?\)\/$/.test(text)) {
@@ -117,8 +131,15 @@ function fieldEntries(data, allowed, parent = "") {
 
 function fieldList(entries) {
   if (!entries.length) return "";
-  return `<dl class="record-fields">${entries.map(([label, value]) =>
-    `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join("")}</dl>`;
+  return `<dl class="record-fields">${entries.map(([label, value, id]) =>
+    `<div><dt>${escape(label)}</dt><dd>${id ? `<a href="#${escape(id)}">${escape(value)}</a>` : escape(value)}</dd></div>`).join("")}</dl>`;
+}
+
+const permitNumber = (a) => valueText(a.PermitNo) || valueText(a.PermitNumber);
+
+function permitHeading(item) {
+  const a = item.attributes ?? {};
+  return [valueText(a.PermitType), permitNumber(a)].filter(Boolean).join(" · ");
 }
 
 function titleFor(item) {
@@ -127,6 +148,7 @@ function titleFor(item) {
   if (item.source_id === "parcel-sale") return "Sale on City parcel record";
   if (item.source_id === "neighborhoods") return a.neighborhood || a.neighborhood_label || sourceTitle(item.source_id);
   if (item.source_id === "wards") return a.ward ? `Ward ${a.ward}` : sourceTitle(item.source_id);
+  if (item.source_id === "municity" && item.category === "Permit") return permitHeading(item) || "Permit record";
   const name = valueText(recordTitle(item));
   return name && name !== String(item.source_record_id) && !/\bnot listed\b/i.test(name)
     ? name : item.category ? `${item.category} record` : sourceTitle(item.source_id);
@@ -146,15 +168,45 @@ function publishedDate(item) {
 const newestFirst = (a, b) => publishedDate(b.item).localeCompare(publishedDate(a.item));
 
 function recordRow(item, id, title, candidates) {
+  const a = item.attributes ?? {};
+  const permit = item.source_id === "municity" && item.category === "Permit";
+  const businessType = businessRecordTypes[item.source_id];
+  const address = permit ? valueText(a.LegalAddress) : businessType
+    ? valueText(a.registered_address_as_published ?? a.site_address_as_published ?? a.recorded_address) : "";
+  const addressLabel = item.source_id === "ct-public-charities" ? "Registered address" :
+    a.site_address_as_published && businessType ? "Site address" : "Recorded address";
+  const description = permit ? valueText(a.Description) : "";
   const status = valueText(recordStatus(item));
-  const date = item.event_date ? `<span>${escape(eventDateLabel(item))} <time datetime="${escape(item.event_date)}">${escape(shortDate(item.event_date))}</time></span>` : "";
-  const fields = [...new Map(candidates.filter(([, value]) => value !== title && value !== status)
+  const dateLabel = eventDateLabel(item);
+  const dateText = shortDate(item.event_date);
+  const date = item.event_date
+    ? `<span class="record-date"><span>${escape(dateLabel)}</span> <time datetime="${escape(item.event_date)}">${escape(dateText)}</time></span>`
+    : permit ? '<span class="undated">Date unpublished</span>' : "";
+  const primary = new Map();
+  if (permit) {
+    primary.set("permit type", valueText(a.PermitType));
+    primary.set("permit number", permitNumber(a));
+    primary.set("description", description);
+    if (dateLabel === "Permit date") primary.set("permit date", valueText(a.PermitDate, "PermitDate"));
+  }
+  if (address) primary.set(addressLabel.toLowerCase(), address);
+  const fields = [...new Map(candidates.filter(([label, value]) => {
+    if (primary.get(label.toLowerCase()) === value) return false;
+    // Title and status comparisons apply to their own fields so equal values under
+    // other labels (such as Permit type and Department) retain their meaning.
+    return !(/^(?:status|perm status|record status|registry status|(?:permit )?application status|comp status)$/i.test(label) && value === status) &&
+      !(/^(?:owner|business name|legal name|occupant name|document name|contact name)$/i.test(label) && value === title);
+  })
     .map((row) => [row.join("\u0000"), row])).values()];
-  const sourceLink = external(item.source_url, "Official record");
+  const recordNumber = permit ? permitNumber(a) : "";
+  const sourceLink = recordNumber ? external(item.source_url, `Open permit ${recordNumber}`)
+    : external(item.source_url, "Open source", `Open source for ${title}`);
   return `<article class="record" id="${id}">
-    <div class="record-head"><div><h4>${escape(title)}</h4>
-    ${date || status ? `<div class="record-meta">${date}${status ? `<span class="status">${escape(status)}</span>` : ""}</div>` : ""}</div>
-    ${sourceLink}</div>${fieldList(fields)}</article>`;
+    <div class="record-head"><h4 tabindex="-1">${escape(title)}</h4>${sourceLink}</div>
+    ${date || status || address ? `<div class="record-meta">${date}
+      ${status ? `<span class="status">${escape(status)}</span>` : ""}
+      ${address ? `<span>${addressLabel} <strong>${escape(address)}</strong></span>` : ""}</div>` : ""}
+    ${description ? `<p class="record-description">${escape(description)}</p>` : ""}${fieldList(fields)}</article>`;
 }
 
 function timeline(items) {
@@ -165,7 +217,7 @@ function timeline(items) {
     .sort(newestFirst);
   if (!dated.length) return "";
   const years = Map.groupBy(dated, ({ item }) => item.event_date.slice(0, 4));
-  return `<section id="history" class="report-section"><h2>Parcel history</h2>
+  return `<section id="history" class="report-section"><h2 tabindex="-1">Parcel history</h2>
     ${[...years].map(([year, rows]) => `<details class="history-year" open>
       <summary>${escape(year)} <span>${rows.length} dated ${rows.length === 1 ? "record" : "records"}</span></summary>
       <ol>${rows.map(({ item, id, title }) => `<li>
@@ -174,11 +226,33 @@ function timeline(items) {
         </li>`).join("")}</ol></details>`).join("")}</section>`;
 }
 
-function recordChapter(key, entries) {
-  if (!entries.length) return "";
+function coverageIssues(sources) {
+  return sources.filter((entry) => entry.status === "unavailable" || entry.status === "partial" ||
+    entry.omitted_categories?.length || (entry.count_established === false && ["ok", "no_records"].includes(entry.status)));
+}
+
+function coverageNotice(issues) {
+  if (!issues.length) return "";
+  const problem = (entry) => {
+    if (entry.status === "unavailable") return "Unavailable when the report was generated.";
+    const details = [
+      entry.omitted_categories?.length ? `The response omitted these categories — ${entry.omitted_categories.join(", ")}.` : "",
+      entry.truncated_categories?.length ? `Record limit reached for ${entry.truncated_categories.join(", ")}.` : "",
+    ].filter(Boolean).join(" ");
+    return details || "The response provided partial coverage.";
+  };
+  return `<div class="coverage-note"><p><strong>Incomplete source checks</strong> · <a href="#sources">See source coverage</a></p>
+    <ul>${issues.map((entry) => `<li><span>${escape(entry.source_id === "municity" ? "Municipal parcel service" : sourceTitle(entry.source_id))}</span> · ${escape(problem(entry))}</li>`).join("")}</ul></div>`;
+}
+
+function recordChapter(key, entries, issues) {
+  if (!entries.length && !issues.length) return "";
   const sections = Map.groupBy(entries, ({ item }) =>
-    item.source_id === "municity" && item.category ? categories[item.category] ?? item.category : sourceTitle(item.source_id));
-  return `<section id="${key}" class="report-section"><h2>${chapters[key]}</h2>
+    item.source_id === "municity" && item.category ? categories[item.category] ?? item.category
+      : businessRecordTypes[item.source_id] ?? sourceTitle(item.source_id));
+  return `<section id="${key}" class="report-section"><h2 tabindex="-1">${chapters[key]}</h2>
+    ${entries.length && chapterExplanations[key] ? `<p class="chapter-note">${chapterExplanations[key]}</p>` : ""}
+    ${coverageNotice(issues)}
     ${[...sections].map(([heading, rows]) => `<details class="record-section" open>
       <summary><h3>${escape(heading)}</h3><span>${rows.length}</span></summary>
       ${rows.sort(newestFirst).map(({ item, id, title, fields }) => recordRow(item, id, title, fields)).join("")}
@@ -192,7 +266,7 @@ function coverageSection(groups, addresses, photo, context) {
     <td>${escape(statusDescription(entry))}
     ${entry.count > 0 ? ` · ${Number(entry.count).toLocaleString("en-US")} returned` : ""}
     ${entry.warning || entry.note || entry.coverage ? `<p>${escape(entry.warning ?? entry.note ?? entry.coverage)}</p>` : ""}</td></tr>`;
-  return `<section id="sources" class="report-section"><h2>Sources and coverage</h2>
+  return `<section id="sources" class="report-section"><h2 tabindex="-1">Sources and coverage</h2>
     <p class="caption">Source dates describe the published records. This report was generated from the records available at the time of the request.</p>
     <details class="record-section" open><summary><h3>Parcel records</h3></summary>
     <table><thead><tr><th scope="col">Source</th><th scope="col">Response</th></tr></thead>
@@ -204,13 +278,15 @@ function coverageSection(groups, addresses, photo, context) {
       row({ status: "unavailable" }, "City map overlays")}</tbody></table></details></section>`;
 }
 
-function reportMap(geometry, context, parcel) {
-  if (!geometry) return `<section id="map" class="report-section"><h2>Parcel and surrounding streets</h2>
-    <p>City parcel geometry was unavailable for this report.</p>${external(parcel.source_url, "Open City parcel record")}</section>`;
+function reportMap(geometry, context, parcel, photograph) {
+  const heading = '<section id="map" class="report-section"><h2 tabindex="-1">Parcel and surrounding streets</h2>';
+  if (!geometry) return `${heading}
+    <p>City parcel geometry was unavailable for this report.</p>${external(parcel.source_url, "Open City parcel record")}
+    ${photograph}</section>`;
   const layers = (context?.layers ?? []).filter(({ features }) => features.length);
   const data = JSON.stringify({ geometry, layers, radius: context?.nearby_radius_m ?? 400 })
     .replaceAll("<", "\\u003c");
-  return `<section id="map" class="report-section"><h2>Parcel and surrounding streets</h2>
+  return `${heading}<div class="report-visuals${photograph ? " with-photo" : ""}"><div>
     <figure class="map-figure"><div id="report-map" role="region" aria-label="Map of the selected parcel and surrounding streets" tabindex="0"></div>
     <figcaption><span class="map-key parcel-key">City parcel boundary</span>
     ${external(parcel.source_url, "City GIS parcel")}</figcaption></figure>
@@ -218,8 +294,13 @@ function reportMap(geometry, context, parcel) {
     ${layers.length ? `<fieldset class="map-options"><legend>Map layers</legend>
       ${layers.map((layer) => `<label><input type="checkbox" value="${escape(layer.id)}"${["parcel-addresses", "transit-stops"].includes(layer.id) ? " checked" : ""}> <span class="map-key" data-layer="${escape(layer.id)}">${escape(layer.title)}</span></label>`).join("")}</fieldset>` : ""}
     ${layers.some(({ scope }) => scope === "nearby") ? `<p class="caption">Nearby layers cover ${escape(context.nearby_radius_m)} meters from the parcel map center.</p>` : ""}
-    <noscript><p>Enable JavaScript to view the street map.</p></noscript>
+    <noscript><p>Enable JavaScript to view the street map.</p></noscript></div>${photograph}</div>
     <script type="application/json" id="report-map-data">${data}</script></section>`;
+}
+
+function recordSummary(entries, label, include, describe) {
+  const latest = entries.filter(({ item }) => item.event_date && include(item)).sort(newestFirst)[0];
+  return latest ? [[label, describe(latest), latest.id]] : [];
 }
 
 export function renderParcelReport({ parcel, searchedAddress, addresses, groups, photo, geometry, context, generated_at }) {
@@ -234,9 +315,13 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
       return fields.length || item.event_date || valueText(recordStatus(item)) || item.attributes?.public_document_url
         ? [{ item, fields, title: titleFor(item), id: `record-${++number}` }] : [];
     })]);
-  const history = timeline(rows.flatMap(([, entries]) => entries));
-  const navigation = [["map", "Map"], ...(history ? [["history", "History"]] : []),
-    ...rows.filter(([, entries]) => entries.length).map(([id]) => [id, chapters[id]]), ["sources", "Sources"]];
+  const allRows = rows.flatMap(([, entries]) => entries);
+  const history = timeline(allRows);
+  const issues = new Map(groups.map(({ group, sources }) => [group, coverageIssues(sources)]));
+  const affected = rows.filter(([id]) => issues.get(id)?.length).length;
+  const navigation = [["map", "Map and photo"], ...(history ? [["history", "History"]] : []),
+    ...rows.filter(([id, entries]) => entries.length || issues.get(id)?.length).map(([id]) => [id, chapters[id]]),
+    ["sources", "Sources and coverage"]];
   const checked = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
   }).format(new Date(generated_at));
@@ -245,21 +330,32 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
     <img id="report-photo" src="${escape(photoUrl)}" alt="Official parcel photograph of ${escape(title)}">
     <figcaption>${external(photo.source_url, photo.photo_source_id === "assessor" ? "Assessor photograph" : "City parcel photograph")}
       <span id="report-photo-status">Photo date unpublished</span></figcaption></figure>` : "";
-  const identity = [["Parcel ID", parcel.parcel_id], ["MBLU", parcel.mblu],
-    ["Assessor account", parcel.account_number],
-    ["Searched address", normalizeAddress(searchedAddress) !== normalizeAddress(parcel.address) ? searchedAddress : null]]
+  const identity = [["Parcel ID", parcel.parcel_id], ["MBLU", parcel.mblu], ["Assessor account", parcel.account_number]]
     .map(([label, value]) => [label, valueText(value)]).filter(([, value]) => value);
+  const differentAddress = searchedAddress && normalizeAddress(searchedAddress) !== normalizeAddress(parcel.address);
   const items = groups.flatMap(({ items }) => items);
   const attributes = (id) => items.find(({ source_id }) => source_id === id)?.attributes ?? {};
   const assessment = attributes("parcel-assessment");
   const values = (id, field) => [...new Set(items.filter(({ source_id }) => source_id === id)
     .map(({ attributes }) => valueText(attributes[field])).filter(Boolean))].join(", ");
-  const facts = [["City zoning", values("zoning", "zone_code")],
+  const assessedUse = valueText(attributes("assessor-land").use_description_as_published);
+  const facts = [["City zoning", values("zoning", "zone_code"), "geography"],
+    [assessedUse ? "Assessor land use" : "City parcel use code",
+      assessedUse || valueText(assessment.use_code), "property"],
     ["City-mapped neighborhoods", values("neighborhoods", "neighborhood") || values("neighborhoods", "neighborhood_label")],
     ["Ward", values("wards", "ward")],
-    ["Assessor land use", valueText(attributes("assessor-land").use_description_as_published)],
     ["Year built", valueText(assessment.year_building_built, "year_building_built")],
-    ["Land area (acres)", valueText(assessment.total_land_area_acres)]].filter(([, value]) => value);
+    ["Land area (acres)", valueText(assessment.total_land_area_acres)],
+    ...recordSummary(allRows, "Latest sale in returned records",
+      (item) => item.source_id === "parcel-sale" || item.source_id === "assessor-sales", ({ item }) => {
+        const { price, sale_price } = item.attributes;
+        const amount = valueText(price ?? sale_price, "price");
+        return [shortDate(item.event_date), amount, item.source_id === "parcel-sale" ? "City parcel" : "Assessor"].filter(Boolean).join(" · ");
+      }),
+    ...recordSummary(allRows, "Latest dated City permit", (item) => item.source_id === "municity" && item.category === "Permit",
+      ({ item, title }) => [`${eventDateLabel(item)} ${shortDate(item.event_date)}`, title, valueText(recordStatus(item))]
+        .filter(Boolean).join(" · ")),
+  ].filter(([, value]) => value);
   const mapped = addresses.addresses.length ? `<div class="mapped-addresses"><h2>City-mapped addresses</h2>
     <ul>${addresses.addresses.map(({ address, units }) => `<li>${escape(address)}${units.length ? ` <span>· ${units.length === 1 ? "Unit" : "Units"} ${escape(units.join(", "))}</span>` : ""}</li>`).join("")}</ul></div>` : "";
   return page(`${title} · Property report`, `<a class="skip" href="#property-report">Skip to property report</a>
@@ -267,15 +363,24 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
       <a href="/parcel?${escape(query)}">← Parcel records</a>
       <button type="button" id="print-report" hidden>Print report</button>
     </div></header><main class="report" id="property-report">
-    <header class="report-title${photoUrl ? " with-photo" : ""}">
-      <div><p class="eyebrow">New Haven Civic Data · Property report</p><h1>${escape(title)}</h1>
-      <p class="caption">Generated <time datetime="${escape(generated_at)}">${escape(checked)} ET</time></p>
-      ${fieldList(identity)}${mapped}</div>${photograph}
+    <header class="report-title">
+      <p class="eyebrow">New Haven Civic Data · Property report</p><h1>${escape(title)}</h1>
+      ${differentAddress ? `<p class="searched-address">Searched address <strong>${escape(searchedAddress)}</strong></p>` : ""}
+      ${mapped}
+      <div class="report-identity">${fieldList(identity)}
+      <p class="caption">Generated <time datetime="${escape(generated_at)}">${escape(checked)} ET</time></p></div>
     </header>
-    <nav class="report-nav" aria-label="Report sections">${navigation.map(([id, label]) => `<a href="#${id}">${escape(label)}</a>`).join("")}</nav>
-    ${facts.length ? `<section class="report-section report-facts"><h2>Property at a glance</h2>${fieldList(facts)}</section>` : ""}
-    ${reportMap(geometry, context, parcel)}${history}
-    ${rows.map(([id, entries]) => recordChapter(id, entries)).join("")}
+    ${facts.length || affected ? `<section class="report-facts"><h2>Property at a glance</h2>${fieldList(facts)}
+      ${affected ? `<p class="coverage-summary"><strong>Incomplete source checks in ${affected} ${affected === 1 ? "section" : "sections"}</strong>
+        <a href="#sources">See source coverage</a></p>` : ""}</section>` : ""}
+    <nav class="report-nav" aria-label="Report sections">
+      <div class="report-nav-links">${navigation.map(([id, label]) => `<a href="#${id}">${escape(label)}</a>`).join("")}</div>
+      <div class="report-jump" hidden><label for="report-section-select">Jump to</label>
+        <select id="report-section-select">${navigation.map(([id, label]) => `<option value="${id}">${escape(label)}</option>`).join("")}</select>
+        <button type="button" id="report-section-go">Go</button></div>
+    </nav>
+    ${reportMap(geometry, context, parcel, photograph)}${history}
+    ${rows.map(([id, entries]) => recordChapter(id, entries, issues.get(id) ?? [])).join("")}
     ${coverageSection(groups, addresses, photo, context)}
     </main><script src="/leaflet/leaflet.js" defer></script><script src="/parcel-report.js" type="module"></script>`);
 }

@@ -76,17 +76,32 @@ if (photo) {
   if (photo.complete && !photo.naturalWidth) showMissingPhoto();
 }
 
-function revealRecord() {
-  if (!/^#record-\d+$/.test(location.hash)) return;
-  const record = document.getElementById(location.hash.slice(1));
-  const section = record?.closest("details");
-  if (section) {
-    section.open = true;
-    record.scrollIntoView();
-  }
+const navigation = document.querySelector(".report-nav");
+const jump = navigation.querySelector(".report-jump");
+const sectionSelect = document.getElementById("report-section-select");
+jump.hidden = false;
+const sizeNavigation = () => {
+  document.documentElement.style.setProperty("--report-nav-height", `${navigation.offsetHeight}px`);
+};
+new ResizeObserver(sizeNavigation).observe(navigation);
+sizeNavigation();
+
+function revealTarget() {
+  const target = document.getElementById(location.hash.slice(1));
+  if (!target?.matches(".report-section, .record")) return;
+  const detail = target.closest("details");
+  if (detail) detail.open = true;
+  sectionSelect.value = target.closest(".report-section").id;
+  target.scrollIntoView();
+  target.querySelector("h2, h4")?.focus({ preventScroll: true });
 }
-window.addEventListener("hashchange", revealRecord);
-revealRecord();
+document.getElementById("report-section-go").addEventListener("click", () => {
+  const hash = `#${sectionSelect.value}`;
+  if (location.hash === hash) revealTarget();
+  else location.hash = hash;
+});
+window.addEventListener("hashchange", revealTarget);
+revealTarget();
 
 const print = document.getElementById("print-report");
 print.hidden = false;
