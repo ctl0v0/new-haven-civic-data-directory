@@ -2,7 +2,8 @@ import { source } from "../parcel/config.js";
 import { normalizeAddress } from "../parcel/resolve.js";
 import { eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate } from "./parcel-record-text.js";
 import { calc, coverageBar, coverageNote, coveragePill, coverageState, coverageTone, escape, factTile, fields,
-  icon, ledger, panel, pill, safeUrl, section, sourceChecks, sourceLink, split, stack, verbatim } from "./plat/components.js";
+  icon, ledger, panel, pill, recordSourceLink, safeUrl, section, sourceChecks, sourceLink, split, stack,
+  verbatim } from "./plat/components.js";
 import { areaBars, categoryNames, glyph, platDrawing, projectAround, publishedNumber, timelineChart,
   valuationBars } from "./plat/graphics.js";
 
@@ -30,9 +31,8 @@ const businessRecordTypes = {
 const chapterExplanations = {
   ownership: "Sale prices come from the City parcel or assessor records. A published $0 is kept as recorded. Use official land records to confirm title and transfers.",
   activity: "Dates and statuses come from the municipal record. Check a permit’s inspection or closeout records to verify completion.",
-  business: "City licenses and State permits show the address on the credential. State charity registrations show the organization’s registered address. Check current occupancy separately.",
+  business: "City occupant records list reported occupants. City licenses and State permits show the address on the credential. State charity registrations show the organization’s registered address. Check current occupancy separately.",
 };
-const timelineMirrors = new Set(["municipal-business-licenses", "municipal-occupants"]);
 const labels = {
   mblu: "MBLU", dba: "DBA", owner_name_1: "Owner", owner_name_2: "Co-owner", co_line: "Care of",
   book_page: "Book and page", year_building_built: "Year built", total_land_area_acres: "Land area (acres)",
@@ -48,6 +48,7 @@ const labels = {
   total_assessed_land_outbldg: "Assessed land and outbuildings", total_assessed_extra_features: "Assessed extra features",
   total_assessed_parcel_value_x: "City assessed parcel value (X)",
   total_assessed_parcel_value_y: "City assessed parcel value (Y)",
+  occupant_id: "City occupant ID",
 };
 const municipalFields = {
   Permit: ["PermitNo", "PermitNumber", "PermitType", "Description", "LegalAddress", "PermitDate", "IssueDate", "ExpirationDate",
@@ -184,7 +185,7 @@ function linkedRows(primary, secondary, primaryKey, secondaryKey) {
 }
 
 function recordCard(row, { merged = [], extra = "", compact = false, className = "" } = {}) {
-  const { item, id, title, raw, dateLabel, dateText, status, address, identifier } = row;
+  const { item, id, title, dateLabel, dateText, status, address, identifier } = row;
   const permit = item.source_id === "municity" && item.category === "Permit";
   const addressLabel = item.source_id === "ct-public-charities" ? "Registered address" :
     item.attributes?.site_address_as_published ? "Site address" : "Recorded address";
@@ -200,8 +201,12 @@ function recordCard(row, { merged = [], extra = "", compact = false, className =
   const summary = row.fields.filter(([label, value]) => primary.get(label.toLowerCase()) !== value &&
     !(label.toLowerCase().endsWith("status") && value === status) &&
     !(label.toLowerCase().endsWith("name") && value === words));
-  const recordSource = sourceLink(item.source_url, permit && identifier ? `Open permit ${identifier}` : "Open source", `Open source for ${title}`);
-  const all = [row, ...merged];
+  const occupant = item.source_id === "municipal-occupants";
+  const published = occupant ? [row] : [row, ...merged];
+  const sourceRows = occupant ? [...new Map([row, ...merged]
+    .map((entry) => [entry.item.source_url, entry])).values()] : [row];
+  const links = sourceRows.map(recordSourceLink).filter(Boolean);
+  const recordSource = links.length > 1 ? `<div class="p-record__sources">${links.join("")}</div>` : links[0] ?? "";
   const display = compact ? [] : summary.slice(0, 8);
   return `<article class="p-record record${className ? ` ${className}` : ""}" id="${id}">
     ${merged.map(({ id }) => alias(id)).join("")}
@@ -211,7 +216,7 @@ function recordCard(row, { merged = [], extra = "", compact = false, className =
       ${address ? `<span>${addressLabel} <strong>${escape(address)}</strong></span>` : ""}</div>` : ""}
     ${description ? `<p class="p-record__desc record-description">${escape(description)}</p>` : ""}
     ${extra}${fields(display)}
-    ${verbatim(all.map(provenance))}
+    ${verbatim(published.map(provenance))}
   </article>`;
 }
 
@@ -235,8 +240,14 @@ function eventCategory(item) {
 
 function reportTimeline(rows, generatedAt) {
   const originals = new Set(rows.filter(({ item }) => item.source_id === "municity").map(({ item }) => item.source_record_id));
-  const dated = rows.filter(({ item }) => item.event_date && /^\d{4}-/.test(item.event_date) &&
-    !(timelineMirrors.has(item.source_id) && originals.has(item.source_record_id))).sort(newestFirst);
+  const occupants = new Set(rows.filter(({ item }) => item.source_id === "municity" && item.category === "Occupant")
+    .map(occupantProjectionKey).filter(Boolean));
+  const dated = rows.filter((row) => {
+    const { item } = row;
+    return item.event_date && /^\d{4}-/.test(item.event_date) &&
+      !(item.source_id === "municipal-business-licenses" && originals.has(item.source_record_id)) &&
+      !(item.source_id === "municipal-occupants" && occupants.has(occupantProjectionKey(row)));
+  }).sort(newestFirst);
   if (!dated.length) return null;
   const years = Map.groupBy(dated, ({ item }) => item.event_date.slice(0, 4));
   const used = new Set(dated.map(({ eventCategory }) => eventCategory));
@@ -499,23 +510,26 @@ function activityView(rows, businessDuplicates) {
     groupsView(without(rows, grouped));
 }
 
+function occupantProjectionKey({ item }) {
+  if (!item.source_record_id?.startsWith("occupant:")) return null;
+  return JSON.stringify([item.source_record_id, item.match?.vendor_parcel_id ?? null,
+    item.event_date ?? null, Object.entries(item.attributes ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
+}
+
 function businessMatch(rows, activity) {
   const licenses = sourceRows(rows, "municipal-business-licenses");
   const occupants = sourceRows(rows, "municipal-occupants");
   const municipal = (category) => activity.filter(({ item }) => item.source_id === "municity" && item.category === category);
   const exactId = ({ item }) => item.source_record_id;
-  const addressName = ({ item, address, title }) => address && title &&
-    `${normalizeAddress(address)}:${String(item.attributes.business_name ?? item.attributes.occupant_name ?? title).trim().toUpperCase()}`;
-  const pairs = (primary, secondary, key) => {
-    const ids = linkedRows(primary, secondary, exactId, exactId);
-    const already = [...ids.values()].flat();
-    const remaining = linkedRows(primary, without(secondary, already), key, key);
-    for (const [id, records] of remaining) ids.set(id, [...ids.get(id) ?? [], ...records]);
-    return ids;
-  };
+  const cityLicenses = municipal("License");
+  const licenseMatches = linkedRows(licenses, cityLicenses, exactId, exactId);
+  const byNumber = ({ identifier }) => identifier;
+  const otherLicenses = linkedRows(licenses, without(cityLicenses, [...licenseMatches.values()].flat()), byNumber, byNumber);
+  for (const [id, records] of otherLicenses)
+    licenseMatches.set(id, [...licenseMatches.get(id) ?? [], ...records]);
   return new Map([
-    ...pairs(licenses, municipal("License"), ({ identifier }) => identifier),
-    ...pairs(occupants, municipal("Occupant"), addressName),
+    ...licenseMatches,
+    ...linkedRows(occupants, municipal("Occupant"), occupantProjectionKey, occupantProjectionKey),
   ]);
 }
 
@@ -780,6 +794,7 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
   const business = inChapter("business");
   const duplicates = businessMatch(business, activity);
   const mergedBusiness = [...duplicates.values()].flat();
+  const occupantCopies = mergedBusiness.filter(({ item }) => item.category === "Occupant").length;
   const coverage = coverageFor(groups, addresses, photo, context);
   const allSources = coverage.flatMap(([, entries]) => entries);
   const byChapter = Map.groupBy(allSources, ({ chapter }) => chapter);
@@ -806,7 +821,7 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
     chapter("zoning", chapters.geography, inChapter("geography").length, zoningView(inChapter("geography")),
       "City zoning shows the mapped district. The assessor reports building use and area separately."),
     chapter("activity", chapters.activity, activity.length - mergedBusiness.length, activityView(activity, mergedBusiness), chapterExplanations.activity),
-    chapter("business", chapters.business, business.length + mergedBusiness.length,
+    chapter("business", chapters.business, business.length + mergedBusiness.length - occupantCopies,
       businessView(business, addresses.addresses, title, duplicates, generated_at), chapterExplanations.business),
     chapter("environment", chapters.environment, inChapter("environment").length, groupsView(inChapter("environment"))),
     chapter("services", "Services and representation", services.length, servicesView(services, byChapter.get("services") ?? [])),
@@ -834,7 +849,7 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
     ${reportHero(geometry, context, parcel, photo)}
     <section class="p-factsband report-facts" aria-label="Property at a glance"><div class="p-facts p-facts--hero">
       ${summary.map(factTile).join("")}</div></section>
-    <div class="p-layout">${sectionRail([{ id: "map", label: "Map and photo" }, ...chaptersView], rows.length,
+    <div class="p-layout">${sectionRail([{ id: "map", label: "Map and photo" }, ...chaptersView], rows.length - occupantCopies,
       allSources.map(({ entry }) => entry))}
       <div class="p-main">${chaptersView.map(({ html }) => html).join("")}</div></div>
     <footer class="p-foot t-caption"><span>New Haven Civic Data · Property report</span><span>Generated ${time}</span></footer>

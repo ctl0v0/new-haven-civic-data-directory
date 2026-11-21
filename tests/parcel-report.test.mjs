@@ -178,3 +178,58 @@ test("Plat keeps source records and original anchors when it groups cross-source
     assert.equal($(`[data-verbatim-for="record-${n}"] a.p-src`).attr("href"), sourceUrl);
   }
 });
+
+test("Plat shows one disclosure for an identical occupant projection and labels City Squared destinations", () => {
+  const cityParcel = `${sourceUrl}#/app/NewHavenCityCT/entity/Parcel/11325`;
+  const documents = `${cityParcel}/Document`;
+  const publicFile = "https://www.municitymedia.com/public/plan.pdf";
+  const occupant = { occupant_name: "Example Market", recorded_address: "892 STATE ST", occupancy_type: "Market" };
+  const groups = [
+    { group: "activity", sources: [], items: [
+      record("municity", "occupant:501", { occupant_id: "501", ...occupant }, {
+        category: "Occupant", source_url: documents, event_date: "2021-01-02",
+      }),
+      record("municity", "occupant:502", { occupant_id: "502", ...occupant }, {
+        category: "Occupant", source_url: cityParcel, event_date: "2021-01-02",
+      }),
+      record("municity", "occupant:503", { occupant_id: "503", ...occupant, inactive: true }, {
+        category: "Occupant", source_url: cityParcel, event_date: "2020-02-01",
+      }),
+      record("municity", "document:12", { document_name: "City plan metadata" }, {
+        category: "Document", source_url: documents,
+      }),
+      record("municity", "document:13", { document_name: "City plan", public_document_url: publicFile }, {
+        category: "Document", source_url: publicFile,
+      }),
+    ] },
+    { group: "business", sources: [], items: [
+      record("municipal-occupants", "occupant:501", { ...occupant, occupant_id: "501" }, {
+        source_url: cityParcel, event_date: "2021-01-02",
+      }),
+      record("municipal-occupants", "occupant:503", { occupant_id: "503", ...occupant, inactive: false }, {
+        source_url: cityParcel, event_date: "2020-02-01",
+      }),
+    ] },
+  ];
+  const $ = load(renderParcelReport({
+    parcel: { parcel_id: 11662, objectid: 13714, address: "892 State St" }, groups,
+    addresses: { addresses: [], status: "ok" }, photo: { status: "no_records" },
+    generated_at: "2026-11-21T15:00:00Z",
+  }));
+  const merged = $("#business #record-6");
+  assert.equal(merged.find("#record-1.report-anchor").length, 1);
+  assert.equal(merged.find(".p-fields__record").length, 1);
+  assert.match(merged.find(".p-fields dl").text(), /City occupant ID\s*501/);
+  assert.match(merged.find(".p-fields__ids").text(), /Report reference 6/);
+  assert.deepEqual(merged.find(".record-head a").map((_, a) => [$(a).text(), $(a).attr("href")].join("|")).get(), [
+    `Open City Squared parcel|${cityParcel}`,
+    `Open City Squared parcel documents|${documents}`,
+  ]);
+  assert.match($("#activity #record-2 .p-fields").text(), /City occupant ID\s*502/);
+  assert.match($("#activity #record-3 .p-fields").text(), /Inactivetrue/);
+  assert.match($("#business #record-7 .p-fields").text(), /Inactivefalse/);
+  assert.equal($("#activity #record-4 .p-fields__ids a").text(), "Open City Squared parcel documents");
+  assert.equal($("#activity #record-5 .record-head a").text(), "Open published document");
+  assert.equal($("#business .p-section__stats").text(), "2 records");
+  assert.equal($("#history li").length, 4);
+});

@@ -776,6 +776,7 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
             UrlExists: true,
             Url: "https://www.municitymedia.com/private/notes.pdf",
           },
+          { Document_ID: 13, Name: "Public document metadata", Public: true, UrlExists: false },
         ],
         Application: [],
         Complaint: [{
@@ -805,8 +806,8 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
   };
   const out = await getSourceRecords("municity", parcel(999015));
   assert.equal(out.status, "ok");
-  assert.equal(out.items.length, 3);
-  assert.equal(out.category_counts.Document, 1);
+  assert.equal(out.items.length, 4);
+  assert.equal(out.category_counts.Document, 2);
   assert.equal(out.category_counts.Application, 0);
   assert.equal(out.category_counts.Complaint, 1);
   assert.equal(out.category_counts.Contact, 1);
@@ -821,6 +822,8 @@ test("municipal parcel lookup includes public documents, complaint metadata and 
   });
   assert.equal(out.items.find((x) => x.category === "Document").source_url,
     "https://www.municitymedia.com/public/plan.pdf");
+  assert.equal(out.items.find((x) => x.source_record_id === "document:13").source_url,
+    "https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Parcel/99873/Document");
   assert.equal(out.items.find((x) => x.category === "Complaint").attributes.complaint_number,
     "C-22-02774");
   assert.equal(out.items.find((x) => x.category === "Contact").attributes.contact_role,
@@ -1285,6 +1288,7 @@ test("municipal occupants use only public fields attached to the verified parcel
   assert.equal(out.status, "ok");
   assert.equal(out.items.length, 1);
   assert.equal(out.items[0].attributes.occupant_name, "Example Cafe");
+  assert.equal(out.items[0].attributes.occupant_id, "1");
   assert.equal(out.items[0].event_date, "2022-11-08");
   assert.match(out.items[0].source_url, /entity\/Parcel\/99873$/);
   assert.doesNotMatch(JSON.stringify(out), /555-0100|Private notes|Deleted Tenant|Wrong Parcel/);

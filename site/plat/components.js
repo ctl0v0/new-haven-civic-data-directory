@@ -15,6 +15,22 @@ export function sourceLink(url, label, name) {
   return href ? `<a class="p-src" href="${escape(href)}" rel="noreferrer"${name ? ` aria-label="${escape(name)}"` : ""}>${escape(label)}</a>` : "";
 }
 
+export function recordSourceLink({ item, title, identifier }) {
+  const href = safeUrl(item.source_url);
+  if (!href) return "";
+  const url = new URL(href);
+  let label = "Open source";
+  if (item.source_id === "municity" && item.category === "Permit" && identifier)
+    label = `Open permit ${identifier}`;
+  else if (item.category === "Document" && href === safeUrl(item.attributes?.public_document_url))
+    label = "Open published document";
+  else if (["www.municityconnect.com", "municityconnect.com"].includes(url.hostname)) {
+    const route = url.hash.match(/^#\/app\/NewHavenCityCT\/entity\/Parcel\/\d+(\/Document)?\/?$/i);
+    if (route) label = route[1] ? "Open City Squared parcel documents" : "Open City Squared parcel";
+  }
+  return sourceLink(href, label, `${label} for ${title}`);
+}
+
 const iconPaths = {
   brand: '<path d="M3 4 10 1.5 16 7l-2 6-6 3-5-5z" fill="var(--parcel)" stroke="currentColor" stroke-width="1.5"/>',
   copy: '<path d="M6 6h8v8H6zM11 4V3H3v8h1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
@@ -37,12 +53,15 @@ export function fields(entries) {
 export function verbatim(rows, { anchors = false } = {}) {
   return `<details class="p-fields" open>
     <summary>Published fields <span class="p-count">${rows.reduce((sum, { raw }) => sum + raw.length, 0)}</span></summary>
-    <div class="p-fields__body">${rows.map(({ raw, id, item, title }) => `<div class="p-fields__record" data-verbatim-for="${id}"${anchors ? ` id="${id}"` : ""}>
+    <div class="p-fields__body">${rows.map((row) => {
+      const { raw, id, title } = row;
+      return `<div class="p-fields__record" data-verbatim-for="${id}"${anchors ? ` id="${id}"` : ""}>
       ${anchors ? `<h4 class="p-record__title" tabindex="-1">${escape(title)}</h4>`
         : rows.length > 1 ? `<p><strong>${escape(title)}</strong></p>` : ""}
       <dl>${raw.map(([label, value]) => `<dt>${escape(label)}</dt><dd>${escape(value)}</dd>`).join("")}</dl>
-      <div class="p-fields__ids"><span class="t-id">${id}</span>
-        ${sourceLink(item.source_url, "Open source", `Open source for ${title}`)}</div></div>`).join("")}</div>
+      <div class="p-fields__ids"><span class="t-id">Report reference ${escape(id.replace(/^record-/, ""))}</span>
+        ${recordSourceLink(row)}</div></div>`;
+    }).join("")}</div>
     </details>`;
 }
 

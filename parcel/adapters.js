@@ -1433,6 +1433,7 @@ function municipalChildAttributes(kind, row) {
     };
   if (kind === "Occupant")
     return {
+      occupant_id: text(row.Occupant_ID),
       occupant_name: text(row.Name),
       business_name: text(row.BusinessName),
       occupancy_type: text(row.OccupancyType),
@@ -1543,7 +1544,7 @@ async function municityRecords(parcel) {
         dateKeys.map((key) => date(row?.[key])).find(Boolean) ?? null;
       const sourceUrl =
         kind === "Document"
-          ? publicDocumentUrl(row) ?? parcelUrl
+          ? publicDocumentUrl(row) ?? `${parcelUrl}/Document`
           : ["Permit", "Application"].includes(kind) && Number.isSafeInteger(Number(row?.[idKey]))
             ? `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/${kind}/${Number(row[idKey])}`
             : parcelUrl;
