@@ -17,8 +17,8 @@ export function renderRadiusReport(output, data, { el, link }) {
   const countFormat = new Intl.NumberFormat("en-US");
   const summary = el("p", `${data.radius_label} straight-line from the `, "meta");
   summary.append(link(data.origin.source_url, "City address point"), " · Checked ",
-    checkedDate.format(new Date(data.checked_at)));
-  const note = el("p", "Google Maps counts listings marked operational. Categories can overlap. Use zero counts as leads to verify.", "meta");
+    checkedDate.format(new Date(data.checked_at)), " ET");
+  const note = el("p", "Google Maps counts listings marked operational. Categories can overlap.", "meta");
   const table = el("table", null, "storefront-table storefront-radius-table");
   table.setAttribute("aria-label", "Neighborhood counts");
   const header = el("tr");

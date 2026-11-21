@@ -102,6 +102,19 @@ table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-bottom
 th, td { text-align: left; vertical-align: top; padding: .52rem .3rem; border-top: 1px solid #e1e8de; }
 tbody th { width: 36%; font-weight: 650; }
 td p { color: var(--muted); margin: .16rem 0 0; }
+.profile-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .65rem; }
+.profile-origin { display: grid; gap: .2rem; min-width: 0; }
+.profile-origin label { font-size: .83rem; font-weight: 650; }
+.profile-origin select, #profile-run { min-height: 2.6rem; padding: .35rem .65rem; border: 1px solid #7f998c; border-radius: .25rem; }
+.profile-origin select { max-width: 100%; background: var(--paper); color: var(--ink); }
+#profile-run { background: var(--accent); color: #fff; font-weight: 650; }
+#profile-run:disabled { opacity: .65; cursor: wait; }
+#profile-output h3 { margin: .85rem 0 .2rem; font-size: 1.02rem; }
+#profile-output .meta { color: var(--muted); font-size: .83rem; margin: .25rem 0; }
+#profile-output td, #profile-output th { overflow-wrap: anywhere; }
+#profile-output .storefront-category-group { background: #edf2ec; }
+#profile-output small.meta { display: block; }
+#profile-output .storefront-category-count { font-variant-numeric: tabular-nums; }
 @media (max-width: 42rem) {
   .report-visuals.with-photo { grid-template-columns: 1fr; }
   .property-photo img { max-height: 17rem; }
@@ -116,7 +129,8 @@ td p { color: var(--muted); margin: .16rem 0 0; }
   :root, .report { background: #fff; }
   .report { max-width: none; padding: 0; font-size: 11pt; }
   .skip, .report-bar, .report-nav, .map-options input, .map-options label:not(:has(input:checked)),
-  .map-options:not(:has(input:checked)), .leaflet-control-zoom { display: none; }
+  .map-options:not(:has(input:checked)), .leaflet-control-zoom, .profile-controls, #profile-status,
+  #nearby-profile:not(:has(#profile-output > *)) { display: none; }
   h1 { font-size: 30pt; }
   h2, summary { break-after: avoid; }
   .report-section { margin-top: 17pt; }

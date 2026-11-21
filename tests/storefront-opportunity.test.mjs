@@ -205,6 +205,32 @@ test("a Google quota response stops further half-mile lookups and preserves the 
   assert.equal(categories.at(-1).count, 1);
 });
 
+test("property report runs only Google categories at a fixed quarter mile from a verified City point", async () => {
+  const input = { mode: "report_profile", confirmed_vacancy: undefined };
+  delete process.env.OPENROUTESERVICE_API_KEY;
+  delete process.env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED;
+  assert.equal((await post(input, false)).status, 401);
+  assert.equal((await post({ ...input, radius_meters: 805 })).status, 400);
+  assert.equal((await post({ ...input, origin: "city-address-99" })).status, 422);
+  assert.equal((await post({ ...input, query_address: "16 Congress Ave" })).status, 422);
+  assert.equal(google.length, 0);
+  const response = await post(input);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  const data = await response.json();
+  assert.equal(data.origin.id, "city-address-22");
+  assert.equal(data.radius_meters, 402);
+  assert.equal(data.vacancy, undefined);
+  assert.equal(data.categories.length, 14);
+  assert.equal(google.length, 14);
+  assert.equal(walks.length, 0);
+  assert.ok(google.every(({ insights, filter }) =>
+    insights.join() === "INSIGHT_COUNT" && filter.locationFilter.circle.radius === 402));
+  assert.ok(data.categories.every(({ attribution }) => attribution === "Google Maps"));
+  assert.equal(data.categories.find(({ label }) => label === "Groceries").count, 0);
+  assert.equal(data.categories.find(({ label }) => label === "Pharmacies").count, null);
+});
+
 test("both modeled walking windows use the alternate City address and return 46 bounded Google count checks", async () => {
   const response = await post({ storefront_sq_ft: 1800, space_checked_for: ["fresh-food"] });
   assert.equal(response.status, 200);

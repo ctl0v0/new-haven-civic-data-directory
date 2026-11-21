@@ -321,7 +321,7 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
   const affected = rows.filter(([id]) => issues.get(id)?.length).length;
   const navigation = [["map", "Map and photo"], ...(history ? [["history", "History"]] : []),
     ...rows.filter(([id, entries]) => entries.length || issues.get(id)?.length).map(([id]) => [id, chapters[id]]),
-    ["sources", "Sources and coverage"]];
+    ["nearby-profile", "Nearby places"], ["sources", "Sources and coverage"]];
   const checked = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
   }).format(new Date(generated_at));
@@ -381,6 +381,17 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
     </nav>
     ${reportMap(geometry, context, parcel, photograph)}${history}
     ${rows.map(([id, entries]) => recordChapter(id, entries, issues.get(id) ?? [])).join("")}
+    <section id="nearby-profile" class="report-section" data-parcel-query="${escape(query)}">
+      <h2 tabindex="-1">Nearby places within ¼ mile</h2>
+      <div class="profile-controls" hidden>
+        <div class="profile-origin" hidden><label for="profile-origin">City address point</label>
+          <select id="profile-origin"></select></div>
+        <button type="button" id="profile-run">Run quarter-mile profile</button>
+      </div>
+      <p id="profile-status" class="caption" role="status"></p>
+      <div id="profile-output"></div>
+      <noscript><p>Enable JavaScript to run the live Google Maps profile.</p></noscript>
+    </section>
     ${coverageSection(groups, addresses, photo, context)}
     </main><script src="/leaflet/leaflet.js" defer></script><script src="/parcel-report.js" type="module"></script>`);
 }

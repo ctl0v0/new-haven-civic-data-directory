@@ -1,4 +1,5 @@
 import { MAP_COLORS, STREET_TILES } from "./parcel-map-sources.js";
+import { renderRadiusReport } from "./storefront-opportunity.js";
 
 const mapData = document.getElementById("report-map-data");
 const mapStatus = document.getElementById("report-map-status");
@@ -102,6 +103,86 @@ document.getElementById("report-section-go").addEventListener("click", () => {
 });
 window.addEventListener("hashchange", revealTarget);
 revealTarget();
+
+const profile = document.getElementById("nearby-profile");
+const profileButton = document.getElementById("profile-run");
+const profileOrigin = document.getElementById("profile-origin");
+const profileStatus = document.getElementById("profile-status");
+const profileOutput = document.getElementById("profile-output");
+const profileQuery = new URLSearchParams(profile.dataset.parcelQuery);
+const opportunityPath = "/api/v1/parcel-opportunity";
+profile.querySelector(".profile-controls").hidden = false;
+
+async function profileRequest(path, options) {
+  const response = await fetch(path, options);
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) throw new Error(data?.error ?? (response.status === 429
+    ? "Too many requests. Try again in a minute." : "The nearby places profile could not be loaded."));
+  return data;
+}
+
+function profileElement(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text != null) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function profileLink(href, label) {
+  const link = profileElement("a", label);
+  try {
+    const url = new URL(href);
+    if (url.protocol === "https:") link.href = url.href;
+  } catch { /* Keep the source label if its link is unavailable. */ }
+  return link;
+}
+
+profileOrigin.addEventListener("change", () => {
+  profileOutput.replaceChildren();
+  profileStatus.textContent = "";
+  profileButton.textContent = "Run quarter-mile profile";
+});
+
+profileButton.addEventListener("click", async () => {
+  profileButton.disabled = true;
+  profileOutput.replaceChildren();
+  try {
+    if (!profileOrigin.options.length) {
+      profileStatus.textContent = "Checking City address points…";
+      const { origins, default_origin, radius_available, warning } =
+        await profileRequest(`${opportunityPath}?${profileQuery}`);
+      if (!origins.length) throw new Error(warning ?? "No verified City address point is available for this parcel.");
+      if (!radius_available) throw new Error("The quarter-mile profile is awaiting the Preview Google Places Aggregate key.");
+      profileOrigin.add(new Option("Choose a City address point", ""));
+      for (const point of origins) {
+        const repeated = origins.filter(({ address }) => address === point.address).length > 1;
+        profileOrigin.add(new Option(repeated ? `${point.address} · City point ${point.objectid}` : point.address, point.id));
+      }
+      profileOrigin.value = default_origin ?? "";
+      profileOrigin.closest(".profile-origin").hidden = Boolean(profileOrigin.value && origins.length === 1);
+    }
+    if (!profileOrigin.value) {
+      profileStatus.textContent = "Choose a City address point to run the profile.";
+      profileOrigin.focus();
+      return;
+    }
+    profileOrigin.disabled = true;
+    profileStatus.textContent = "Counting nearby places by category…";
+    const data = await profileRequest(opportunityPath, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...Object.fromEntries(profileQuery), mode: "report_profile", origin: profileOrigin.value }),
+    });
+    renderRadiusReport(profileOutput, data, { el: profileElement, link: profileLink });
+    const available = data.categories.filter(({ status }) => status === "ok").length;
+    profileStatus.textContent = `${available} of ${data.categories.length} category counts returned.`;
+    profileButton.textContent = "Refresh quarter-mile profile";
+  } catch (error) {
+    profileStatus.textContent = error.message;
+  } finally {
+    profileButton.disabled = false;
+    profileOrigin.disabled = false;
+  }
+});
 
 const print = document.getElementById("print-report");
 print.hidden = false;

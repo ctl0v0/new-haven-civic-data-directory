@@ -72,13 +72,16 @@ const RADIUS_CATEGORIES = [
 const CITY_SCOPE = new Set(["HILL", "THE HILL", "HILL NORTH", "HILL SOUTH"]);
 const conceptId = z.enum(storefrontConcepts.filter(({ commercial }) => commercial).map(({ id }) => id));
 const parcelId = z.union([z.string().regex(/^\d{1,12}$/), z.number().int().nonnegative().max(999999999999)]);
-const addressSubmission = z.strictObject({
+const parcelAddressSubmission = z.strictObject({
   parcel_id: parcelId,
   objectid: parcelId.optional(),
   query_address: z.string().max(160).optional(),
   origin: z.string().regex(/^city-address-\d{1,12}$/).optional(),
+});
+const addressSubmission = parcelAddressSubmission.extend({
   confirmed_vacancy: z.literal(true),
 });
+const reportProfileSubmission = parcelAddressSubmission.extend({ mode: z.literal("report_profile") });
 const submission = addressSubmission.extend({
   storefront_sq_ft: z.number().int().positive().max(1_000_000).optional(),
   space_checked_for: z.array(conceptId).max(5).default([]),
@@ -275,12 +278,36 @@ async function collectCounts(tasks, count, { parallel, signal }) {
   await Promise.all(Array.from({ length: Math.min(tasks.length, parallel) }, worker));
 }
 
-async function resolveStorefront({ parcel_id, objectid, query_address, origin: originId }, env) {
+async function resolveCityOrigin({ parcel_id, objectid, query_address, origin: originId }, env) {
   const addresses = await nearbyBusinessOrigins({ parcel_id, objectid, query_address }, env);
   const origin = addresses.origins.find(({ id, method }) =>
     id === (originId ?? addresses.default_origin) && method === "city-address-point");
-  if (!origin) throw new SourceError("Choose a verified City street address for this storefront.", 422);
-  return { parcel_id: addresses.parcel_id, objectid: addresses.objectid, origin, vacancy: "user_confirmed" };
+  if (!origin) throw new SourceError("Choose a verified City street address for this parcel.", 422);
+  return { parcel_id: addresses.parcel_id, objectid: addresses.objectid, origin };
+}
+
+async function googleRadiusCounts(key, origin, radius, signal) {
+  const categories = RADIUS_CATEGORIES.map((category) => ({
+    ...category, status: "unavailable", count: null, reason: null,
+    source_url: GOOGLE_PLACES_SOURCE, attribution: "Google Maps",
+  }));
+  await collectCounts(categories.map((result) => ({ result })),
+    ({ result }, timeout) => countPlacesWithinRadius(key, origin, radius, result.types, timeout),
+    { parallel: 3, signal });
+  return categories;
+}
+
+export async function quarterMileBusinessProfile(input, { env = process.env, signal } = {}) {
+  const parsed = reportProfileSubmission.safeParse(input);
+  if (!parsed.success)
+    throw new SourceError("Provide one parcel and an optional verified City address point.", 400);
+  const key = env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
+  if (!key) throw new SourceError("The quarter-mile profile is awaiting the Preview Google Places Aggregate key.", 503);
+  const location = await resolveCityOrigin(parsed.data, env);
+  const radius = DEFAULT_STOREFRONT_RADIUS;
+  const categories = await googleRadiusCounts(key, location.origin, radius, signal);
+  return { ...location, radius_meters: radius, radius_label: businessRadii[radius],
+    checked_at: new Date().toISOString(), categories };
 }
 
 export async function analyzeRadius(input, { env = process.env, signal } = {}) {
@@ -289,18 +316,12 @@ export async function analyzeRadius(input, { env = process.env, signal } = {}) {
     throw new SourceError("Confirm a vacant storefront and provide one parcel, a City address, and a supported search radius.", 400);
   const key = env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
   if (!key) throw new SourceError("Neighborhood analysis is awaiting the Preview Google Places Aggregate key.", 503);
-  const storefront = await resolveStorefront(parsed.data, env);
+  const storefront = await resolveCityOrigin(parsed.data, env);
   const { origin } = storefront;
   const { radius_meters: radius } = parsed.data;
-  const categories = RADIUS_CATEGORIES.map((category) => ({
-    ...category, status: "unavailable", count: null, reason: null,
-    source_url: GOOGLE_PLACES_SOURCE, attribution: "Google Maps",
-  }));
-  const [transit] = await Promise.all([
+  const [transit, categories] = await Promise.all([
     nearbyTransitStops(origin, radius),
-    collectCounts(categories.map((result) => ({ result })),
-      ({ result }, timeout) => countPlacesWithinRadius(key, origin, radius, result.types, timeout),
-      { parallel: 3, signal }),
+    googleRadiusCounts(key, origin, radius, signal),
   ]);
   const transitOk = ["ok", "no_records"].includes(transit.status);
   categories.push({
@@ -309,7 +330,7 @@ export async function analyzeRadius(input, { env = process.env, signal } = {}) {
     source_url: transit.source_url, attribution: "City GIS", reason: transit.warning,
     note: "Counts mapped stops. Check CT Transit for routes and current service.",
   });
-  return { ...storefront, radius_meters: radius, radius_label: businessRadii[radius],
+  return { ...storefront, vacancy: "user_confirmed", radius_meters: radius, radius_label: businessRadii[radius],
     checked_at: new Date().toISOString(), categories };
 }
 
@@ -319,7 +340,7 @@ export async function analyzeStorefront(input, { env = process.env, signal } = {
     throw new SourceError("Confirm a vacant storefront and provide a valid parcel, address and optional storefront area.", 400);
   const availability = opportunityAvailability(env);
   if (!availability.configured) throw new SourceError(availability.reason, 503);
-  const storefront = await resolveStorefront(parsed.data, env);
+  const storefront = await resolveCityOrigin(parsed.data, env);
   const { origin } = storefront;
   const parcel = await loadParcel(parsed.data.parcel_id, parsed.data.objectid ?? null);
   const windows = await walkingAreas(origin, env.OPENROUTESERVICE_API_KEY.trim());
@@ -329,7 +350,7 @@ export async function analyzeStorefront(input, { env = process.env, signal } = {
   ]);
   const { neighborhoods, zoning, subareas, source_checks } = site;
   return {
-    ...storefront, storefront_sq_ft: parsed.data.storefront_sq_ft ?? null,
+    ...storefront, vacancy: "user_confirmed", storefront_sq_ft: parsed.data.storefront_sq_ft ?? null,
     walking: {
       source_url: WALK_SOURCE, attribution: "openrouteservice by HeiGIT · OpenStreetMap contributors",
       areas: windows.map(({ minutes, status, reason }) => ({ minutes, status, reason: reason ?? null })),

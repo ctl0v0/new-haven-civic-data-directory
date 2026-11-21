@@ -81,6 +81,11 @@ test("report retains historical rows beyond one result page, with factual links 
   assert.ok($("#map #report-map").length);
   assert.equal(JSON.parse($("#report-map-data").text()).layers[0].title, "</script><script>unsafe</script>");
   assert.equal($("#report-photo").attr("src"), "https://www.municitymedia.com/parcel.jpg");
+  const profileQuery = new URLSearchParams($("#nearby-profile").attr("data-parcel-query"));
+  assert.equal(profileQuery.get("query_address"), "138 Bradley St");
+  assert.equal($(".report-nav a[href='#nearby-profile']").length, 1);
+  assert.equal($("#nearby-profile .profile-controls[hidden]").length, 1);
+  assert.equal($("#profile-output").children().length, 0);
   assert.equal($("script:not([src]):not([type])").length, 0);
   assert.equal($("a[href^='javascript:']").length, 0);
   assert.doesNotMatch($("#activity dl").text(), /Not provided|Permit ID|Issue date/i);
@@ -103,7 +108,9 @@ test("HTML report requires the private pilot and leaves a usable report when map
       else process.env[key] = value;
     }
   });
+  let googleCalls = 0;
   globalThis.fetch = async (input) => {
+    if (new URL(input).hostname === "areainsights.googleapis.com") googleCalls++;
     if (String(input).startsWith(LAYERS.parcels + "/query"))
       return Response.json({ features: [{ attributes: { objectid: 23816, parcel_id: 11293,
         property_address: "136 BRADLEY ST", owner_name_1: "Fixture Property Owner" }, geometry: { rings: [] } }] });
@@ -123,6 +130,7 @@ test("HTML report requires the private pilot and leaves a usable report when map
   assert.equal($("#report-photo").length, 0);
   assert.match($("#ownership .coverage-note").text(), /Assessor ownership history · Unavailable/);
   assert.match($("#sources").text(), /Unavailable/);
+  assert.equal(googleCalls, 0);
   process.env.VERCEL_ENV = "production";
   assert.equal((await route.fetch(new Request(url, { headers }))).status, 404);
 });

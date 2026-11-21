@@ -32,6 +32,20 @@ if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[parcel-report-smoke]')) {
     console.warn(JSON.stringify({ event: 'preview_parcel_report_failed', message: error.message }));
   }
 }
+if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[report-places-smoke]')) {
+  try {
+    const { quarterMileBusinessProfile } = await import('../parcel/storefront-opportunity.js');
+    const { origin, radius_meters, categories } = await quarterMileBusinessProfile({
+      mode: 'report_profile', parcel_id: 11293, objectid: 23816, query_address: '138 Bradley St',
+    });
+    console.log(JSON.stringify({ event: 'preview_parcel_report_places', origin: origin.address, radius_meters,
+      returned_categories: categories.filter(({ status }) => status === 'ok').length,
+      unavailable_categories: categories.filter(({ status }) => status !== 'ok')
+        .map(({ label, reason }) => ({ label, reason })) }));
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'preview_parcel_report_places_failed', message: error.message }));
+  }
+}
 if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[charity-registration-smoke]')) {
   const { CHARITY_SOURCE } = await import('../parcel/charity-registrations.js');
   const { stateRosterInventory } = await import('../search-index/socrata.js');
