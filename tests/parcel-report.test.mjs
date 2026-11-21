@@ -22,11 +22,18 @@ test("report retains historical rows beyond one result page, with factual links 
     parcel: { parcel_id: 11293, objectid: 23816, address: "136 Bradley St", source_url: LAYERS.parcels, account_number: null },
     searchedAddress: "138 Bradley St",
     groups: [
+      { group: "property", sources: [], items: [
+        record("assessor-valuations", "10", { valuation_year: "2010", valuation_type: "assessed", total: "$30,000" }),
+        record("assessor-valuations", "25", { valuation_year: "2025", valuation_type: "assessed", total: "$40,000" }),
+      ] },
       { group: "ownership", sources: [], items: [record("parcel-sale", "1", { price: 0, book: "12", page: "" },
         { event_date: "2001-01-01" })] },
-      { group: "activity", items: [...permits, record("municity", "contact:1", { contact_name: null, contact_role: "" },
-        { category: "Contact" })], sources: [{ source_id: "municity", source_url: sourceUrl, status: "ok",
-        count: 30, omitted_categories: ["License"], warning: "The City omitted the License category." }] },
+      { group: "activity", items: [
+        record("municity", "permit:undated", { PermitNo: "BP-UNKNOWN", PermitType: "Building" }, { category: "Permit" }),
+        ...permits,
+        record("municity", "contact:1", { contact_name: null, contact_role: "" }, { category: "Contact" }),
+      ], sources: [{ source_id: "municity", source_url: sourceUrl, status: "ok",
+        count: 32, omitted_categories: ["License"], warning: "The City omitted the License category." }] },
       { group: "business", sources: [], items: [record("ct-public-charities", "2671715",
         { dba: "BRADLEY STREET BICYCLE CO-OP", status: "ACTIVE", registered_address_as_published: "138 Bradley St" },
         { category: "Registration", event_date: "2024-11-19" })] },
@@ -42,7 +49,11 @@ test("report retains historical rows beyond one result page, with factual links 
   const $ = load(html);
   assert.equal($("h1").text(), "136 Bradley St");
   assert.match($(".mapped-addresses").text(), /138 Bradley St.*Unit 2/);
-  assert.equal($("#activity .record").length, 30);
+  assert.equal($("#activity .record").length, 31);
+  assert.deepEqual($("#activity .record time").map((_, time) => $(time).attr("datetime")).get(),
+    permits.map(({ event_date }) => event_date).reverse());
+  assert.match($("#activity .record").last().find("h4").text(), /BP-UNKNOWN/);
+  assert.match($("#property .record").first().find("h4").text(), /2025 assessed valuation/);
   assert.equal($("#history li").length, 32);
   assert.equal($(".report details:not([open])").length, 0);
   assert.equal($("#history li").first().find("time").attr("datetime"), "2024-11-19");

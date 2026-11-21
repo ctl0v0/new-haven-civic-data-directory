@@ -137,6 +137,14 @@ function meaningfulFields(item) {
     (item.source_id === "municity" ? municipalFields[item.category] : null));
 }
 
+function publishedDate(item) {
+  if (item.event_date) return item.event_date;
+  const year = String(item.attributes?.valuation_year ?? "").trim();
+  return item.source_id === "assessor-valuations" && /^\d{4}$/.test(year) ? year : "";
+}
+
+const newestFirst = (a, b) => publishedDate(b.item).localeCompare(publishedDate(a.item));
+
 function recordRow(item, id, title, candidates) {
   const status = valueText(recordStatus(item));
   const date = item.event_date ? `<span>${escape(eventDateLabel(item))} <time datetime="${escape(item.event_date)}">${escape(shortDate(item.event_date))}</time></span>` : "";
@@ -154,7 +162,7 @@ function timeline(items) {
     .map(({ item }) => item.source_record_id));
   const dated = items.filter(({ item }) => item.event_date &&
       !(timelineMirrors.has(item.source_id) && originalIds.has(item.source_record_id)))
-    .sort((a, b) => b.item.event_date.localeCompare(a.item.event_date));
+    .sort(newestFirst);
   if (!dated.length) return "";
   const years = Map.groupBy(dated, ({ item }) => item.event_date.slice(0, 4));
   return `<section id="history" class="report-section"><h2>Parcel history</h2>
@@ -173,7 +181,7 @@ function recordChapter(key, entries) {
   return `<section id="${key}" class="report-section"><h2>${chapters[key]}</h2>
     ${[...sections].map(([heading, rows]) => `<details class="record-section" open>
       <summary><h3>${escape(heading)}</h3><span>${rows.length}</span></summary>
-      ${rows.map(({ item, id, title, fields }) => recordRow(item, id, title, fields)).join("")}
+      ${rows.sort(newestFirst).map(({ item, id, title, fields }) => recordRow(item, id, title, fields)).join("")}
       </details>`).join("")}</section>`;
 }
 
