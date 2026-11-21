@@ -366,7 +366,8 @@ body.record-only-mode #parcel-map-section { display: none; }
 .storefront-check { display: flex; gap: .45rem; align-items: baseline; margin: .3rem 0; font-size: .88rem; }
 .storefront-check input { width: 1rem; height: 1rem; margin: 0; flex: 0 0 auto; accent-color: #0b624d; }
 .storefront-space-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .2rem .55rem; }
-#storefront-run { justify-self: start; }
+#storefront-walking-options { display: grid; gap: .65rem; }
+#storefront-run, #storefront-half-mile { justify-self: start; }
 #storefront-status:empty { display: none; }
 #storefront-report { margin-top: 1rem; }
 #storefront-report h3, #storefront-report h4 { margin: 0 0 .45rem; }

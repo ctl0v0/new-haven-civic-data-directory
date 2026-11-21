@@ -2546,7 +2546,7 @@ $("nearby-business-clear-types")?.addEventListener("click", () => {
   clearNearbyBusinessResults(nearbyBusinessGroup.form);
 });
 
-$("nearby-business-open")?.addEventListener("click", async () => {
+async function openNearbyBusinessResearch({ radiusMeters, originId } = {}) {
   if (!selected || requestedParcelKey !== parcelKey(selected)) return;
   const panel = $("nearby-business-research");
   if (!panel.hidden) {
@@ -2561,6 +2561,7 @@ $("nearby-business-open")?.addEventListener("click", async () => {
   $("nearby-business-title").focus();
   const form = $("nearby-business-form");
   form.reset();
+  if (radiusMeters) form.elements.radius_meters.value = String(radiusMeters);
   $("nearby-business-subcategories").open = false;
   resetNearbyBusinessTypes();
   const origin = form.elements.origin;
@@ -2582,9 +2583,9 @@ $("nearby-business-open")?.addEventListener("click", async () => {
       const label = repeated ? `${choice.address} · City point ${choice.objectid}` : choice.address ?? "City parcel's mapped center";
       origin.add(new Option(label, choice.id));
     }
-    origin.value = data.default_origin ?? "";
+    origin.value = originId ?? data.default_origin ?? "";
     nearbyBusinessConfigured = data.configured;
-    note.textContent = data.warning ?? (!data.default_origin && searchedAddress
+    note.textContent = data.warning ?? (!origin.value && searchedAddress
       ? `A City point for ${searchedAddress} could not be verified. Choose a published address from this parcel.`
       : "The search uses a straight-line radius.");
     note.hidden = false;
@@ -2599,7 +2600,8 @@ $("nearby-business-open")?.addEventListener("click", async () => {
       $("nearby-business-fields").disabled = false;
     }
   }
-});
+}
+$("nearby-business-open")?.addEventListener("click", () => void openNearbyBusinessResearch());
 
 $("nearby-business-form")?.addEventListener("change", (event) => {
   if (event.target === nearbyBusinessTypeFilter) return;
@@ -2746,6 +2748,7 @@ function closeStorefrontOpportunity() {
 function updateStorefrontRun(form) {
   $("storefront-run").disabled = !storefrontConfigured || !form.elements.origin.value ||
     !form.elements.confirmed_vacancy.checked;
+  $("storefront-half-mile").disabled = !form.elements.origin.value;
 }
 
 $("storefront-opportunity-open")?.addEventListener("click", async () => {
@@ -2771,6 +2774,8 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
   const checks = $("storefront-space-checks");
   checks.replaceChildren();
   storefrontConfigured = false;
+  $("storefront-walking-options").hidden = true;
+  $("storefront-half-mile").hidden = true;
   updateStorefrontRun(form);
   $("storefront-opportunity-fields").disabled = true;
   status.textContent = "Checking City address points…";
@@ -2794,8 +2799,12 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
       checks.append(label);
     }
     storefrontConfigured = data.configured;
+    const halfMile = !data.configured && data.half_mile_available;
+    $("storefront-walking-options").hidden = !data.configured;
+    $("storefront-half-mile").hidden = !halfMile;
     status.textContent = data.reason ?? data.warning ??
       (data.origins.length ? "" : "No verified City street address is available for this parcel.");
+    if (halfMile) status.textContent += " You can check one place category at a time within a straight-line half-mile radius.";
     updateStorefrontRun(form);
   } catch (error) {
     if (storefrontRequest === request) status.textContent = error.message;
@@ -2805,6 +2814,12 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
       $("storefront-opportunity-fields").disabled = false;
     }
   }
+});
+
+$("storefront-half-mile")?.addEventListener("click", () => {
+  const originId = $("storefront-origin").value;
+  if (!originId || storefrontRequest) return;
+  void openNearbyBusinessResearch({ radiusMeters: 805, originId });
 });
 
 $("storefront-opportunity-form")?.addEventListener("change", (event) => {

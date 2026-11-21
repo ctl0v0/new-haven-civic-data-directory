@@ -8,12 +8,14 @@ export default guarded(async (request) => {
   if (!pilotPreviewEnabled()) throw new SourceError("Storefront analysis is available in the private Preview.", 404);
   if (request.method === "GET") {
     const { id, objectid, query_address } = params(request);
-    const { origins, default_origin, warning } = await nearbyBusinessOrigins({
+    const { origins, default_origin, warning, configured: placesConfigured } = await nearbyBusinessOrigins({
       parcel_id: id, objectid: objectid ?? undefined, query_address: query_address ?? undefined,
     });
+    const cityOrigins = origins.filter(({ method }) => method === "city-address-point");
     return {
-      ...opportunityAvailability(), origins: origins.filter(({ method }) => method === "city-address-point"),
+      ...opportunityAvailability(), origins: cityOrigins,
       default_origin, warning,
+      half_mile_available: placesConfigured && cityOrigins.length > 0,
       space_checks: storefrontConcepts.filter(({ commercial }) => commercial)
         .map(({ id, label }) => ({ id, label })),
     };

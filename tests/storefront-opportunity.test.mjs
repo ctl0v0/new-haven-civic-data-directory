@@ -107,14 +107,16 @@ function post(params = {}, authenticated = true) {
   }));
 }
 
-test("Preview inspection resolves the searched City address and makes no paid calls", async () => {
+test("Preview inspection offers half-mile research when the walking report is unavailable", async () => {
+  delete process.env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED;
   const response = await route.fetch(new Request(`${host}?parcel_id=${parcelId}&objectid=111&query_address=14+Congress+Ave`, {
     headers: { authorization: `Bearer ${token}` },
   }));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   const data = await response.json();
-  assert.equal(data.configured, true);
+  assert.equal(data.configured, false);
+  assert.equal(data.half_mile_available, true);
   assert.equal(data.default_origin, "city-address-22");
   assert.deepEqual(data.origins.map(({ id }) => id), ["city-address-21", "city-address-22"]);
   assert.equal(walks.length + google.length, 0);

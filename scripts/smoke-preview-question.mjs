@@ -188,6 +188,12 @@ try {
   const origin = result.origins.find(({ id }) => id === result.default_origin);
   console.log(JSON.stringify({ event: 'preview_nearby_business_origin', configured: result.configured,
     origins: result.origins.length, exact_address: origin?.method === 'city-address-point', warning: result.warning }));
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-half-mile-smoke]')) {
+    const nearby = await nearbyBusinessCount({ ...parcel, category: 'grocery_store', radius_meters: 805 });
+    if (nearby.radius_meters !== 805 || nearby.origin.id !== origin?.id || origin?.method !== 'city-address-point')
+      throw new Error('The half-mile check did not use the expected City address and radius');
+    console.log(JSON.stringify({ event: 'preview_storefront_half_mile', status: 'ok', radius_meters: nearby.radius_meters }));
+  }
   if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-walk-smoke]')) {
     const routingKey = process.env.OPENROUTESERVICE_API_KEY?.trim();
     const googleKey = process.env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
