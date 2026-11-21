@@ -122,7 +122,7 @@ function post(params = {}, authenticated = true) {
   }));
 }
 
-test("Preview inspection offers half-mile research when the walking report is unavailable", async () => {
+test("Preview inspection offers radius research when the walking report is unavailable", async () => {
   delete process.env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED;
   const response = await route.fetch(new Request(`${host}?parcel_id=${parcelId}&objectid=111&query_address=14+Congress+Ave`, {
     headers: { authorization: `Bearer ${token}` },
@@ -131,6 +131,7 @@ test("Preview inspection offers half-mile research when the walking report is un
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   const data = await response.json();
   assert.equal(data.configured, false);
+  assert.equal(data.radius_available, true);
   assert.equal(data.half_mile_available, true);
   assert.equal(data.default_origin, "city-address-22");
   assert.deepEqual(data.origins.map(({ id }) => id), ["city-address-21", "city-address-22"]);
@@ -150,10 +151,10 @@ test("analysis rejects unconfirmed vacancy, bad origins and missing Preview sett
   assert.equal(walks.length + google.length, 0);
 });
 
-test("one half-mile submission checks every category from a single verified City point", async () => {
+test("one radius submission defaults to a quarter mile for all categories and City GIS", async () => {
   delete process.env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED;
   delete process.env.OPENROUTESERVICE_API_KEY;
-  const mode = "half_mile";
+  const mode = "radius";
   assert.equal((await post({ mode, confirmed_vacancy: false })).status, 400);
   assert.equal((await post({ mode, parcel_id: [parcelId] })).status, 400);
   assert.equal((await post({ mode, radius_meters: 1609 })).status, 400);
@@ -165,7 +166,8 @@ test("one half-mile submission checks every category from a single verified City
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   const data = await response.json();
   assert.equal(data.origin.id, "city-address-22");
-  assert.equal(data.radius_meters, 805);
+  assert.equal(data.radius_meters, 402);
+  assert.equal(data.radius_label, "¼ mile");
   assert.equal(data.categories.length, 15);
   assert.equal(walks.length, 0);
   assert.equal(google.length, 14);
@@ -174,7 +176,7 @@ test("one half-mile submission checks every category from a single verified City
   assert.deepEqual(requestedTypes, data.categories.filter(({ attribution }) => attribution === "Google Maps").map(({ types }) => types));
   for (const { insights, filter } of google) {
     assert.deepEqual(insights, ["INSIGHT_COUNT"]);
-    assert.deepEqual(filter.locationFilter, { circle: { latLng: { latitude: origin[1], longitude: origin[0] }, radius: 805 } });
+    assert.deepEqual(filter.locationFilter, { circle: { latLng: { latitude: origin[1], longitude: origin[0] }, radius: 402 } });
   }
   const [groceries, , pharmacy] = data.categories;
   assert.equal(groceries.status, "ok");
@@ -182,14 +184,21 @@ test("one half-mile submission checks every category from a single verified City
   assert.equal(pharmacy.status, "unavailable");
   assert.equal(pharmacy.count, null);
   assert.equal(data.categories.at(-1).source_url, transitLayer);
-  assert.equal(data.categories.at(-1).count, 1);
+  assert.equal(data.categories.at(-1).count, 0);
+  const halfMile = await (await post({ mode, radius_meters: 805 })).json();
+  assert.equal(halfMile.radius_meters, 805);
+  assert.equal(halfMile.radius_label, "½ mile");
+  assert.equal(halfMile.categories.at(-1).count, 1);
+  assert.equal(google.length, 28);
+  assert.ok(google.slice(14).every(({ filter }) => filter.locationFilter.circle.radius === 805));
 });
 
 test("a Google quota response stops further half-mile lookups and preserves the City count", async () => {
   quota = true;
   const response = await post({ mode: "half_mile" });
   assert.equal(response.status, 200);
-  const { categories } = await response.json();
+  const { categories, radius_meters } = await response.json();
+  assert.equal(radius_meters, 805);
   assert.equal(google.length, 3);
   assert.ok(categories.slice(0, -1).every(({ status, count, reason }) =>
     status === "unavailable" && count === null && reason.includes("quota")));

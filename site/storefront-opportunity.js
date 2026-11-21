@@ -13,14 +13,14 @@ const checkedDate = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
 });
 
-export function renderHalfMileReport(output, data, { el, link }) {
+export function renderRadiusReport(output, data, { el, link }) {
   const countFormat = new Intl.NumberFormat("en-US");
-  const summary = el("p", "½ mile straight-line from the ", "meta");
+  const summary = el("p", `${data.radius_label} straight-line from the `, "meta");
   summary.append(link(data.origin.source_url, "City address point"), " · Checked ",
     checkedDate.format(new Date(data.checked_at)));
   const note = el("p", "Google Maps counts listings marked operational. Categories can overlap. Use zero counts as leads to verify.", "meta");
-  const table = el("table", null, "storefront-table storefront-half-mile-table");
-  table.setAttribute("aria-label", "Half-mile neighborhood counts");
+  const table = el("table", null, "storefront-table storefront-radius-table");
+  table.setAttribute("aria-label", "Neighborhood counts");
   const header = el("tr");
   for (const label of ["Place category", "Count", "Source"]) {
     const cell = el("th", label);

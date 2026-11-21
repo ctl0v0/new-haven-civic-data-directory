@@ -5,7 +5,8 @@ import { LAYERS } from "./config.js";
 import { arcgis, cached, SourceError } from "./http.js";
 import { nearbyTransitStops } from "./map-context.js";
 import {
-  businessCategoryGroups, countPlacesInWalkingArea, countPlacesWithinRadius, GOOGLE_PLACES_SOURCE, nearbyBusinessOrigins,
+  businessCategoryGroups, businessRadii, countPlacesInWalkingArea, countPlacesWithinRadius,
+  DEFAULT_STOREFRONT_RADIUS, GOOGLE_PLACES_SOURCE, nearbyBusinessOrigins, STOREFRONT_RADII,
 } from "./nearby-business-count.js";
 import { loadParcel, normalizeAddress } from "./resolve.js";
 import { walkingAreas, walkingAreaContains, WALK_MINUTES, WALK_SOURCE } from "./walking-areas.js";
@@ -49,8 +50,7 @@ export const storefrontConcepts = [
 const MAX_GOOGLE_COUNTS = 46;
 const MAX_PARALLEL_COUNTS = 6;
 const COUNT_BUDGET_MS = 32_000;
-const HALF_MILE_METERS = 805;
-const HALF_MILE_CATEGORIES = [
+const RADIUS_CATEGORIES = [
   { group: "Food and essentials", label: "Groceries", types: ["grocery_store", "supermarket", "discount_supermarket", "asian_grocery_store"] },
   { group: "Food and essentials", label: "Convenience stores", types: ["convenience_store"] },
   { group: "Food and essentials", label: "Pharmacies", types: ["pharmacy"] },
@@ -83,7 +83,14 @@ const submission = addressSubmission.extend({
   storefront_sq_ft: z.number().int().positive().max(1_000_000).optional(),
   space_checked_for: z.array(conceptId).max(5).default([]),
 }).refine(({ storefront_sq_ft, space_checked_for }) => !space_checked_for.length || storefront_sq_ft);
-const halfMileSubmission = addressSubmission.extend({ mode: z.literal("half_mile") });
+const radiusSubmission = z.union([
+  addressSubmission.extend({
+    mode: z.literal("radius"),
+    radius_meters: z.literal(STOREFRONT_RADII).default(DEFAULT_STOREFRONT_RADIUS),
+  }),
+  addressSubmission.extend({ mode: z.literal("half_mile") })
+    .transform((data) => ({ ...data, radius_meters: 805 })),
+]);
 
 export function opportunityAvailability(env = process.env) {
   const reason = !env.OPENROUTESERVICE_API_KEY?.trim()
@@ -276,22 +283,23 @@ async function resolveStorefront({ parcel_id, objectid, query_address, origin: o
   return { parcel_id: addresses.parcel_id, objectid: addresses.objectid, origin, vacancy: "user_confirmed" };
 }
 
-export async function analyzeHalfMile(input, { env = process.env, signal } = {}) {
-  const parsed = halfMileSubmission.safeParse(input);
+export async function analyzeRadius(input, { env = process.env, signal } = {}) {
+  const parsed = radiusSubmission.safeParse(input);
   if (!parsed.success)
-    throw new SourceError("Confirm a vacant storefront and provide one valid parcel and City address.", 400);
+    throw new SourceError("Confirm a vacant storefront and provide one parcel, a City address, and a supported search radius.", 400);
   const key = env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
-  if (!key) throw new SourceError("Half-mile analysis is awaiting the Preview Google Places Aggregate key.", 503);
+  if (!key) throw new SourceError("Neighborhood analysis is awaiting the Preview Google Places Aggregate key.", 503);
   const storefront = await resolveStorefront(parsed.data, env);
   const { origin } = storefront;
-  const categories = HALF_MILE_CATEGORIES.map((category) => ({
+  const { radius_meters: radius } = parsed.data;
+  const categories = RADIUS_CATEGORIES.map((category) => ({
     ...category, status: "unavailable", count: null, reason: null,
     source_url: GOOGLE_PLACES_SOURCE, attribution: "Google Maps",
   }));
   const [transit] = await Promise.all([
-    nearbyTransitStops(origin, HALF_MILE_METERS),
+    nearbyTransitStops(origin, radius),
     collectCounts(categories.map((result) => ({ result })),
-      ({ result }, timeout) => countPlacesWithinRadius(key, origin, HALF_MILE_METERS, result.types, timeout),
+      ({ result }, timeout) => countPlacesWithinRadius(key, origin, radius, result.types, timeout),
       { parallel: 3, signal }),
   ]);
   const transitOk = ["ok", "no_records"].includes(transit.status);
@@ -301,7 +309,8 @@ export async function analyzeHalfMile(input, { env = process.env, signal } = {})
     source_url: transit.source_url, attribution: "City GIS", reason: transit.warning,
     note: "Counts mapped stops. Check CT Transit for routes and current service.",
   });
-  return { ...storefront, radius_meters: HALF_MILE_METERS, checked_at: new Date().toISOString(), categories };
+  return { ...storefront, radius_meters: radius, radius_label: businessRadii[radius],
+    checked_at: new Date().toISOString(), categories };
 }
 
 export async function analyzeStorefront(input, { env = process.env, signal } = {}) {

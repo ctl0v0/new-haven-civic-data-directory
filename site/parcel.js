@@ -2763,7 +2763,7 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
 
 let storefrontRequest = null;
 let storefrontConfigured = false;
-let storefrontHalfMileConfigured = false;
+let storefrontRadiusConfigured = false;
 
 function closeStorefrontOpportunity() {
   const panel = $("storefront-opportunity");
@@ -2771,7 +2771,7 @@ function closeStorefrontOpportunity() {
   storefrontRequest?.abort();
   storefrontRequest = null;
   storefrontConfigured = false;
-  storefrontHalfMileConfigured = false;
+  storefrontRadiusConfigured = false;
   panel.hidden = true;
   $("storefront-opportunity-open").setAttribute("aria-expanded", "false");
   $("storefront-report").replaceChildren();
@@ -2781,7 +2781,7 @@ function closeStorefrontOpportunity() {
 function updateStorefrontRun(form) {
   const ready = form.elements.origin.value && form.elements.confirmed_vacancy.checked;
   $("storefront-run").disabled = !storefrontConfigured || !ready;
-  $("storefront-half-mile").disabled = !storefrontHalfMileConfigured || !ready;
+  $("storefront-radius-run").disabled = !storefrontRadiusConfigured || !ready;
 }
 
 $("storefront-opportunity-open")?.addEventListener("click", async () => {
@@ -2807,9 +2807,9 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
   const checks = $("storefront-space-checks");
   checks.replaceChildren();
   storefrontConfigured = false;
-  storefrontHalfMileConfigured = false;
+  storefrontRadiusConfigured = false;
   $("storefront-walking-options").hidden = true;
-  $("storefront-half-mile").hidden = true;
+  $("storefront-radius-options").hidden = true;
   updateStorefrontRun(form);
   $("storefront-opportunity-fields").disabled = true;
   status.textContent = "Checking City address points…";
@@ -2833,12 +2833,12 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
       checks.append(label);
     }
     storefrontConfigured = data.configured;
-    storefrontHalfMileConfigured = data.half_mile_available;
+    storefrontRadiusConfigured = data.radius_available;
     $("storefront-walking-options").hidden = !data.configured;
-    $("storefront-half-mile").hidden = !storefrontHalfMileConfigured;
+    $("storefront-radius-options").hidden = !storefrontRadiusConfigured;
     status.textContent = !data.origins.length
       ? data.warning ?? "No verified City street address is available for this parcel."
-      : storefrontHalfMileConfigured ? "" : "Neighborhood analysis is awaiting the Preview Google Places Aggregate key.";
+      : storefrontRadiusConfigured ? "" : "Neighborhood analysis is awaiting the Preview Google Places Aggregate key.";
     updateStorefrontRun(form);
   } catch (error) {
     if (storefrontRequest === request) status.textContent = error.message;
@@ -2863,8 +2863,8 @@ $("storefront-opportunity-form")?.addEventListener("change", (event) => {
 
 $("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const halfMile = event.submitter?.value === "half_mile";
-  if (storefrontRequest || !(halfMile ? storefrontHalfMileConfigured : storefrontConfigured) || !selected ||
+  const byRadius = event.submitter?.value === "radius";
+  if (storefrontRequest || !(byRadius ? storefrontRadiusConfigured : storefrontConfigured) || !selected ||
       $("storefront-opportunity").hidden || !maplessRecords) return;
   const form = event.currentTarget;
   const { elements } = form;
@@ -2872,8 +2872,10 @@ $("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
   const payload = {
     ...Object.fromEntries(selectedQuery()), origin: elements.origin.value, confirmed_vacancy: true,
   };
-  if (halfMile) payload.mode = "half_mile";
-  else {
+  if (byRadius) {
+    payload.mode = "radius";
+    payload.radius_meters = Number(elements.radius_meters.value);
+  } else {
     const area = elements.storefront_sq_ft.valueAsNumber;
     payload.storefront_sq_ft = Number.isFinite(area) ? area : undefined;
     payload.space_checked_for = [...form.querySelectorAll('input[name="space_checked_for"]:checked')]
@@ -2884,10 +2886,12 @@ $("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
   const status = $("storefront-status");
   const report = $("storefront-report");
   report.hidden = true;
-  status.textContent = halfMile ? "Checking each category within ½ mile…" : "Calculating walking areas and checking nearby places…";
+  status.textContent = byRadius
+    ? `Checking each category within ${elements.radius_meters.selectedOptions[0].textContent}…`
+    : "Calculating walking areas and checking nearby places…";
   $("storefront-opportunity-fields").disabled = true;
   try {
-    const [{ renderStorefrontReport, renderHalfMileReport }, data] = await Promise.all([
+    const [{ renderStorefrontReport, renderRadiusReport }, data] = await Promise.all([
       import("/storefront-opportunity.js"),
       api("/api/v1/parcel-opportunity", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
@@ -2895,7 +2899,7 @@ $("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
       }),
     ]);
     if (storefrontRequest !== request) return;
-    const render = halfMile ? renderHalfMileReport : renderStorefrontReport;
+    const render = byRadius ? renderRadiusReport : renderStorefrontReport;
     render(report, data, { el, link, sourceNames });
     report.hidden = false;
     status.textContent = "";

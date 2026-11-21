@@ -5,7 +5,7 @@ import {
   pilotPreviewEnabled,
 } from "../parcel/auth.js";
 import { businessCategoryGroups, businessRadii, DEFAULT_BUSINESS_RADIUS,
-  GOOGLE_BUSINESS_MATCH_LIMIT } from "../parcel/nearby-business-count.js";
+  DEFAULT_STOREFRONT_RADIUS, GOOGLE_BUSINESS_MATCH_LIMIT, STOREFRONT_RADII } from "../parcel/nearby-business-count.js";
 
 const header =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Parcel pilot · New Haven Civic Data</title><link rel="stylesheet" href="/leaflet/leaflet.css"><link rel="stylesheet" href="/parcel.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a href="/index.html">New Haven Civic Data Directory</a><span>Private parcel pilot</span></header><main id="main">';
@@ -62,7 +62,15 @@ const storefrontResearch = previewToolsVisible ? `
           <select name="origin" id="storefront-origin" required></select>
         </div>
         <label class="storefront-check"><input type="checkbox" name="confirmed_vacancy" required> I’ve confirmed this storefront is vacant.</label>
-        <button id="storefront-half-mile" type="submit" value="half_mile" aria-controls="storefront-report" aria-describedby="storefront-status" formnovalidate hidden disabled>Run neighborhood analysis · ½ mile</button>
+        <div id="storefront-radius-options" hidden>
+          <div class="storefront-input">
+            <label for="storefront-radius">Search radius</label>
+            <select id="storefront-radius" name="radius_meters">
+              ${STOREFRONT_RADII.map((meters) => `<option value="${meters}"${meters === DEFAULT_STOREFRONT_RADIUS ? " selected" : ""}>${businessRadii[meters]}</option>`).join("")}
+            </select>
+          </div>
+          <button id="storefront-radius-run" type="submit" value="radius" aria-controls="storefront-report" aria-describedby="storefront-status" formnovalidate disabled>Run neighborhood analysis</button>
+        </div>
         <div id="storefront-walking-options" hidden>
           <details>
             <summary>Space and site checks <span class="meta">Optional</span></summary>

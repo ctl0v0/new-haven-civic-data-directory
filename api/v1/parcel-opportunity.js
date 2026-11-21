@@ -2,7 +2,7 @@ import { guarded, params } from "../../parcel/api.js";
 import { pilotPreviewEnabled } from "../../parcel/auth.js";
 import { readRequestText, SourceError } from "../../parcel/http.js";
 import { nearbyBusinessOrigins } from "../../parcel/nearby-business-count.js";
-import { analyzeHalfMile, analyzeStorefront, opportunityAvailability, storefrontConcepts } from "../../parcel/storefront-opportunity.js";
+import { analyzeRadius, analyzeStorefront, opportunityAvailability, storefrontConcepts } from "../../parcel/storefront-opportunity.js";
 
 export default guarded(async (request) => {
   if (!pilotPreviewEnabled()) throw new SourceError("Storefront analysis is available in the private Preview.", 404);
@@ -12,10 +12,11 @@ export default guarded(async (request) => {
       parcel_id: id, objectid: objectid ?? undefined, query_address: query_address ?? undefined,
     });
     const cityOrigins = origins.filter(({ method }) => method === "city-address-point");
+    const radiusAvailable = placesConfigured && cityOrigins.length > 0;
     return {
       ...opportunityAvailability(), origins: cityOrigins,
       default_origin, warning,
-      half_mile_available: placesConfigured && cityOrigins.length > 0,
+      radius_available: radiusAvailable, half_mile_available: radiusAvailable,
       space_checks: storefrontConcepts.filter(({ commercial }) => commercial)
         .map(({ id, label }) => ({ id, label })),
     };
@@ -26,6 +27,6 @@ export default guarded(async (request) => {
   let input;
   try { input = JSON.parse(body); }
   catch { throw new SourceError("Invalid JSON", 400); }
-  const analyze = input?.mode === "half_mile" ? analyzeHalfMile : analyzeStorefront;
+  const analyze = ["radius", "half_mile"].includes(input?.mode) ? analyzeRadius : analyzeStorefront;
   return analyze(input, { signal: request.signal });
 }, { methods: ["GET", "POST"] });

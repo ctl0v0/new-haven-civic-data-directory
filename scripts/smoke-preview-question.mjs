@@ -17,46 +17,6 @@ const sourceSummary = (result) => ({
     date_covered: check.date_covered ?? null,
   })) ?? [],
 });
-if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[bradley-address-smoke]')) {
-  const { resolveParcel, parcelAddresses } = await import('../parcel/service.js');
-  const { getSourceRecords } = await import('../parcel/adapters.js');
-  const { loadParcel } = await import('../parcel/resolve.js');
-  const { fetchJson } = await import('../parcel/http.js');
-  const streetQueries = ['136 Bradley St', '138 Bradley St'];
-  const tasks = [
-    Promise.all(streetQueries.map(resolveParcel)).then(async (lookups) => {
-      const [base] = lookups;
-      const reviewed = await Promise.all(base.candidates.map(async ({ parcel_id, objectid }) => {
-        const parcel = await loadParcel(parcel_id, objectid);
-        const [addresses, municipal] = await Promise.all([
-          parcelAddresses(parcel_id, objectid),
-          getSourceRecords('municity', parcel),
-        ]);
-        const entries = municipal.items.filter(({ category }) => ['License', 'Occupant'].includes(category));
-        return { parcel_id, objectid, addresses, municity_status: municipal.status,
-          municity_warning: municipal.warning, license_count: municipal.category_counts?.License,
-          occupant_count: municipal.category_counts?.Occupant,
-          co_op_entries: entries.filter((item) => /BICYCLE|BRADLEY STREET|BIKE CO/i.test(JSON.stringify(item.attributes)))
-            .map(({ source_record_id, source_url }) => ({ source_record_id, source_url })),
-        };
-      }));
-      console.log(JSON.stringify({ event: 'preview_bradley_parcel_check', lookups, reviewed }));
-    }),
-    fetchJson('https://data.ct.gov/resource/ngch-56tr.json?' + new URLSearchParams({
-      $select: 'credentialid,name,businessname,dba,credential,fullcredentialcode,status,address,city,issuedate,expirationdate',
-      $where: "upper(city)='NEW HAVEN' AND (upper(address) LIKE '138 BRADLEY%' OR upper(address) LIKE '136 BRADLEY%')",
-      $limit: '100',
-    })).then((rows) => {
-      const matches = rows.filter((row) => [row.name, row.businessname, row.dba].some((name) =>
-        /BICYCLE WORKSHOP|BRADLEY STREET BICYCLE/i.test(name ?? '')));
-      console.log(JSON.stringify({ event: 'preview_bradley_state_check', matches }));
-    }),
-  ];
-  for (const result of await Promise.allSettled(tasks)) {
-    if (result.status === 'rejected')
-      console.warn(JSON.stringify({ event: 'preview_bradley_check_failed', message: result.reason.message }));
-  }
-}
 console.log(JSON.stringify({ event: 'preview_question_reader', configured: indexConfigured() }));
 const window = recentCalendarDates(30);
 try {

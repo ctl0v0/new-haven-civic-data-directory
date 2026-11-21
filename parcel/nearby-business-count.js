@@ -11,6 +11,8 @@ export const businessCategoryGroups = businessCategoryCatalog.groups;
 export const businessCategories = Object.freeze(Object.assign({}, ...Object.values(businessCategoryGroups)));
 export const businessRadii = Object.freeze({ 402: "¼ mile", 805: "½ mile", 1609: "1 mile", 3219: "2 miles" });
 export const DEFAULT_BUSINESS_RADIUS = 1609;
+export const STOREFRONT_RADII = Object.freeze([402, 805]);
+export const DEFAULT_STOREFRONT_RADIUS = 402;
 export const GOOGLE_BUSINESS_MATCH_LIMIT = 100;
 export const BUSINESS_SEARCH_BODY_LIMIT = 8192;
 
