@@ -343,6 +343,10 @@ body.record-only-mode #parcel-map-section { display: none; }
 #nearby-business-result { border-left: 3px solid #0b624d; padding: .15rem .75rem .65rem; margin-top: .8rem; background: #eaf1ec; }
 #nearby-business-result .nearby-business-result-heading { font-weight: 700; }
 .nearby-business-result-heading strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.nearby-business-match-button { margin-top: .65rem; }
+.nearby-business-matches { list-style: none; padding: 0; margin: .65rem 0 0; }
+.nearby-business-matches li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .2rem 1rem; padding: .55rem 0; border-top: 1px solid #cbdacf; }
+.nearby-business-matches .meta { display: block; }
 body.browse-mode .parcel-tabs { padding: 0 1.4rem; margin: 0; }
 .browse-workspace { display: grid; grid-template-columns: clamp(28rem, 36vw, 34rem) minmax(0, 1fr); gap: 0; min-height: calc(100dvh - 8rem); }
 body.browse-expanded .browse-workspace { grid-template-columns: min(46rem, 55vw) minmax(0, 1fr); }

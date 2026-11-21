@@ -4,7 +4,8 @@ import {
   pilotConfigured,
   pilotPreviewEnabled,
 } from "../parcel/auth.js";
-import { businessCategories, businessRadii, DEFAULT_BUSINESS_RADIUS } from "../parcel/nearby-business-count.js";
+import { businessCategories, businessRadii, DEFAULT_BUSINESS_RADIUS,
+  GOOGLE_BUSINESS_MATCH_LIMIT } from "../parcel/nearby-business-count.js";
 
 const header =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Parcel pilot · New Haven Civic Data</title><link rel="stylesheet" href="/leaflet/leaflet.css"><link rel="stylesheet" href="/parcel.css"></head><body><a class="skip" href="#main">Skip to content</a><header><a href="/index.html">New Haven Civic Data Directory</a><span>Private parcel pilot</span></header><main id="main">';
@@ -16,7 +17,7 @@ export { pilotPreviewEnabled as queryWorkbenchVisible };
 const previewToolsVisible = pilotPreviewEnabled();
 const askHidden = previewToolsVisible ? "" : " hidden";
 const nearbyBusinessResearch = previewToolsVisible ? `
-  <section id="nearby-business-research" aria-labelledby="nearby-business-title" hidden>
+  <section id="nearby-business-research" aria-labelledby="nearby-business-title" data-match-limit="${GOOGLE_BUSINESS_MATCH_LIMIT}" hidden>
     <h2 id="nearby-business-title" tabindex="-1">Nearby business research</h2>
     <form id="nearby-business-form">
       <fieldset id="nearby-business-fields" aria-label="Nearby business filters" disabled>

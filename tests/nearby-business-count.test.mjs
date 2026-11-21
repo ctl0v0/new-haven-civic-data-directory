@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import route from "../api/v1/nearby-business-count.js";
+import matchesRoute from "../api/v1/nearby-business-matches.js";
 import { LAYERS } from "../parcel/config.js";
 
 const host = "https://pilot.example.test";
@@ -28,12 +29,16 @@ const other = point(22, 14, -72.932);
 let places;
 let cityPoints;
 let requests;
+let detailsRequests;
+let detailsResponses;
 
 test.beforeEach(() => {
   Object.assign(process.env, env);
   cityPoints = [point(15, 12), other];
   places = Response.json({ count: "3" });
   requests = [];
+  detailsRequests = [];
+  detailsResponses = new Map();
   globalThis.fetch = async (input, options) => {
     const url = new URL(input);
     if (url.href.startsWith(LAYERS.parcels + "/query")) return Response.json({ features: [parcel] });
@@ -43,11 +48,19 @@ test.beforeEach(() => {
       assert.equal(url.searchParams.get("returnGeometry"), "true");
       return Response.json({ features: cityPoints, spatialReference: { wkid: 4326 } });
     }
-    assert.equal(url.href, "https://areainsights.googleapis.com/v1:computeInsights");
     assert.equal(options.headers["X-Goog-Api-Key"], key);
     assert.equal(options.cache, "no-store");
+    if (url.origin === "https://places.googleapis.com") {
+      assert.match(url.pathname, /^\/v1\/places\/[a-zA-Z0-9_-]+$/);
+      assert.equal(options.headers["X-Goog-FieldMask"], "displayName,formattedAddress,googleMapsUri");
+      const id = url.pathname.split("/").at(-1);
+      detailsRequests.push(id);
+      return detailsResponses.get(id) ?? Response.json({ displayName: { text: `Business ${id}` },
+        formattedAddress: "30 Sample Street, New Haven, CT", googleMapsUri: "https://maps.google.com/?cid=1" });
+    }
+    assert.equal(url.href, "https://areainsights.googleapis.com/v1:computeInsights");
     requests.push(JSON.parse(options.body));
-    return places;
+    return places.clone();
   };
 });
 test.after(() => {
@@ -65,6 +78,11 @@ const countRequest = (input = {}, headers = auth) => route.fetch(new Request(pat
   method: "POST", headers: { ...headers, "content-type": "application/json" },
   body: JSON.stringify({ ...identity, category: "ice_cream_shop", ...input }),
 }));
+const matchRequest = (input = {}, headers = auth) => matchesRoute.fetch(new Request(`${host}/api/v1/nearby-business-matches`, {
+  method: "POST", headers: { ...headers, "content-type": "application/json" },
+  body: JSON.stringify({ ...identity, category: "ice_cream_shop", ...input }),
+}));
+const placeMatches = (ids) => Response.json({ count: String(ids.length), placeInsights: ids.map((id) => ({ place: `places/${id}` })) });
 
 test("city origin discovery needs no Google key and does not request a Google count", async () => {
   delete process.env.GOOGLE_PLACES_AGGREGATE_API_KEY;
@@ -141,4 +159,63 @@ test("the route requires pilot access, Preview scope, and supported radius and c
   assert.equal((await countRequest()).status, 404);
   assert.equal((await originRequest()).status, 404);
   assert.equal(requests.length, 0);
+});
+
+test("one verified search returns live business names in bounded pages for the same match set", async () => {
+  const ids = Array.from({ length: 12 }, (_, index) => String(index).padStart(2, "0"));
+  places = placeMatches(ids);
+  const query = { query_address: "14 Sample Street", radius_meters: 805 };
+  await countRequest(query);
+  assert.deepEqual(detailsRequests, []);
+  const response = await matchRequest(query);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  const first = await response.json();
+  assert.equal(first.count, 12);
+  assert.equal(first.results.length, 10);
+  assert.deepEqual(first.results[0], { name: "Business 00", address: "30 Sample Street, New Haven, CT", maps_url: "https://maps.google.com/?cid=1" });
+  assert.deepEqual(requests[1].insights, ["INSIGHT_COUNT", "INSIGHT_PLACES"]);
+  assert.deepEqual(requests[1].filter, requests[0].filter);
+  places = placeMatches([...ids].reverse());
+  const second = await (await matchRequest({ ...query, cursor: first.next_cursor })).json();
+  assert.equal(second.results.length, 2);
+  assert.equal(second.next_cursor, null);
+  assert.deepEqual(detailsRequests, ids);
+  assert.equal((await matchRequest({ ...query, radius_meters: 402, cursor: first.next_cursor })).status, 409);
+  places = placeMatches([...ids.slice(0, -1), "new_match"]);
+  assert.equal((await matchRequest({ ...query, cursor: first.next_cursor })).status, 409);
+  assert.equal(detailsRequests.length, 12);
+});
+
+test("named matches enforce Google's limit and distinguish missing details from zero", async () => {
+  places = Response.json({ count: "101" });
+  assert.deepEqual(await (await matchRequest()).json(), { status: "above_limit", count: 101, results: [], next_cursor: null });
+  assert.deepEqual(detailsRequests, []);
+  places = Response.json({ count: "4", placeInsights: [
+    { place: "places/valid" }, { place: "places/withdrawn" }, { place: "places/../invalid" },
+  ] });
+  detailsResponses.set("valid", Response.json({ displayName: { text: "Sample shop" }, googleMapsUri: "https://unrelated.example/" }));
+  detailsResponses.set("withdrawn", Response.json({}, { status: 404 }));
+  const partial = await (await matchRequest()).json();
+  assert.equal(partial.count, 4);
+  assert.equal(partial.results[0].address, null);
+  assert.equal(new URL(partial.results[0].maps_url).searchParams.get("query_place_id"), "valid");
+  assert.equal(partial.unavailable, 1);
+  assert.equal(partial.missing_matches, 2);
+  assert.deepEqual(detailsRequests, ["valid", "withdrawn"]);
+});
+
+test("named matches keep Preview access checks and report a blocked Places Details key", async () => {
+  assert.equal((await matchRequest({}, {})).status, 401);
+  process.env.VERCEL_ENV = "production";
+  assert.equal((await matchRequest()).status, 404);
+  assert.equal(requests.length, 0);
+  process.env.VERCEL_ENV = "preview";
+  places = placeMatches(["blocked"]);
+  detailsResponses.set("blocked", Response.json({ error: key }, { status: 403 }));
+  const response = await matchRequest();
+  assert.equal(response.status, 503);
+  const result = await response.text();
+  assert.match(result, /Places API \(New\)/);
+  assert.doesNotMatch(result, new RegExp(key));
 });

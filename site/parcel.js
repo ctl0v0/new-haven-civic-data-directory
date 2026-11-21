@@ -2528,6 +2528,77 @@ $("nearby-business-form")?.addEventListener("change", (event) => {
   if (nearbyBusinessConfigured) $("nearby-business-status").textContent = "";
 });
 
+function offerNearbyBusinessMatches(output, count, search) {
+  const matchLimit = Number($("nearby-business-research").dataset.matchLimit);
+  const refine = `Google Maps provides names for searches with ${matchLimit} matches or fewer. Try a smaller radius.`;
+  if (count === 0) return;
+  if (count > matchLimit) {
+    output.append(el("p", refine, "meta"));
+    return;
+  }
+  const list = el("ul", null, "nearby-business-matches");
+  list.setAttribute("aria-label", "Matching businesses from Google Maps");
+  list.hidden = true;
+  const matchStatus = el("p", null, "meta");
+  matchStatus.setAttribute("role", "status");
+  matchStatus.tabIndex = -1;
+  const button = el("button", "Show matching businesses", "secondary");
+  button.type = "button";
+  button.classList.add("nearby-business-match-button");
+  output.append(matchStatus, list, button);
+  let cursor;
+  let unavailable = 0;
+  button.addEventListener("click", async () => {
+    if (nearbyBusinessRequest || !maplessRecords || output.hidden || !button.isConnected) return;
+    const request = new AbortController();
+    nearbyBusinessRequest = request;
+    $("nearby-business-fields").disabled = true;
+    button.disabled = true;
+    matchStatus.textContent = "Loading matching businesses…";
+    try {
+      const data = await api("/api/v1/nearby-business-matches", {
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
+        body: JSON.stringify({ ...search, cursor }),
+      });
+      if (request !== nearbyBusinessRequest) return;
+      if (data.status === "above_limit") {
+        matchStatus.textContent = `Google Maps now lists ${data.count} matches. ${refine}`;
+        button.hidden = true;
+        matchStatus.focus();
+        return;
+      }
+      for (const business of data.results) {
+        const row = el("li");
+        const name = el("div");
+        name.append(el("strong", business.name));
+        if (business.address) name.append(el("span", business.address, "meta"));
+        const maps = link(business.maps_url, "Open in Google Maps");
+        maps.setAttribute("aria-label", `Open ${business.name} in Google Maps`);
+        row.append(name, maps);
+        list.append(row);
+      }
+      const displayed = list.children.length;
+      list.hidden = displayed === 0;
+      unavailable += data.unavailable;
+      const missing = unavailable + data.missing_matches;
+      matchStatus.textContent = data.count === 0 ? "Google Maps currently lists no matching businesses for this search."
+        : `Showing ${displayed} of ${data.count} Google Maps matches.${missing ? ` Details unavailable for ${missing}.` : ""}`;
+      cursor = data.next_cursor;
+      button.textContent = "Load more businesses";
+      button.hidden = !cursor;
+      if (button.hidden) matchStatus.focus();
+    } catch (error) {
+      if (request === nearbyBusinessRequest) matchStatus.textContent = error.message;
+    } finally {
+      if (request === nearbyBusinessRequest) {
+        nearbyBusinessRequest = null;
+        $("nearby-business-fields").disabled = false;
+        button.disabled = false;
+      }
+    }
+  });
+}
+
 $("nearby-business-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!maplessRecords || $("nearby-business-research").hidden || nearbyBusinessRequest || !nearbyBusinessConfigured) return;
@@ -2543,10 +2614,11 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
   status.textContent = "Counting Google Maps listings…";
   $("nearby-business-fields").disabled = true;
   try {
+    const search = { ...Object.fromEntries(selectedQuery()), origin: origin.value,
+      category: category.value, radius_meters: Number(radius_meters.value) };
     const data = await api("/api/v1/nearby-business-count", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
-      body: JSON.stringify({ ...Object.fromEntries(selectedQuery()), origin: origin.value,
-        category: category.value, radius_meters: Number(radius_meters.value) }),
+      body: JSON.stringify(search),
     });
     if (request !== nearbyBusinessRequest) return;
     const heading = el("p", data.category_label, "nearby-business-result-heading");
@@ -2561,6 +2633,7 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
     time.dateTime = data.retrieved_at;
     source.append(link(data.source_url, data.attribution), document.createTextNode(" · Checked "), time);
     output.replaceChildren(heading, detail, source);
+    offerNearbyBusinessMatches(output, data.count, search);
     output.hidden = false;
     status.textContent = "";
   } catch (error) {
