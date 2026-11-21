@@ -656,8 +656,6 @@ details.display-section > summary strong { margin-right: auto; }
 .guide-content h2 { margin: .2rem 0 .7rem; font-size: 1.55rem; }
 .guide-content h3 { margin: 1.5rem 0 .55rem; font-size: 1rem; }
 .guide-rule { margin: .35rem 0; padding: .35rem .65rem; border-left: 2px solid var(--line); font-size: .85rem; }
-.guide-steps { margin: .7rem 0 1.3rem; padding-left: 1.5rem; }
-.guide-steps li { padding: .25rem 0; }
 .guide-example { position: sticky; top: var(--explorer-chrome-height); align-self: start; max-height: var(--explorer-viewport-height); overflow: auto; padding: 1.25rem 0 1rem 1rem; font-size: .82rem; }
 .guide-example h3 { margin: 0 0 .6rem; }
 .guide-example pre { max-width: 100%; overflow: auto; padding: .7rem; background: var(--surface-sunken); border-left: 3px solid var(--line-strong); color: var(--ink); font-size: .74rem; line-height: 1.5; }
@@ -689,8 +687,8 @@ details.display-section > summary strong { margin-right: auto; }
 #ask-status[data-state="ready"] { padding: .75rem .9rem; background: var(--status-ok-soft); border-left: 3px solid var(--status-ok); }
 .ask-examples { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .65rem; margin: 0 0 1.2rem; font-size: .82rem; color: var(--ink-muted); }
 .ask-examples button { width: auto; padding: .25rem .45rem; background: transparent; color: var(--civic); border: 1px solid var(--line); border-radius: var(--radius-control); font-size: .8rem; }
-#ask-interpretation, #ask-coverage, #ask-context { border-top: 1px solid var(--line); padding: 1.1rem 0; }
-#ask-interpretation h2, #ask-coverage h2, #ask-context h2 { margin: 0 0 .7rem; }
+#ask-interpretation, #ask-coverage { border-top: 1px solid var(--line); padding: 1.1rem 0; }
+#ask-interpretation h2, #ask-coverage h2 { margin: 0 0 .7rem; }
 #ask-interpretation p, #ask-coverage p { margin: .3rem 0; }
 .query-plan-summary { display: grid; grid-template-columns: minmax(0, min(12rem, 35%)) minmax(0, 1fr); gap: .55rem 1rem; margin: 0 0 1rem; }
 .query-plan-summary dt { font-weight: 650; }
@@ -707,8 +705,6 @@ details.display-section > summary strong { margin-right: auto; }
 .ask-result > a { font-size: 1.15rem; font-weight: 750; }
 .ask-result p { margin: .25rem 0; }
 .ask-date { font-variant-numeric: tabular-nums; color: var(--ink-muted); }
-.ask-context-row { border-top: 1px solid var(--line); padding: .75rem 0; }
-.ask-context-row h3, .ask-context-row p { margin: .2rem 0; }
 .query-mode-bar, .query-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .query-mode-bar { justify-content: space-between; padding: .8rem 0; }
 .query-mode-bar > div { display: flex; gap: .35rem; flex-wrap: wrap; }

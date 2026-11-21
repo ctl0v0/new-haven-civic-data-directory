@@ -12,6 +12,7 @@ import { parcelPhoto } from "../parcel/photo.js";
 import { parcelQueryCatalog, queryDateFields, queryParcelDataSchema, relatedPermitFields } from "../parcel/query-contract.js";
 import { loadParcel, normalizeAddress, resolveParcel } from "../parcel/resolve.js";
 import { schoolAddress } from "../parcel/school-attendance.js";
+import { withTrashPickupDayName } from "../parcel/trash-pickup-days.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { indexQuery } from "./db.js";
 import { questionPermitCatalog } from "./ask.js";
@@ -33,9 +34,13 @@ const good = new Set(["complete", "ok", "no_records"]);
 const normalized = (value) => String(value ?? "").trim().toUpperCase();
 const unsupported = (reason, plan) => ({ status: "unsupported", reason, ...(plan ? { plan } : {}) });
 const unavailable = (reason, plan) => ({ status: "unavailable", reason, plan });
-const fieldsFor = (fields, wanted) => wanted
-  ? Object.fromEntries(wanted.filter((key) => fields[key] != null).map((key) => [key, fields[key]]))
-  : fields;
+function fieldsFor(fields, wanted, sourceId) {
+  if (sourceId === "trash-pickup") {
+    fields = withTrashPickupDayName(fields);
+    if (wanted?.includes("trash_day")) wanted = [...wanted, "trash_day_name"];
+  }
+  return wanted ? Object.fromEntries(wanted.filter((key) => fields[key] != null).map((key) => [key, fields[key]])) : fields;
+}
 const workId = (value) => /^[1-9]\d{0,11}$/.test(String(value ?? "")) ? String(value) : null;
 const pair = (value) => [value.parcel_id, value.objectid].map(String).join(":");
 
@@ -175,7 +180,7 @@ function indexedRecord(row, sourceId, wanted) {
   const dateField = sourceId === PERMIT_ACTIVITY_SOURCE
     ? PERMIT_ACTIVITY_KINDS[row.fields.activity_kind]?.date : queryDateFields[sourceId];
   const { fields, ...evidence } = row;
-  return { ...evidence, fields: fieldsFor(fields, wanted),
+  return { ...evidence, fields: fieldsFor(fields, wanted, sourceId),
     ...(sourceId === PERMIT_ACTIVITY_SOURCE ? { permit_id: fields.permit_id,
       permit_source_url: fields.permit_source_url, linked_from: fields.linked_from } : {}),
     ...(dateField && row.event_date ? { date_field: dateField, published_date: fields[dateField] ?? null } : {}) };
@@ -188,7 +193,7 @@ function liveRecord(item, wanted, dateField) {
     ...(item.linked_from ? { linked_from: item.linked_from } : {}),
     ...(item.note ? { note: item.note } : {}),
     ...(dateField && item.event_date ? { date_field: dateField, published_date: fields[dateField] ?? null } : {}),
-    fields: fieldsFor(fields, wanted) };
+    fields: fieldsFor(fields, wanted, item.source_id) };
 }
 
 async function liveSource(sourceId, wanted, feature, plan, dependencies) {

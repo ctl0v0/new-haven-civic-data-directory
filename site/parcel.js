@@ -85,7 +85,7 @@ let feedLoadVersion = 0;
 let activeDataSection = "overview";
 let activeRecordGroup = null;
 let guideData = null;
-let guideSection = "home";
+let guideSection = "fields";
 let queryModule = null;
 let askMode = "language";
 let askMethod = "parcels";
@@ -1492,7 +1492,7 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
   else if (activity) url.searchParams.set("view", "activity");
   else if (maplessRecords) url.searchParams.set("view", "records");
   else url.searchParams.delete("view");
-  if (guiding && section !== "home" &&
+  if (guiding && section !== "fields" &&
       (!["query-explorer", "permit-applications"].includes(section) || !$("ask-tab").hidden))
     url.searchParams.set("guide", section);
   else url.searchParams.delete("guide");
@@ -1551,7 +1551,7 @@ function renderGuideSection(key) {
   if (!guideData) return;
   guideSection = key;
   const url = new URL(location.href);
-  if (key === "home") url.searchParams.delete("guide");
+  if (key === "fields") url.searchParams.delete("guide");
   else url.searchParams.set("guide", key);
   history.replaceState(null, "", `${url.pathname}${url.search}`);
   const content = $("guide-content");
@@ -1575,18 +1575,6 @@ function renderGuideSection(key) {
     void import("/permit-applications.js").then(({ renderPermitApplications }) =>
       renderPermitApplications(menu, sidebar, { api, el, link }))
       .catch((error) => menu.replaceChildren(el("p", error.message, "source-warning")));
-  } else if (key === "home") {
-    content.append(el("p", "Official source records · private preview", "eyebrow"),
-      el("h2", "How to read this parcel feed"));
-    const steps = el("ol", null, "guide-steps");
-    for (const step of ["Resolve an address to a City parcel ID and object ID.",
-      "Read the overview and source coverage before interpreting an empty result.",
-      "Open one group, filter the returned records, then inspect the original source.",
-      "Use the dated feed for source dates; follow a permit ID for its public child records."])
-      steps.append(el("li", step));
-    content.append(steps, el("h3", "Reading rules"));
-    for (const rule of guideData.rules) content.append(el("p", rule, "guide-rule"));
-    example.append(el("h3", "REST and MCP"), el("p", "Each method below shows the protected REST path and the matching MCP tool. Example responses are requested only when you press the button."));
   } else if (key === "fields") {
     content.append(el("p", "Response schema", "eyebrow"), el("h2", "Field guide"),
       el("p", "These service fields appear around record attributes returned by each source adapter. Coverage explains omitted fields and unavailable checks."));
@@ -1666,10 +1654,10 @@ async function loadGuide(section) {
   }
   const nav = $("guide-nav");
   nav.replaceChildren();
-  const sections = [["home", "How to read the data"],
+  const sections = [["fields", "Field guide"],
     ...(!$("ask-tab").hidden ? [["query-explorer", "Query explorer"], ["permit-applications", "Permit applications"]] : []),
-    ...guideData.methods.filter(({ id }) => id !== "permit-applications").map((item) => [item.id, item.title]),
-    ["fields", "Field guide"], ["sources", "Sources and gaps"]];
+    ...guideData.methods.filter(({ id }) => !["data-context", "permit-applications"].includes(id)).map((item) => [item.id, item.title]),
+    ["sources", "Sources and gaps"]];
   for (const [id, title] of sections) {
     const button = el("button", title, "guide-nav-button");
     button.type = "button";
@@ -1678,7 +1666,7 @@ async function loadGuide(section) {
     nav.append(button);
   }
   if (!$("guide-view").hidden)
-    renderGuideSection(sections.some(([id]) => id === section) ? section : "home");
+    renderGuideSection(sections.some(([id]) => id === section) ? section : "fields");
 }
 const MIN_BROWSE_ZOOM = 15;
 const BROWSE_REUSE_MS = 60_000;
@@ -3066,19 +3054,6 @@ $("ask-query-guide").addEventListener("click", (event) => {
 $("ask-language-mode").addEventListener("click", () => void setAskMode("language"));
 $("ask-fields-mode").addEventListener("click", () => void setAskMode("fields"));
 
-function renderAskContext(entries = []) {
-  const target = $("ask-context");
-  target.replaceChildren();
-  target.hidden = !entries.length;
-  if (!entries.length) return;
-  target.append(el("h2", "How to read this data"));
-  for (const entry of entries) {
-    const row = el("div", null, "ask-context-row");
-    row.append(el("h3", entry.term), el("p", entry.source_fact),
-      el("p", entry.reading_rule, "meta"), link(entry.official_source_url, "Official source"));
-    target.append(row);
-  }
-}
 function renderAskCoverage(result) {
   const target = $("ask-coverage");
   target.replaceChildren();
@@ -3131,7 +3106,8 @@ function appendProjectedRecords(parent, match) {
     const fields = record.fields ?? {};
     const charityName = match.source_id === "ct-public-charities" ? fields.dba || fields.businessname || fields.name : null;
     const registryName = match.source_id === "ct-business-registrations" ? fields.name : null;
-    const title = registryName ?? charityName ?? fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
+    const pickupDay = match.source_id === "trash-pickup" ? fields.trash_day_name : null;
+    const title = pickupDay ?? registryName ?? charityName ?? fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
       fields.PermitNo ?? record.permit_number ?? record.published_type ?? record.address ?? `Record ${record.record_id}`;
     const head = el("p");
     head.append(el("strong", title));
@@ -3140,14 +3116,16 @@ function appendProjectedRecords(parent, match) {
     if (record.event_date) head.append(el("strong",
       ` · ${record.date_field === "date_registration" ? "Formation or registration date " : record.date_field ? `${record.date_field} ` : ""}${String(record.event_date).slice(0, 10)}`, "ask-date"));
     row.append(head);
-    const values = Object.entries(fields).filter(([, value]) => value != null && value !== "");
+    const values = Object.entries(fields).filter(([field, value]) => value != null && value !== "" &&
+      !(pickupDay && (field === "trash_day_name" || (field === "trash_day" && value === pickupDay))));
     if (values.length) {
       const dl = el("dl", null, "query-projected-fields");
       for (const [field, value] of values) {
         const label = match.source_id === "school-attendance" ? {
           k8_school: "K–8 attendance zone", high_school: "High-school attendance zone",
         }[field] : match.source_id === "ct-public-charities" ? { address: "Registered address",
-          businessname: "Legal name", dba: "DBA", fullcredentialcode: "Registration number" }[field] : null;
+          businessname: "Legal name", dba: "DBA", fullcredentialcode: "Registration number" }[field]
+          : match.source_id === "trash-pickup" && ["trash_day", "trash_day_code"].includes(field) ? "City day code" : null;
         dl.append(el("dt", label ?? field), el("dd", typeof value === "object" ? JSON.stringify(value) : value));
       }
       row.append(dl);
@@ -3194,7 +3172,7 @@ function appendAskItems(items = []) {
     const sourceUrl = item.source_url ?? item.permit_source_url ?? work?.source_url;
     if (sourceUrl) {
       const fields = item.fields ?? {};
-      const name = fields.BusinessName ?? fields.dba ?? fields.business ?? fields.name;
+      const name = fields.trash_day_name ?? fields.BusinessName ?? fields.dba ?? fields.business ?? fields.name;
       const type = item.published_type ?? item.permit_type ?? item.activity_type ?? work?.PermitType;
       const recordStatus = item.published_status ?? item.permit_status ?? item.activity_status ?? work?.PermStatus;
       const date = item.event_date ?? item.permit_date ?? item.activity_date ?? work?.PermitDate;
@@ -3237,7 +3215,6 @@ function clearAskResult() {
   $("ask-interpretation").hidden = true;
   $("ask-filter-form").hidden = true;
   $("ask-more").hidden = true;
-  $("ask-context").hidden = true;
   $("ask-clarification").replaceChildren();
   $("ask-clarification").hidden = true;
   askCriteria = null;
@@ -3272,7 +3249,7 @@ function displaySearchResult(result, { append = false } = {}) {
   setAskStatus(message, ["unconfigured", "unavailable"].includes(indexStatus)
     ? "unavailable" : result.complete_for_query ? "ready" : "coverage_limited");
 }
-async function runFieldSearch(method, args, context) {
+async function runFieldSearch(method, args) {
   const version = ++askVersion;
   clearAskResult();
   setAskStatus("Checking indexed sources…", "loading");
@@ -3281,7 +3258,7 @@ async function runFieldSearch(method, args, context) {
     const result = await api(...indexedQueryRequest(method, args));
     if (version !== askVersion) return;
     if (method === "unified") {
-      renderUnifiedAnswer({ ...result, context }, null, version);
+      renderUnifiedAnswer(result, null, version);
       return;
     }
     const target = $("ask-interpretation");
@@ -3303,7 +3280,7 @@ function renderUnifiedAnswer(response, question, version) {
     const target = $("ask-interpretation");
     const pending = response.status === "planned";
     const run = (selectedPlan) => {
-      if (version === askVersion) void runFieldSearch("unified", { plan: selectedPlan }, response.context);
+      if (version === askVersion) void runFieldSearch("unified", { plan: selectedPlan });
     };
     const summary = el("dl", null, "query-plan-summary");
     const line = (label, value) => summary.append(el("dt", label), el("dd", value));
@@ -3358,7 +3335,6 @@ function renderUnifiedAnswer(response, question, version) {
     target.append(detail);
     target.hidden = false;
   }
-  renderAskContext(response.context);
   if (response.clarification) {
     const clarification = response.clarification;
     setAskStatus(clarification.question, "clarify");
@@ -3370,7 +3346,7 @@ function renderUnifiedAnswer(response, question, version) {
         if (version !== askVersion) return;
         if (plan && clarification.id === "parcel") {
           const [parcel_id, objectid] = choice.id.split(":");
-          void runFieldSearch("unified", { plan: { ...plan, scope: { ...plan.scope, parcel_id, objectid } } }, response.context);
+          void runFieldSearch("unified", { plan: { ...plan, scope: { ...plan.scope, parcel_id, objectid } } });
         } else if (question) void runAsk(question, null, { id: clarification.id, choice: choice.id });
       };
       target.append(button);
@@ -3426,7 +3402,6 @@ async function runAsk(question, filters = null, clarification = null) {
       $("ask-neighborhood").value = parsed.neighborhood ?? "";
       $("ask-filter-form").hidden = Boolean(parsed.activity);
     }
-    renderAskContext(response.context);
     if (response.reason || response.clarification) {
       const blockedCommercial = response.status === "blocked" && parsed?.commercial;
       setAskStatus(`${response.reason ?? response.clarification}${blockedCommercial
@@ -3529,7 +3504,7 @@ if ($("vacancy-panel") && consumeVacancyLaunch()) {
   initial.set("view", "map");
   history.replaceState(null, "", `/parcel?${initial}`);
 }
-if (initial.get("view") === "guide") showExplorerTab("guide", { section: initial.get("guide") ?? "home" });
+if (initial.get("view") === "guide") showExplorerTab("guide", { section: initial.get("guide") ?? "fields" });
 if (initial.get("view") === "ask" && !$("ask-tab").hidden) showExplorerTab("ask");
 if (initial.get("view") === "activity" && !$("activity-tab").hidden) showExplorerTab("activity");
 if (initial.get("view") === "records") showExplorerTab("records", { noMap: true });

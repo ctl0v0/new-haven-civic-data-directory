@@ -286,7 +286,6 @@ const app = `
       <div id="ask-coverage" hidden></div>
       <ol id="ask-results" class="ask-results"></ol>
       <button id="ask-more" type="button" class="secondary" hidden>Load more results</button>
-      <div id="ask-context" hidden></div>
     </div>
   </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" type="module"></script>`;

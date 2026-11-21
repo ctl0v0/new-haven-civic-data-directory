@@ -12,6 +12,25 @@ const catalog = async () => ({ groups: [{ name: "Plumbing", types: [{ name: "Wat
 const cityParcel = { attributes: { parcel_id: 42, objectid: 99, property_address: "42 State St" } };
 const permitUrl = (id) => `https://www.municityconnect.com/#/app/NewHavenCityCT/entity/Permit/${id}`;
 
+test("indexed trash pickup projects the City's weekday name and preserves the published code", async () => {
+  const source_id = "trash-pickup";
+  const query = async (fields) => {
+    const answer = await queryParcelData({ plan: {
+      scope: { kind: "parcel", parcel_id: "11483", objectid: "8207" },
+      requirements: [{ source_id }], include: [{ source_id, fields }],
+    } }, { search: async () => ({ complete_for_query: true, coverage: { index_status: "connected" }, items: [
+      { city_parcel_id: 11483, city_objectid: 8207, matching_sources: [{ source_id, matching_record_count: 3,
+        records: ["T", "TH", "X"].map((trash_day, i) => ({ record_id: String(i + 10), fields: { trash_day } })) }] },
+    ] }) });
+    assert.equal(answer.status, "ready");
+    return answer.items[0].matching_sources[0].records.map((row) => row.fields);
+  };
+  assert.deepEqual(await query(["trash_day"]), [
+    { trash_day: "T", trash_day_name: "Tuesday" }, { trash_day: "TH", trash_day_name: "Thursday" }, { trash_day: "X" },
+  ]);
+  assert.deepEqual(await query(["trash_day_name"]), [{ trash_day_name: "Tuesday" }, { trash_day_name: "Thursday" }, {}]);
+});
+
 test("work date ambiguity pauses before touching any source", async () => {
   const fail = () => assert.fail("No source or interpreter should be called during date clarification");
   const dependencies = { execute: fail, catalog: fail, interpret: fail, now };

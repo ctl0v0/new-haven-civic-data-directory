@@ -64,6 +64,7 @@ export function parcelQueryCatalog() {
           : [queryDateFields[source.source_id]].filter(Boolean),
       },
       return_fields: exact.length ? [...new Set([...exact, queryDateFields[source.source_id],
+        ...(source.source_id === "trash-pickup" ? ["trash_day_name"] : []),
         ...(source.source_id === PERMIT_ACTIVITY_SOURCE
           ? Object.values(PERMIT_ACTIVITY_KINDS).flatMap(({ date, fields }) => [date, ...fields]) : []),
       ].filter(Boolean))] : liveFields[source.source_id] ?? [],

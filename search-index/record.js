@@ -1,4 +1,5 @@
 import { SourceError } from "../parcel/http.js";
+import { withTrashPickupDayName } from "../parcel/trash-pickup-days.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { indexConfigured, indexQuery } from "./db.js";
 import { RECENT_PERMIT_SCOPES } from "./municity.js";
@@ -105,9 +106,10 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
       FROM search_record_parcels WHERE run_id = $1 AND source_id = $2
         AND record_id = $3 ORDER BY city_parcel_id, city_objectid`,
     [run.run_id, sourceId, recordId]);
+    const record = rows[0];
     return { ...key, found: true, complete_for_query: complete,
-      record: rows[0], parcel_links: links,
-      coverage, retrieved_at: new Date().toISOString(),
+      record: sourceId === "trash-pickup" ? { ...record, fields: withTrashPickupDayName(record.fields) } : record,
+      parcel_links: links, coverage, retrieved_at: new Date().toISOString(),
       note: sourceId === "municity"
         ? "Indexed municipal permit search fields. Use get_permit_details with an exact linked City parcel for full live permit, application, fee, task, inspection and public contact records."
         : "Fields are those selected from the official source for the index. Use the live parcel tools for complete source context." };

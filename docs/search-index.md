@@ -11,7 +11,7 @@ The index is available to the private Preview API only when its read-only `SEARC
 | City parcel GIS | Complete official ID/count inventory, 200-feature batches | One published sale field set is searchable, not a title history or vacancy claim. |
 | City address points | Full GIS inventory, geometry join to exactly one City parcel | Points crossing parcel boundaries remain ambiguous. |
 | City zoning, ward, neighborhood and CMT polygons | Full GIS inventory, explicit polygon intersection | An intersection is a spatial relationship, not an assertion of a single district when a parcel crosses a boundary. |
-| City trash day polygons | Full GIS inventory, join through City address points | Multiple pickup zones at an address stay ambiguous. |
+| City trash day polygons | Full GIS inventory, join through City address points | Indexed rows retain the City `trash_day` code for filters and return `trash_day_name` from the published legend. Multiple zones at an address stay ambiguous. |
 | CT DEEP brownfields | New Haven GIS rows, exact published `Site_Parce` to City PID or MBLU | Unlinked and ambiguous rows are counted, not assigned by proximity. |
 | City mapped meters and City hosted CT Transit stops | Full official feature ID/count inventory | Mapped inventory and straight-line distance only; no available meter or transit frequency claim. The bus-stop ArcGIS item is owned by a New Haven city account. |
 | CT liquor, child care and cannabis location rosters | Official Socrata row ID, count, schema and page checks; unique City address-point join | Credentials can repeat and are never used as row IDs. Rows without one exact parcel remain unlinked. |

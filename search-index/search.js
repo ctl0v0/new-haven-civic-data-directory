@@ -1,5 +1,6 @@
 import { SourceError } from "../parcel/http.js";
 import { normalizeAddress } from "../parcel/resolve.js";
+import { withTrashPickupDayName } from "../parcel/trash-pickup-days.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { GIS_INDEX_FIELDS } from "./arcgis.js";
 import { indexConfigured, indexQuery } from "./db.js";
@@ -673,7 +674,9 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
         note: "Indexed record search failed; no zero result was asserted." } };
   }
   const hasMore = rows.length > limit;
-  return { criteria, items: rows.slice(0, limit),
+  const items = rows.slice(0, limit);
+  return { criteria, items: sourceId === "trash-pickup"
+    ? items.map((row) => ({ ...row, fields: withTrashPickupDayName(row.fields) })) : items,
     next_cursor: hasMore ? makeSearchCursor({ v: 1, query: fingerprint(criteria),
       source: sourceHash, offset: cursor.offset + limit,
       expires: Date.now() + 30 * 60_000 }) : null,
