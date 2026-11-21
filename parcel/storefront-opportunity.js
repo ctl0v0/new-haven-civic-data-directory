@@ -67,7 +67,7 @@ export function opportunityAvailability(env = process.env) {
     : !env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim()
       ? "Walking analysis is awaiting the Preview Google Places Aggregate key."
       : env.VERCEL_ENV === "preview" && env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED !== "1"
-        ? "Walking analysis is awaiting its Preview request limit."
+        ? "Run neighborhood analysis is disabled until the Preview request limit is configured in Vercel."
         : null;
   return { configured: reason === null, reason };
 }

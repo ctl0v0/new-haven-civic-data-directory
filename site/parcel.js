@@ -1339,9 +1339,10 @@ function mapFeaturePopup(feature, layer) {
       : "Mapped district intersects the selected parcel.", "meta"));
   return popup;
 }
-function mapFeatureLayer(layer) {
+function mapFeatureLayer(layer, { interactive = true } = {}) {
   const color = MAP_COLORS[layer.id] ?? "#315e4e";
   return window.L.geoJSON({ type: "FeatureCollection", features: layer.features }, {
+    interactive,
     style: () => ({
       color,
       weight: 3,
@@ -1351,7 +1352,9 @@ function mapFeatureLayer(layer) {
       radius: layer.id === "parcel-addresses" ? 6 : layer.id === "metered-parking-spaces" ? 4 : 5,
       color: "#fff", weight: 2, fillColor: color, fillOpacity: 1,
     }),
-    onEachFeature: (feature, leafletLayer) => leafletLayer.bindPopup(mapFeaturePopup(feature, layer)),
+    onEachFeature: (feature, leafletLayer) => {
+      if (interactive) leafletLayer.bindPopup(mapFeaturePopup(feature, layer));
+    },
   });
 }
 async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
@@ -1391,7 +1394,8 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
       row.append(link(layer.source_url, "Open City GIS layer"));
       list.append(row);
       if (!layer.features.length) continue;
-      const rendered = mapFeatureLayer(layer);
+      // A zoning polygon can cover neighboring parcels. Let Browse clicks reach the parcel canvas.
+      const rendered = mapFeatureLayer(layer, { interactive: map !== browseMap || layer.id !== "zoning" });
       renderedLayers.push(rendered);
       if (checkbox.checked) rendered.addTo(map);
       checkbox.addEventListener("change", () => {

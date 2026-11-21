@@ -71,7 +71,7 @@ const storefrontResearch = previewToolsVisible ? `
           <p class="meta">Check a use if you’ve verified the space and basic building requirements for it.</p>
           <div id="storefront-space-checks" class="storefront-space-checks"></div>
         </details>
-        <button id="storefront-run" type="submit" disabled>Run neighborhood analysis</button>
+        <button id="storefront-run" type="submit" aria-describedby="storefront-status" disabled>Run neighborhood analysis</button>
       </fieldset>
     </form>
     <p id="storefront-status" role="status"></p>
