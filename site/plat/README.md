@@ -2,7 +2,9 @@
 
 Load `plat-tokens.css`, `plat-fonts.css` and `plat.css` in that order. Wrap the report in a `.plat` element. The styles follow the system color scheme. Set `data-theme` to `light` or `dark` on the document element to choose a screen theme.
 
-The directory and parcel explorer load `plat-base.css` for the same typography, palette and focus styles. Their own stylesheets define page layouts using the shared tokens.
+The directory and parcel explorer load `plat-base.css` for typography and focus styles, and `plat.css` for shared fact tiles, record panels, and ledgers. Their own stylesheets define each page’s layout. `--page-gutter` sets the common inset for full-width pages.
+
+Use `plat-map.css` and the palette in `parcel-map-sources.js` for Leaflet parcel maps. The same tokens drive the map legend, parcel fills, and SVG overlays in both themes.
 
 Use `components.js` for section and panel layouts, fact tiles, source links, status stamps, coverage, and published-field disclosures. `graphics.js` renders the plat drawing and charts from verified geometry and returned records. The property report template supplies the data and maps the source rows into components. Keep new report-specific selectors in `parcel-report.css`.
 

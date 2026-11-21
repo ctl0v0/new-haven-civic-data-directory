@@ -1,5 +1,6 @@
 import { brief, eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate } from "./parcel-record-text.js";
-import { createParcelMap, MAP_COLORS, STREET_TILES } from "./parcel-map-sources.js";
+import { statusTone } from "./plat/status.js";
+import { createParcelMap, createStreetLayer, mapColor, mapLayerColor, recordedUseStyles, watchBrowseMapColors } from "./parcel-map-sources.js";
 
 const $ = (id) => document.getElementById(id);
 const groups = [
@@ -105,6 +106,7 @@ let parcelMap = null;
 let browseMap = null;
 let browseLayer = null;
 let browseRenderer = null;
+let browseColors;
 let browsePaths = new Map();
 let browseSelectedLayer = null;
 let browseContextLayers = [];
@@ -117,10 +119,7 @@ let requestedParcelKey = null;
 const AERIAL_TILES = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer/tile/{z}/{y}/{x}";
 function addMapBackgrounds(map) {
   const leaflet = window.L;
-  const streets = leaflet.tileLayer(STREET_TILES, {
-    maxZoom: 23, maxNativeZoom: 23,
-    attribution: '<a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Street map · Esri and contributors</a>',
-  }).addTo(map);
+  const streets = createStreetLayer(leaflet).addTo(map);
   const aerial = leaflet.tileLayer(AERIAL_TILES, {
     maxZoom: 21, maxNativeZoom: 21,
     attribution: '<a href="https://maps.cteco.uconn.edu/data/flight2023/" target="_blank" rel="noopener noreferrer">2023 aerial imagery · CT ECO</a>',
@@ -313,7 +312,7 @@ async function loadOverview(qs, version) {
     const needsReview = data.groups.filter(({ sources }) => sources.some(({ status }) =>
       ["partial", "unavailable", "not_integrated", "not_linked"].includes(status)));
     if (needsReview.length) {
-      const details = el("details", null, "overview-known-gaps");
+      const details = el("details", null, "overview-known-gaps p-coverage");
       details.append(el("summary", `Source coverage · ${needsReview.length} sections with gaps`));
       const list = el("ul");
       for (const { id, sources } of needsReview) {
@@ -335,12 +334,12 @@ async function loadOverview(qs, version) {
     for (const id of first) {
       const group = data.groups.find((entry) => entry.id === id);
       if (!group?.record_count) continue;
-      const section = el("section", null, "overview-group");
+      const section = el("section", null, "p-fact overview-group");
       const heading = el("div", null, "overview-group-heading");
       const open = el("button", groups.find(([key]) => key === id)[1], "overview-link");
       open.type = "button";
       open.addEventListener("click", () => navigateDataSection(id, true));
-      heading.append(open, el("span", `${group.record_count} returned`, "group-count"));
+      heading.append(open, el("p", `${group.record_count.toLocaleString()} returned`, "p-fact__value"));
       section.append(heading);
       const items = data.highlights?.[id] ?? [];
       if (items.length) {
@@ -692,24 +691,39 @@ async function openRecordDetail(item, trigger) {
       contents.replaceChildren(el("p", `Could not load ${kind.toLowerCase()} details: ${error.message}`, "source-warning"));
   }
 }
+function statusStamp(value) {
+  const stamp = el("span", brief(value, 45), "p-pill");
+  stamp.dataset.tone = statusTone(value);
+  return stamp;
+}
+
+function recordFacts(entries) {
+  const list = el("dl", null, "p-kv");
+  for (const [label, value] of entries) {
+    const cell = el("div");
+    cell.append(el("dt", label), el("dd", value));
+    list.append(cell);
+  }
+  return list;
+}
+
 function appendRecord(parent, item) {
-  const card = el("article", null, "record-card");
-  const aside = el("div", null, "record-aside");
+  const card = el("article", null, "p-record record-card");
+  const aside = el("div", null, "p-record__meta record-aside");
   if (item.event_date) aside.append(eventDateBlock(item, "record-event-date"));
   aside.append(el("span", item.category ?? sourceName(item.source_id), "record-kind"));
   aside.append(el("span", sourceName(item.source_id), "record-source-name"));
-  card.append(aside);
   const body = el("div", null, "record-body");
-  const head = el("div", null, "record-head");
-  head.append(el("h3", recordTitle(item)));
+  const head = el("div", null, "p-record__head record-head");
+  head.append(el("h3", recordTitle(item), "p-record__title"));
   const state = recordStatus(item);
-  if (state) head.append(el("span", brief(state, 45), "status-pill"));
+  if (state) head.append(statusStamp(state));
   if (item.address_evidence?.matches_query)
     head.append(el("span", "Source address matches search", "address-badge"));
-  body.append(head);
+  card.append(head, aside);
   if (item.attributes?.period) body.append(el("p", item.attributes.period, "record-meta"));
   const description = recordDescription(item);
-  if (description) body.append(el("p", description, "record-description"));
+  if (description) body.append(el("p", description, "p-record__desc record-description"));
   if (item.source_id === "assessor-valuations") {
     body.append(el("p", `${fieldLabel(item.attributes.table_section ?? "valuation")} row`, "record-meta"));
     body.append(valuationAmounts(item.attributes, "valuation-values valuation-record-values"));
@@ -845,19 +859,21 @@ function appendRecord(parent, item) {
     : item.source_id === "assessor-valuations" ? [] : sourceFields(item.attributes)
       .filter(([, value]) => value !== "Not provided" && value !== "" && value.length < 220)
       .slice(0, 4);
-  if (preview.length) body.append(fieldList(preview));
+  if (preview.length) body.append(recordFacts(preview));
   if (item.address_evidence)
     body.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "record-note"));
   const evidence = matchEvidence(item);
   if (evidence) body.append(el("p", evidence, "record-note"));
   if (item.note) body.append(el("p", item.note, "record-note"));
-  const actions = el("div", null, "record-actions");
+  const actions = el("div", null, "p-record__foot record-actions");
   if (item.source_url) actions.append(link(item.source_url, item.category === "Document" && item.source_url.includes("municitymedia.com") ? "Open document" : "Open source"));
-  const details = el("details", null, "source-fields");
-  details.append(el("summary", "All source fields"));
+  const details = el("details", null, "p-fields source-fields");
+  details.append(el("summary", "Published fields"));
   details.addEventListener("toggle", () => {
-    if (details.open && !details.querySelector("dl"))
-      details.append(fieldList(sourceFields(item.attributes), "record-fields all-fields"));
+    if (!details.open || details.querySelector("dl")) return;
+    const fields = el("div", null, "p-fields__body");
+    fields.append(fieldList(sourceFields(item.attributes)));
+    details.append(fields);
   });
   actions.append(details);
   const workKind = item.source_id === "municity" && ["Permit", "Application"].includes(item.category)
@@ -1190,10 +1206,10 @@ async function loadMap(qs, version) {
       $("parcel-map-status").textContent = `Loading ${name.toLowerCase()} behind the City parcel boundary…`;
     });
     const casing = leaflet.geoJSON(feature, {
-      style: { color: "#173e35", weight: 8, fillOpacity: 0 },
+      style: { color: mapColor("parcel-edge"), weight: 8, fill: false },
     }).addTo(map);
     leaflet.geoJSON(feature, {
-      style: { color: "#f8c547", weight: 4, fillColor: "#f8c547", fillOpacity: 0.15 },
+      style: { color: mapColor("parcel"), weight: 4, fillColor: mapColor("parcel"), fillOpacity: 0.15 },
     }).addTo(map);
     const bounds = casing.getBounds();
     if (!bounds.isValid()) throw Error("Parcel boundary has no map extent");
@@ -1233,7 +1249,7 @@ async function loadBrowseSelectedMap(qs, version, recenter = false) {
     }
     browseSelectedLayer = window.L.geoJSON(feature, {
       pane: "selected-boundary", interactive: false,
-      style: { color: "#00a8ad", weight: 4, fillColor: "#00d5d8", fillOpacity: .1 },
+      style: { color: mapColor("parcel"), weight: 4, fill: false },
     }).addTo(browseMap);
     const bounds = browseSelectedLayer.getBounds();
     if (!bounds.isValid()) throw Error("City parcel boundary has no map extent");
@@ -1277,7 +1293,7 @@ function mapFeaturePopup(feature, layer) {
   return popup;
 }
 function mapFeatureLayer(layer, { interactive = true } = {}) {
-  const color = MAP_COLORS[layer.id] ?? "#315e4e";
+  const color = mapLayerColor(layer.id);
   return window.L.geoJSON({ type: "FeatureCollection", features: layer.features }, {
     interactive,
     style: () => ({
@@ -1287,7 +1303,7 @@ function mapFeatureLayer(layer, { interactive = true } = {}) {
     }),
     pointToLayer: (_feature, latlng) => window.L.circleMarker(latlng, {
       radius: layer.id === "parcel-addresses" ? 6 : layer.id === "metered-parking-spaces" ? 4 : 5,
-      color: "#fff", weight: 2, fillColor: color, fillOpacity: 1,
+      color: mapColor("surface-raised"), weight: 2, fillColor: color, fillOpacity: 1,
     }),
     onEachFeature: (feature, leafletLayer) => {
       if (interactive) leafletLayer.bindPopup(mapFeaturePopup(feature, layer));
@@ -1312,7 +1328,7 @@ async function loadMapContext(map, qs, version, parcelBounds, targets = {}) {
       checkbox.checked = layer.features.length > 0 &&
         ["parcel-addresses", "zoning", "transit-stops"].includes(layer.id);
       const swatch = el("span", null, "map-layer-swatch");
-      swatch.style.backgroundColor = MAP_COLORS[layer.id] ?? "#315e4e";
+      swatch.style.backgroundColor = mapLayerColor(layer.id);
       swatch.setAttribute("aria-hidden", "true");
       const name = el("span", layer.title);
       title.append(checkbox, swatch, name);
@@ -1570,20 +1586,13 @@ async function loadGuide(section) {
   if (!$("guide-view").hidden)
     renderGuideSection(sections.some(([id]) => id === section) ? section : "home");
 }
-const browseUseStyles = new Map([
-  ["residential", { label: "Residential", color: "#286eae", opacity: .40 }],
-  ["mixed_use", { label: "Mixed-use", color: "#ca820b", opacity: .47 }],
-  ["commercial_only", { label: "Commercial only", color: "#863db4", opacity: .40 }],
-  ["other", { label: "Other", color: "#696e7d", opacity: .28 }],
-  ["unclassified", { label: "Unclassified", color: "#b0b7bc", opacity: .15 }],
-]);
 const MIN_BROWSE_ZOOM = 15;
 const BROWSE_REUSE_MS = 60_000;
 const BROWSE_MAX_SPLIT_DEPTH = 2;
 const BROWSE_SPLIT_AREA = .001;
 
 function browseUseStyle(category) {
-  return browseUseStyles.get(category) ?? browseUseStyles.get("unclassified");
+  return recordedUseStyles.get(category) ?? recordedUseStyles.get("unclassified");
 }
 
 function browseParcelStyle(feature) {
@@ -1593,9 +1602,9 @@ function browseParcelStyle(feature) {
     String(p.objectid) === String(selectedBrowseParcel.objectid);
   const use = browseUseStyle(p.recorded_use?.category);
   const useMode = $("browse-parcel-display").value === "use";
-  return { color: active ? "#00d5d8" : "#173e35", weight: active ? 4 : 1.25, opacity: .92,
-    fillColor: useMode ? use.color : active ? "#00d5d8" : "#f8c547",
-    fillOpacity: useMode ? use.opacity : active ? .22 : .04 };
+  return { color: active ? browseColors.parcel : browseColors.ink, weight: active ? 4 : 1.25, opacity: .92,
+    fillColor: useMode ? browseColors[use.token] : active ? browseColors.parcel : browseColors.ink,
+    fillOpacity: useMode ? use.opacity : active ? .22 : 0 };
 }
 
 function browseUseDetail(use) {
@@ -1808,10 +1817,10 @@ function initBrowseMap() {
     return;
   }
   const legend = $("browse-use-legend");
-  for (const { label, color } of browseUseStyles.values()) {
+  for (const { label, token } of recordedUseStyles.values()) {
     const entry = el("li");
     const swatch = el("span", null, "browse-use-swatch");
-    swatch.style.backgroundColor = color;
+    swatch.style.backgroundColor = mapColor(token);
     swatch.setAttribute("aria-hidden", "true");
     entry.append(swatch, document.createTextNode(label));
     legend.append(entry);
@@ -1821,6 +1830,10 @@ function initBrowseMap() {
     browseLayer?.setStyle(browseParcelStyle);
   });
   browseMap = createParcelMap(leaflet, $("browse-map"));
+  watchBrowseMapColors((colors) => {
+    browseColors = colors;
+    browseLayer?.setStyle(browseParcelStyle);
+  });
   browseRenderer = leaflet.canvas({ padding: .2 });
   addMapBackgrounds(browseMap);
   browseMap.setView([41.3083, -72.9279], MIN_BROWSE_ZOOM);
@@ -2279,14 +2292,14 @@ function appendTimelineEvent(parent, item) {
   content.append(el("p", kind, "timeline-type"));
   content.append(el("h3", recordTitle(item)));
   const state = recordStatus(item);
-  if (state) content.append(el("span", state, "status-pill"));
+  if (state) content.append(statusStamp(state));
   if (item.address_evidence?.matches_query)
     content.append(el("span", "Source address matches search", "address-badge"));
   if (item.address_evidence?.matches_query)
     content.append(el("p", `Source ${item.address_evidence.source_field}: ${item.address_evidence.source_address}`, "timeline-description"));
   const description = recordDescription(item);
   if (description) content.append(el("p", description, "timeline-description"));
-  const source = el("p", null, "timeline-source");
+  const source = el("p", null, "t-caption timeline-source");
   source.append(document.createTextNode(`${sourceName(item.source_id)} · `));
   if (item.source_url) source.append(link(item.source_url, "Open source"));
   content.append(source);

@@ -1,4 +1,4 @@
-import { createParcelMap, STREET_TILES } from "./parcel-map-sources.js";
+import { createParcelMap, createStreetLayer, mapColor, mapLayerColor } from "./parcel-map-sources.js";
 import { renderRadiusReport } from "./storefront-opportunity.js";
 
 const mapData = document.getElementById("report-map-data");
@@ -9,10 +9,7 @@ function initializeMap() {
   const leaflet = window.L;
   const { geometry, layers, radius } = JSON.parse(mapData.textContent);
   map = createParcelMap(leaflet, "report-map");
-  const streets = leaflet.tileLayer(STREET_TILES, {
-    maxZoom: 23, maxNativeZoom: 23,
-    attribution: '<a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer">Street map · Esri and contributors</a>',
-  });
+  const streets = createStreetLayer(leaflet);
   let tilesUnavailable = false;
   streets.on("loading", () => { tilesUnavailable = false; });
   streets.on("tileerror", () => { tilesUnavailable = true; });
@@ -20,14 +17,11 @@ function initializeMap() {
     mapStatus.textContent = tilesUnavailable ? "Some street map tiles were unavailable." : "";
   });
   streets.addTo(map);
-  const css = getComputedStyle(document.documentElement);
-  const color = (name) => css.getPropertyValue(`--${name}`).trim();
-  const boundaryStyle = () => ({ color: color("parcel-edge"), weight: 2, fillColor: color("parcel"), fillOpacity: 1 });
-  const boundary = leaflet.geoJSON(geometry, { style: boundaryStyle });
+  const boundary = leaflet.geoJSON(geometry, {
+    style: { color: mapColor("parcel-edge"), weight: 2, fillColor: mapColor("parcel"), fillOpacity: 1 },
+  });
   const bounds = boundary.getBounds();
   const center = bounds.getCenter();
-  const radiusStyle = () => ({ radius, color: color("ink"), dashArray: "4 4", weight: 1.2, fill: false });
-  const restyleLayers = [];
   const latOffset = radius / 111195;
   const lonOffset = latOffset / Math.cos(center.lat * Math.PI / 180);
   const surrounding = leaflet.latLngBounds(
@@ -35,21 +29,20 @@ function initializeMap() {
     [center.lat + latOffset, center.lng + lonOffset],
   ).extend(bounds);
   map.fitBounds(surrounding, { padding: [12, 12], maxZoom: 18 });
-  const circle = leaflet.circle(center, radiusStyle()).addTo(map);
+  leaflet.circle(center, { radius, color: mapColor("ink"), dashArray: "4 4", weight: 1.2, fill: false }).addTo(map);
   boundary.addTo(map);
   leaflet.control.scale({ metric: true, imperial: true }).addTo(map);
   for (const layer of layers) {
     const toggle = [...document.querySelectorAll(".map-options input")].find((input) => input.value === layer.id);
-    const token = layer.id === "zoning" ? "cat-document" :
-      layer.id === "transit-stops" ? "cat-permit" : layer.id === "metered-parking-spaces" ? "cat-license" : "ink";
+    const color = mapLayerColor(layer.id);
+    const backing = mapColor("surface-raised");
     const layerStyle = ({ properties }) => {
       const out = layer.id === "transit-stops" && [0, false, "0"].includes(properties.InService);
-      return { color: color(out ? token : "surface-raised"), weight: 1.5,
-        fillColor: color(out ? "surface-raised" : token), fillOpacity: 0.95 };
+      return { color: out ? color : backing, weight: 1.5, fillColor: out ? backing : color, fillOpacity: .95 };
     };
-    const areaStyle = () => ({ color: color(token), weight: 1.4, fillOpacity: 0.12 });
+    const areaStyle = { color, weight: 1.4, fillOpacity: 0.12 };
     const overlay = leaflet.geoJSON({ type: "FeatureCollection", features: layer.features }, {
-      style: (feature) => feature.geometry.type === "Point" ? layerStyle(feature) : areaStyle(),
+      style: (feature) => feature.geometry.type === "Point" ? layerStyle(feature) : areaStyle,
       pointToLayer: (feature, latlng) => leaflet.circleMarker(latlng, { radius: 4.5, ...layerStyle(feature) }),
       onEachFeature: ({ properties: p }, feature) => {
         const label = document.createElement("span");
@@ -60,20 +53,10 @@ function initializeMap() {
         feature.bindTooltip(label);
       },
     });
-    restyleLayers.push(() => overlay.eachLayer((item) =>
-      item.setStyle(item.feature.geometry.type === "Point" ? layerStyle(item.feature) : areaStyle())));
     const showLayer = () => toggle.checked ? overlay.addTo(map) : map.removeLayer(overlay);
     toggle.addEventListener("change", showLayer);
     showLayer();
   }
-  const refreshColors = () => {
-    boundary.setStyle(boundaryStyle());
-    circle.setStyle(radiusStyle());
-    restyleLayers.forEach((restyle) => restyle());
-  };
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
-  new MutationObserver(refreshColors).observe(document.documentElement, { attributeFilter: ["data-theme"] });
-
 }
 
 if (mapData) {

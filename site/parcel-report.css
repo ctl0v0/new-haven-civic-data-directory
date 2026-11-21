@@ -1,4 +1,6 @@
 /* Property report integration for the shared Plat components. */
+@import url("./plat/plat-map.css");
+
 body.plat { margin: 0; }
 .plat .skip:focus { clip: auto; width: auto; height: auto; z-index: 40; top: 8px; left: 8px; padding: var(--space-2); background: var(--surface); }
 .p-masthead.report-message { padding-bottom: var(--space-7); }

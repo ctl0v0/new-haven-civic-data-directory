@@ -1,3 +1,5 @@
+import { statusTone } from "./status.js";
+
 export const escape = (value) => String(value).replace(/[&<>"']/g,
   (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 
@@ -20,16 +22,6 @@ const iconPaths = {
 };
 export function icon(name, className = "") {
   return `<svg class="${className}" viewBox="0 0 18 18" aria-hidden="true">${iconPaths[name]}</svg>`;
-}
-
-export function statusTone(status) {
-  const word = status.trim().toLowerCase();
-  if (word.startsWith("partial") || word === "unavailable" || word === "parcel link unavailable") return "partial";
-  if (/^(no records|outside|inactive flag)/.test(word)) return "none";
-  if (["issued", "active", "returned records", "in service"].includes(word)) return "ok";
-  if (["draft", "scheduled", "submitted", "case assigned"].includes(word)) return "pending";
-  if (["void", "voided", "inactive", "expired", "not in service"].includes(word)) return "void";
-  return "closed";
 }
 
 export const pill = (status, tone) => status

@@ -135,8 +135,8 @@ const app = `
   ${nearbyBusinessResearch}
   ${storefrontResearch}
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
-    <h2 id="snapshot-title">At a glance</h2>
-    <div id="snapshot-grid" class="snapshot-grid"></div>
+    <div class="p-section__head"><h2 class="t-section" id="snapshot-title">At a glance</h2></div>
+    <div id="snapshot-grid" class="p-facts snapshot-grid"></div>
     <div id="overview-counts"></div>
   </section>
   <section id="school-attendance-summary" class="school-attendance-summary" aria-labelledby="school-attendance-title" hidden>
@@ -154,7 +154,7 @@ const app = `
     <p class="map-sources"><span class="map-swatch" aria-hidden="true"></span> Selected parcel boundary: <a href="https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0" target="_blank" rel="noopener noreferrer">New Haven GIS</a>. Visual backgrounds: <a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer" target="_blank" rel="noopener noreferrer">Esri street map</a> or <a href="https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023_tiled/ImageServer" target="_blank" rel="noopener noreferrer">Connecticut 2023 aerial imagery</a>. Backgrounds do not establish parcel facts or current conditions.</p>
   </section>
   <section id="feed-section" class="timeline-section" aria-labelledby="timeline-title" hidden>
-    <div class="section-heading"><div><p class="eyebrow">Dated records</p><h2 id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. Undated contacts remain in the Activity records.</p></div>
+    <div class="section-heading p-section__head"><div><p class="eyebrow">Dated records</p><h2 class="t-section" id="timeline-title">Timeline</h2></div><p>Source dates, not a change log. Undated contacts remain in the Activity records.</p></div>
     <div id="timeline-filters"></div>
     <ol id="feed" class="timeline"></ol>
     <button id="feed-more" type="button" class="secondary" hidden>Load more dated records</button>
@@ -173,7 +173,7 @@ const app = `
         <div class="browse-use-controls">
           <label for="browse-parcel-display">Color parcels by</label>
           <select id="browse-parcel-display"><option value="use">Recorded use</option><option value="outlines">Outlines</option></select>
-          <div id="browse-use-key"><ul id="browse-use-legend" aria-label="Recorded use legend"></ul><p class="meta">Unclassified parcels lack a verified use classification.</p></div>
+          <div id="browse-use-key"><ul id="browse-use-legend" aria-label="Recorded use legend"></ul><p class="meta">The ochre outline marks the selected parcel. Unclassified parcels lack a verified use classification.</p></div>
         </div>
         <div id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and official photo.</p></div>
         <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>

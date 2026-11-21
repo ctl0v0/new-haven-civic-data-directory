@@ -54,7 +54,7 @@
   --radius-control: 3px;
   --radius-panel: 4px;
   --radius-status: 2px;
-  --sheet-max: 1280px;
+  --page-gutter: clamp(1rem, 3vw, 3rem);
   --rail-width: 216px;
   --measure: 68ch;
   --bp-rail: 1180px;

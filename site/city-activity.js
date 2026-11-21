@@ -87,7 +87,7 @@ export function initCityActivity({ api, el, link }) {
         currentList = el("ol", null, "city-activity-day");
         resultList.append(heading, currentList);
       }
-      const li = el("li");
+      const li = el("li", null, "p-record");
       const heading = el("h3");
       const parcel = el("a", item.city_address || `City parcel ${item.city_parcel_id}`);
       const destination = linkedParcel(item);
@@ -170,7 +170,7 @@ export function initCityActivity({ api, el, link }) {
         coverage.querySelector("summary").textContent = data.coverage.status === "partial"
           ? "Source coverage · limited" : "Source coverage";
         sourceList.replaceChildren(...data.coverage.sources.map((source) => {
-          const li = el("li");
+          const li = el("li", null, "p-record");
           li.append(link(source.source_url, source.label));
           if (source.coverage_from && source.coverage_to)
             li.append(` · Indexed window ${source.coverage_from} through ${source.coverage_to}`);

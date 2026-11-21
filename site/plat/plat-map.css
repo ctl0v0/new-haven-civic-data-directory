@@ -1,0 +1,22 @@
+/* Style only the street basemap. Aerial imagery uses its published colors. */
+.plat-street-tiles { filter: grayscale(.85) contrast(.95); }
+:root[data-theme="dark"] .plat-street-tiles { filter: grayscale(1) invert(.92) brightness(.9) contrast(.9); }
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .plat-street-tiles { filter: grayscale(1) invert(.92) brightness(.9) contrast(.9); }
+}
+
+.leaflet-container .leaflet-control-attribution {
+  color: var(--ink-muted);
+  background: var(--surface);
+}
+.leaflet-container .leaflet-control-attribution a { color: var(--civic); }
+
+.leaflet-container :is(.leaflet-control-layers, .leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-control-scale-line),
+.leaflet-container .leaflet-bar a {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+.leaflet-container .leaflet-bar a:hover { background: var(--surface-sunken); }
+.leaflet-container .leaflet-bar a.leaflet-disabled { color: var(--ink-muted); }
+.leaflet-container :is(.leaflet-popup-content a, a.leaflet-popup-close-button) { color: var(--civic); }
