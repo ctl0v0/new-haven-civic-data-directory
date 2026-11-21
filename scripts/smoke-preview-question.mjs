@@ -21,7 +21,8 @@ if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[charity-registration-smoke
   const { CHARITY_SOURCE } = await import('../parcel/charity-registrations.js');
   const { stateRosterInventory } = await import('../search-index/socrata.js');
   const [live, inventory, indexed] = await Promise.allSettled([
-    askParcelData({ question: 'Show public charity registrations at 138 Bradley St' }),
+    askParcelData({ question: 'Show public charity registrations at 138 Bradley St',
+      clarification: { id: 'parcel', choice: '11293:23816' } }),
     stateRosterInventory(CHARITY_SOURCE),
     searchIndexedRecords({ source_id: CHARITY_SOURCE, site_address: '138 Bradley St',
       equals: { fullcredentialcode: 'CHR.0068611' } }),
