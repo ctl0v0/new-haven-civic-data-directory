@@ -441,10 +441,10 @@
 .p-ledger tr[data-dim] { display: none; }
 .p-ledger tr.p-ledger__group th { background: var(--surface); padding-top: 16px; border-top: 0; }
 @media (max-width: 640px) {
-  .p-ledger:not(.property-ledger) thead { display: none; }
-  .p-ledger:not(.property-ledger), .p-ledger:not(.property-ledger) :is(tbody, tr, th, td) { display: block; width: auto; }
-  .p-ledger:not(.property-ledger) tr { border-top: 1px solid var(--line); padding: 10px 12px; }
-  .p-ledger:not(.property-ledger) :is(th, td) { border: 0; padding: 2px 0; }
+  .p-ledger:where(:not(.property-ledger)) thead { display: none; }
+  .p-ledger:where(:not(.property-ledger)), .p-ledger:where(:not(.property-ledger)) :is(tbody, tr, th, td) { display: block; width: auto; }
+  .p-ledger:where(:not(.property-ledger)) tr { border-top: 1px solid var(--line); padding: 10px 12px; }
+  .p-ledger:where(:not(.property-ledger)) :is(th, td) { border: 0; padding: 2px 0; }
   .p-match thead { display: none; }
   .p-match, .p-match tbody, .p-match tr, .p-match th, .p-match td { display: block; width: auto; }
   .p-match tr { border-top: 1px solid var(--line); padding: 8px 10px; }
