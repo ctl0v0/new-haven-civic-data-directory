@@ -883,20 +883,25 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
   margin-bottom: 1rem;
 }
 #activity-filters {
+  --activity-control-height: 2.75rem;
   display: grid;
   grid-template-columns: minmax(10rem, 1.35fr) repeat(3, minmax(8rem, 1fr)) auto;
   align-items: end;
   gap: .75rem;
 }
 #activity-filters label {
+  display: grid;
+  gap: .3rem;
   min-width: 0;
   margin: 0;
 }
-#activity-filters input, #activity-filters select {
-  display: block;
+#activity-filters :is(input, select, button[type="submit"]) {
+  block-size: var(--activity-control-height);
+  min-inline-size: 0;
+  padding: 0 .75rem;
+}
+#activity-filters :is(input, select) {
   width: 100%;
-  min-height: 2.6rem;
-  margin-top: .3rem;
 }
 #activity-filters select {
   font: inherit;
@@ -904,7 +909,6 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
-  padding: .55rem;
 }
 #activity-status {
   min-height: 1.5em;
@@ -956,6 +960,9 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
 }
 @media (max-width: 820px) {
   #activity-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 32rem) {
+  #activity-filters label:has(select[name="neighborhood"]) { grid-column: 1 / -1; }
 }
 @media (max-width: 375px) {
   #activity-filters { grid-template-columns: minmax(0, 1fr); }
