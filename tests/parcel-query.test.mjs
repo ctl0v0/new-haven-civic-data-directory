@@ -282,6 +282,15 @@ test("common permit and license QA questions retain exact search criteria withou
   const liquor = await askParcelData({ question: "Which parcels have Connecticut liquor permits linked to them? Show the business name, licensed address, and published status.", plan_only: true }, deps);
   assert.deepEqual(liquor.plan.requirements, [{ source_id: "ct-liquor-permits" }]);
   assert.ok(liquor.plan.include[0].fields.includes("permit_address"));
+  const charity = await askParcelData({ question: "Show public charity registrations at 138 Bradley Street", plan_only: true }, deps);
+  assert.equal(charity.status, "planned");
+  assert.deepEqual(charity.plan.scope, { kind: "address", address: "138 Bradley Street" });
+  assert.deepEqual(charity.plan.requirements, []);
+  assert.deepEqual(charity.plan.include, [{ source_id: "ct-public-charities" }]);
+  const charities = await askParcelData({ question: "List public charities in East Rock neighborhood", plan_only: true }, deps);
+  assert.equal(charities.status, "planned");
+  assert.deepEqual(charities.plan.scope, { kind: "neighborhood", name: "East Rock" });
+  assert.deepEqual(charities.plan.requirements, [{ source_id: "ct-public-charities" }]);
   const description = await askParcelData({ question: "Show plumbing permits where the description actually says ‘replace.’", plan_only: true }, deps);
   assert.deepEqual(description.plan.permit_description_terms, ["replace"]);
 });

@@ -1,6 +1,7 @@
 import { getSourceRecords } from "../parcel/adapters.js";
 import { addressEvidence, checkedQueryAddress } from "../parcel/address-evidence.js";
 import { LAYERS } from "../parcel/config.js";
+import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
 import { parcelUseCodesForSearch, reviewedUseCodeValues } from "../parcel/data-context.js";
 import { SourceError } from "../parcel/http.js";
 import { nearbyFeatureCounts } from "../parcel/nearby-counts.js";
@@ -206,8 +207,10 @@ async function liveSource(sourceId, wanted, feature, plan, dependencies) {
   const recordCategory = sourceId === "municity" ? plan.include.find(({ source_id }) => source_id === sourceId)?.record_category : null;
   const schoolFocus = sourceId === "school-attendance" && plan.scope.kind === "address"
     ? schoolAddress(plan.scope.address) : null;
+  const charityFocus = sourceId === CHARITY_SOURCE && plan.scope.kind === "address";
   const selected = schoolFocus ? result.items.filter((item) =>
     schoolAddress(item.attributes.address)?.address === schoolFocus.address)
+    : charityFocus ? result.items.filter((item) => addressEvidence(item, plan.scope.address)?.matches_query)
     : recordCategory ? result.items.filter(({ category }) => category === recordCategory) : result.items;
   const countEstablished = result.count_established ?? (recordCategory ?
     !result.omitted_categories?.includes(recordCategory) && !result.truncated_categories?.includes(recordCategory) : undefined);

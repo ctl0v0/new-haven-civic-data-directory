@@ -14,7 +14,7 @@ export const DISPLAY_GROUPS = Object.freeze([
   { key: "reported", title: "Recently reported active, open or issued", description: "These are source statuses. An issued permit does not prove work is underway, and a license does not prove a business is operating here." },
   { key: "early", title: "Recent drafts and records awaiting review", description: "These records have not been shown as issued or approved by the source." },
   { key: "older", title: "Older open, issued or draft records", description: "These records are more than two years old but still carry a nonterminal source status. Their present state needs source review." },
-  { key: "past", title: "Closed, void, expired or inactive", description: "The source reports a terminal status or a published license expiration date has passed." },
+  { key: "past", title: "Closed, void, expired or inactive", description: "The source reports a terminal status or a published expiration date has passed." },
   { key: "unclassified", title: "Other or unstated status", description: "The source did not provide a recognized status for these groups. Any published status still appears on its record." },
 ]);
 const rank = Object.fromEntries(DISPLAY_GROUPS.map((entry, index) => [entry.key, index]));
@@ -55,19 +55,21 @@ export function displayGroup(item, asOf = new Date()) {
   const status = publishedStatus(item);
   const normalized = String(status ?? "").toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const a = item.attributes ?? {};
-  const isLicense = item.category === "License" || item.source_id === "municipal-business-licenses" || item.source_id === "ct-liquor-permits";
-  const expiration = isLicense ? dateOnly(a.expiration_date ?? a.ExpirationDate) : null;
+  const hasCredential = ["License", "Registration"].includes(item.category) ||
+    item.source_id === "municipal-business-licenses" || item.source_id === "ct-liquor-permits";
+  const expiration = hasCredential ? dateOnly(a.expiration_date ?? a.ExpirationDate) : null;
   if (pastWords.test(normalized))
     return { key: "past", basis: "Published terminal status", as_of: checkedOn };
   if (expiration && expiration < checkedOn)
-    return { key: "past", basis: "Published license expiration date passed", as_of: checkedOn };
+    return { key: "past", basis: item.category === "Registration" ? "Published registration expiration date passed"
+      : "Published license expiration date passed", as_of: checkedOn };
   let key = negativeApproval.test(normalized) ? "early" : currentWords.test(normalized) ? "reported"
     : earlyWords.test(normalized) ? "early" : "unclassified";
   const recorded = dateOnly(item.event_date);
   const cutoff = new Date(asOf);
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
-  const unexpiredIssuedLicense = key === "reported" && isLicense && expiration && expiration >= checkedOn;
-  if (key !== "unclassified" && !unexpiredIssuedLicense && recorded && recorded < cutoff.toISOString().slice(0, 10))
+  const unexpiredCredential = key === "reported" && expiration && expiration >= checkedOn;
+  if (key !== "unclassified" && !unexpiredCredential && recorded && recorded < cutoff.toISOString().slice(0, 10))
     key = "older";
   return {
     key,

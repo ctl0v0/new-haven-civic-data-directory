@@ -9,7 +9,7 @@ import { auditMunicipalAddressCandidates } from "../search-index/address-candida
 import { buildIndexedSearchQuery, searchIndexedParcels, searchIndexedRecords,
   SEARCH_FIELDS } from "../search-index/search.js";
 import { searchCapabilities } from "../parcel/search-capabilities.js";
-import { stateRosterInventory, stateRosterRows } from "../search-index/socrata.js";
+import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "../search-index/socrata.js";
 import { arcgis } from "../parcel/http.js";
 import { municipalPermitCatalogRows, municipalPermitTypeRows,
   sameMunicipalPermitRows } from "../search-index/municity.js";
@@ -70,7 +70,8 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
   const catalog = indexSourceCatalog();
   assert.equal(catalog.filter((entry) => entry.source_id !== "transit-stops" &&
     entry.source_id !== "metered-parking-spaces" && entry.source_id !== "loading-zones" &&
-    entry.source_id !== "parking-availability").length, 43);
+    entry.source_id !== "parking-availability").length, 44);
+  assert.equal(catalog.find((entry) => entry.source_id === "ct-public-charities").index_source_id, "ct-public-charities");
   assert.equal(catalog.find((entry) => entry.source_id === "municity-permit-types")
     .index_source_id, "municity-permit-types");
   assert.equal(catalog.find((entry) => entry.source_id === "tax-bills").search_mode, "gap");
@@ -145,6 +146,32 @@ test("State roster retains published row IDs and refuses count or schema gaps", 
   assert.equal(records[0].event_date, "2026-01-14");
   assert.match(records[0].source_url, /data\.ct\.gov/);
   await assert.rejects(stateRosterRows(source, 0, 500, { get: async () => [] }));
+});
+
+test("charity roster uses the State credential ID and restricts inventory to registered charity types", async () => {
+  const sourceId = "ct-public-charities";
+  const inventory = await stateRosterInventory(sourceId, { get: async (value) => {
+    const url = new URL(value);
+    if (url.pathname.includes("/api/views/")) return { rowsUpdatedAt: 1760000000,
+      columns: STATE_ROSTERS[sourceId].fields.map((fieldName) => ({ fieldName })) };
+    assert.equal(url.searchParams.get("$select"), "count(*)");
+    assert.match(url.searchParams.get("$where"), /upper\(city\)='NEW HAVEN'.*'PUBLIC CHARITY', 'PUBLIC CHARITY - EXEMPT'/);
+    return [{ count: "1" }];
+  } });
+  const row = { credentialid: "2671715", fullcredentialcode: "CHR.0068611",
+    credential: "PUBLIC CHARITY", status: "ACTIVE", dba: "BRADLEY STREET BICYCLE CO-OP",
+    address: "138 BRADLEY STREET", city: "NEW HAVEN", issuedate: "2024-11-19T00:00:00.000" };
+  const [registration] = await stateRosterRows(inventory, 0, 500, { get: async (url) => {
+    assert.equal(url.searchParams.get("$where"), inventory.where);
+    assert.equal(url.searchParams.get("$order"), "credentialid");
+    return [row];
+  } });
+  assert.equal(registration.record_id, "2671715");
+  assert.equal(registration.published_type, "PUBLIC CHARITY");
+  assert.equal(registration.event_date, "2024-11-19");
+  assert.equal(registration.fields.normalized_site_address, "138 BRADLEY ST");
+  assert.equal(new URL(registration.source_url).searchParams.get("credentialid"), "2671715");
+  await assert.rejects(stateRosterRows(inventory, 0, 500, { get: async () => [{ ...row, credential: "PUBLIC ACCOUNTANT" }] }));
 });
 
 test("indexed cross-source search uses exact parcel joins and refuses an unindexed source", async () => {

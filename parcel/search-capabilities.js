@@ -7,6 +7,7 @@ import { STATE_ROSTERS } from "../search-index/socrata.js";
 import { indexConfigured, indexQuery } from "../search-index/db.js";
 import { SourceError } from "./http.js";
 import { parcelQueryCatalog } from "./query-contract.js";
+import { CHARITY_SOURCE } from "./charity-registrations.js";
 
 const eventFields = { parcels: "sale_date", municity: "PermitDate",
   [MUNICIPAL_LICENSE_SOURCE]: "IssueDate",
@@ -16,7 +17,7 @@ const valueFields = {
   neighborhoods: ["neighborhood", "neighborhood_label"], "trash-pickup": ["trash_day"],
   municity: ["PermStatus"], [MUNICIPAL_LICENSE_SOURCE]: ["LicenseType", "Status"],
   "ct-liquor-permits": ["status"], "ct-child-care-licenses": ["licensetype", "status"],
-  "ct-cannabis-retail": ["type"], "managed-lots": ["status"],
+  "ct-cannabis-retail": ["type"], [CHARITY_SOURCE]: ["credential", "status"], "managed-lots": ["status"],
 };
 
 export async function indexedQueryValues(source, field, { query = indexQuery, configured = indexConfigured } = {}) {
@@ -139,7 +140,7 @@ export function searchCapabilities() {
         tool: "search_indexed_records",
         rest: "POST /api/v1/search-indexed-records",
         sources: Object.keys(SEARCH_FIELDS),
-        scopes: ["all exact parcel-linked records in one indexed source", "one City parcel ID and object ID", "City neighborhood", "verified license site address"],
+        scopes: ["all exact parcel-linked records in one indexed source", "one City parcel ID and object ID", "City neighborhood", "verified license or registration address"],
         filter_fields: {
           source_id: "One indexed official source; municipal rows require one exact PermitType",
           equals: "Exact published fields from indexed_source_fields",

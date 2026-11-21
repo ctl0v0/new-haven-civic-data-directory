@@ -1,4 +1,5 @@
 import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
+import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
 
 export const permitFields = ["PermitNo", "PermitType", "PermStatus", "PermitDate", "LegalAddress"];
 export const contactFields = ["Fullname", "ContactRole", "CompanyName", "Phone", "Email", "EMailAddress", "ContactLicenseNumber"];
@@ -39,6 +40,17 @@ export function exactRecordQuestion(question, window) {
   const text = question.replace(/[?.!]$/, "");
   const history = !window && permitHistory(text);
   if (history) return { plan: history };
+  const charity = !window && text.match(/^(?:show(?: me)?|find|list|what are|which are) (?:the )?(?:(?:state|ct|connecticut) )?public charit(?:ies|y registrations)(?: (at|for|in) (.+?)(?: neighborhood)?)?$/i);
+  if (charity) {
+    const [, relation, location] = charity;
+    const include = [{ source_id: CHARITY_SOURCE }];
+    if (/^(?:at|for)$/i.test(relation ?? "")) {
+      if (!new RegExp(`^${street}$`, "i").test(location)) return null;
+      return { plan: { scope: { kind: "address", address: location }, requirements: [], include } };
+    }
+    const scope = location && !/^new haven$/i.test(location) ? { kind: "neighborhood", name: location } : city;
+    return { plan: { scope, requirements: [{ source_id: CHARITY_SOURCE }], include } };
+  }
   if (/^which parcels have (?:connecticut|ct|state) liquor (?:permits|licenses) linked to them(?:[?.!] show (?:the )?business name, licensed address, and (?:published )?status)?$/i.test(text)) {
     const source_id = "ct-liquor-permits";
     return { plan: { scope: city, requirements: [{ source_id }],

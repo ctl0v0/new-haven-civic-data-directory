@@ -5,7 +5,8 @@ function publishedRecordType(item) {
   const a = item.attributes ?? {};
   const value = item.category === "Permit" ? a.PermitType :
     item.category === "Application" ? a.ApplicationType :
-    item.category === "License" ? a.LicenseType ?? a.license_type : null;
+    item.category === "License" ? a.LicenseType ?? a.license_type :
+    item.category === "Registration" ? a.credential : null;
   return value == null ? null : String(value).trim() || null;
 }
 

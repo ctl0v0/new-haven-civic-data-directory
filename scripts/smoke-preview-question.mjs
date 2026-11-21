@@ -2,7 +2,7 @@ import { recentCalendarDates, askIndexedParcels, questionPermitCatalog } from '.
 import { indexConfigured } from '../search-index/db.js';
 import { askParcelData } from '../search-index/parcel-question.js';
 import { queryParcelData } from '../search-index/parcel-query.js';
-import { searchIndexedParcels } from '../search-index/search.js';
+import { searchIndexedParcels, searchIndexedRecords } from '../search-index/search.js';
 import { checkRecentPermitWindows } from './smoke-recent-permits.mjs';
 
 // A private Preview build checks that the read-only index can answer the
@@ -17,6 +17,31 @@ const sourceSummary = (result) => ({
     date_covered: check.date_covered ?? null,
   })) ?? [],
 });
+if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[charity-registration-smoke]')) {
+  const { CHARITY_SOURCE } = await import('../parcel/charity-registrations.js');
+  const { stateRosterInventory } = await import('../search-index/socrata.js');
+  const [live, inventory, indexed] = await Promise.allSettled([
+    askParcelData({ question: 'Show public charity registrations at 138 Bradley St' }),
+    stateRosterInventory(CHARITY_SOURCE),
+    searchIndexedRecords({ source_id: CHARITY_SOURCE, site_address: '138 Bradley St',
+      equals: { fullcredentialcode: 'CHR.0068611' } }),
+  ]);
+  const proof = (rows) => rows.flatMap((row) => (row.matching_sources ?? []).flatMap((source) =>
+    source.records.filter(({ record_id }) => record_id === '2671715')
+      .map(({ record_id, fields, match }) => ({ parcel_id: row.city_parcel_id, record_id,
+        address: fields.address, status: fields.status, match: match?.method }))));
+  console.log(JSON.stringify({ event: 'preview_charity_registration_check',
+    live: live.status === 'fulfilled' ? { status: live.value.status, matches: proof(live.value.items ?? []),
+      checks: live.value.coverage?.source_checks?.map(({ source_id, status, warning }) => ({ source_id, status, warning })) }
+      : { error: live.reason.message },
+    inventory: inventory.status === 'fulfilled' ? { count: inventory.value.source_count }
+      : { error: inventory.reason.message },
+    indexed: indexed.status === 'fulfilled' ? {
+      matches: indexed.value.items.map(({ city_parcel_id, record_id, match_methods }) =>
+        ({ parcel_id: city_parcel_id, record_id, match_methods })), ...sourceSummary(indexed.value),
+    } : { error: indexed.reason.message },
+  }));
+}
 console.log(JSON.stringify({ event: 'preview_question_reader', configured: indexConfigured() }));
 const window = recentCalendarDates(30);
 try {

@@ -15,6 +15,7 @@ import { normalizeAddress } from "./resolve.js";
 import { stateLocationMatches } from "./state-locations.js";
 import { lookupNhpsStreet, NHPS_ATTENDANCE_URL, schoolAddress, schoolRowsForAddress } from "./school-attendance.js";
 import { AGENTS, MASTER, PRINCIPALS, entityChildren, findOfficialOwnerEntity, legalName } from "./business-registry.js";
+import { CHARITY_SOURCE } from "./charity-registrations.js";
 
 const ISO = () => new Date().toISOString();
 const text = (value) =>
@@ -364,36 +365,39 @@ async function schoolAttendanceRecords(parcel) {
 async function stateLocationRecords(parcel, sourceId) {
   const checked = await stateLocationMatches(sourceId, parcel);
   if (checked.notLinked) return notLinked(sourceId, checked.warning);
+  const charity = sourceId === CHARITY_SOURCE;
   const items = checked.matches.map(({ row, siteField, credentialField, datasetId, addressPointIds }) => {
     const credential = text(row[credentialField]);
     const hash = createHash("sha256").update(JSON.stringify(row)).digest("hex").slice(0, 12);
-    const effective = sourceId === "ct-liquor-permits" ? row.effective_date : row.effectivedate;
+    const event = charity ? row.issuedate : sourceId === "ct-liquor-permits" ? row.effective_date : row.effectivedate;
     const expiration = sourceId === "ct-liquor-permits" ? row.expire_date : row.expirationdate;
     const sourceUrl = new URL(`https://data.ct.gov/resource/${datasetId}.json`);
     if (credential) sourceUrl.searchParams.set(credentialField, credential);
     const attributes = {
       ...row,
-      site_address_as_published: row[siteField],
-      site_address_source_field: siteField,
+      ...(charity ? { registered_address_as_published: row[siteField] }
+        : { site_address_as_published: row[siteField], site_address_source_field: siteField }),
       ...(sourceId === "ct-child-care-licenses" ? { license_type: row.licensetype } : {}),
       ...(sourceId === "ct-cannabis-retail" ? { license_type: row.type } : {}),
       ...(expiration ? { expiration_date: date(expiration) } : {}),
     };
     return {
-      ...record(`${credential ?? "row"}:${hash}`, sourceId, attributes, {
-        eventDate: date(effective),
+      ...record(charity ? credential : `${credential ?? "row"}:${hash}`, sourceId, attributes, {
+        eventDate: date(event),
         match: {
-          method: "state-site-address-city-address-point-unique-parcel",
-          state_site_address_field: siteField,
+          ...(charity ? { method: "state-registered-address-city-address-point-unique-parcel",
+            state_registered_address_field: siteField }
+            : { method: "state-site-address-city-address-point-unique-parcel", state_site_address_field: siteField }),
           city_address_point_objectids: addressPointIds,
           city_parcel_objectid: parcel.attributes.objectid,
           city_parcel_id: parcel.attributes.parcel_id,
         },
         sourceUrl: sourceUrl.href,
-        note: "The State site address matches City address points that resolve only to this parcel. The source does not publish a City parcel identifier; mailing or backer addresses were not used for this join.",
+        note: charity ? "The published registration address matches City address points that resolve only to this parcel. This record documents the organization’s State registration and registered address."
+          : "The State site address matches City address points that resolve only to this parcel. The source does not publish a City parcel identifier; mailing or backer addresses were not used for this join.",
       }),
       source_record_id: credential ?? hash,
-      category: sourceId === "ct-liquor-permits" ? "Permit" : "License",
+      category: charity ? "Registration" : sourceId === "ct-liquor-permits" ? "Permit" : "License",
     };
   });
   return result(sourceId, items, { partial: checked.partial, warning: checked.warning });
@@ -1848,6 +1852,7 @@ const ADAPTERS = Object.freeze({
   "ct-liquor-permits": (p) => stateLocationRecords(p, "ct-liquor-permits"),
   "ct-child-care-licenses": (p) => stateLocationRecords(p, "ct-child-care-licenses"),
   "ct-cannabis-retail": (p) => stateLocationRecords(p, "ct-cannabis-retail"),
+  [CHARITY_SOURCE]: (p) => stateLocationRecords(p, CHARITY_SOURCE),
   "lci-cases": lciCaseRecords,
   "managed-lots": managedLotRecords,
 });

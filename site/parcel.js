@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 const groups = [
   ["property", "Building and addresses", "City parcel fields, assessor detail, address points, and address-level NHPS School Choice attendance zones."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
-  ["business", "Businesses and occupants in records", "Municipal parcel records and State licensed locations joined through City address points. A license does not prove current occupancy or operation."],
+  ["business", "Businesses and occupants in records", "Municipal parcel records, State licensed locations, and charity registrations linked through City address points."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
@@ -40,6 +40,7 @@ const sourceNames = {
   "ct-liquor-permits": "CT liquor permits",
   "ct-child-care-licenses": "CT child care and youth camps",
   "ct-cannabis-retail": "CT cannabis retail locations",
+  "ct-public-charities": "CT public charity registrations",
   "lci-cases": "LCI cases",
   "managed-lots": "LCI managed lots",
   planning: "Planning cases",
@@ -92,6 +93,7 @@ const municipalCategoryTitles = {
   Complaint: "Complaints",
   Contact: "Contacts",
   License: "Licenses",
+  Registration: "Charity registrations",
   Permit: "Permits",
   Occupant: "Occupants",
   Certificate: "Certificates",
@@ -440,6 +442,7 @@ function eventDateLabel(item) {
   if (["parcel-sale", "assessor-sales"].includes(item.source_id)) return "Sale date";
   if (item.source_id === "lci-cases") return "Filed date";
   if (["ct-liquor-permits", "ct-child-care-licenses"].includes(item.source_id)) return "Effective date";
+  if (item.source_id === "ct-public-charities") return "Registration issue date";
   if (item.source_id === "municity") {
     const fields = {
       Permit: [["PermitDate", "Permit date"], ["CreatedDate", "Created date"]],
@@ -509,6 +512,9 @@ function recordTitle(item) {
     return brief([a.name ?? "Child care or youth camp license", a.licensenumber].filter(Boolean).join(" · "), 120);
   if (item.source_id === "ct-cannabis-retail")
     return brief([a.dba ?? a.business ?? "Cannabis retail location", a.license].filter(Boolean).join(" · "), 120);
+  if (item.source_id === "ct-public-charities")
+    return brief([a.dba || a.businessname || a.name || "State charity registration", a.fullcredentialcode]
+      .filter(Boolean).join(" · "), 120);
   if (item.category === "Permit")
     return brief([a.PermitType, a.PermitNo ?? a.PermitNumber].filter(Boolean).join(" · ") || "Permit record", 120);
   if (item.category === "Application")
@@ -636,6 +642,8 @@ function recordDescription(item) {
     return [a.licensetype, a.address2, a.status, a.expirationdate ? `Expires ${shortDate(a.expirationdate)}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "ct-cannabis-retail")
     return [a.type, a.street, "State operating-location roster; no row-level status published"].filter(Boolean).join(" · ");
+  if (item.source_id === "ct-public-charities")
+    return [a.credential, a.registered_address_as_published, a.status].filter(Boolean).join(" · ");
   if (item.source_id === "business-master")
     return [a.entity_type, a.alei ? `ALEI ${a.alei}` : null, a.registry_status ? `Registry status: ${a.registry_status}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "business-principals")
@@ -931,6 +939,15 @@ function appendRecord(parent, item) {
       ["Retailer type", item.attributes.type],
       ["License", item.attributes.license],
       ["Business", item.attributes.business],
+    ].filter(([, value]) => value)
+    : item.source_id === "ct-public-charities" ? [
+      ["Registered address", item.attributes.registered_address_as_published],
+      ["Legal name", item.attributes.businessname || item.attributes.name],
+      ["DBA", item.attributes.dba],
+      ["Registration type", item.attributes.credential],
+      ["Registration number", item.attributes.fullcredentialcode],
+      ["Published status", item.attributes.status],
+      ["Expiration date", shortDate(item.attributes.expiration_date)],
     ].filter(([, value]) => value)
     : item.source_id === "municity" && item.category === "Permit" ? [
       ["Permit number", item.attributes.PermitNo],
@@ -2195,7 +2212,7 @@ function kindKey(item, id) {
 function orderedKinds(id, facets) {
   const preferred = id === "ownership"
     ? ["owner_names", "owner_registry", "owner_history", "unclassified"]
-    : id === "business" ? ["License", "Permit", "Occupant"]
+    : id === "business" ? ["License", "Permit", "Registration", "Occupant"]
       : ["Permit", "License", "Application", "Complaint", "Contact", "Document", "Certificate", "Occupant"];
   return Object.keys(facets?.kind ?? {}).sort((a, b) => {
     const aRank = preferred.indexOf(a);
@@ -3020,7 +3037,8 @@ function appendProjectedRecords(parent, match) {
   for (const record of match.records) {
     const row = el("li");
     const fields = record.fields ?? {};
-    const title = fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
+    const charityName = match.source_id === "ct-public-charities" ? fields.dba || fields.businessname || fields.name : null;
+    const title = charityName ?? fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
       fields.PermitNo ?? record.permit_number ?? record.published_type ?? record.address ?? `Record ${record.record_id}`;
     const head = el("p");
     head.append(el("strong", title));
@@ -3035,7 +3053,8 @@ function appendProjectedRecords(parent, match) {
       for (const [field, value] of values) {
         const label = match.source_id === "school-attendance" ? {
           k8_school: "K–8 attendance zone", high_school: "High-school attendance zone",
-        }[field] : null;
+        }[field] : match.source_id === "ct-public-charities" ? { address: "Registered address",
+          businessname: "Legal name", dba: "DBA", fullcredentialcode: "Registration number" }[field] : null;
         dl.append(el("dt", label ?? field), el("dd", typeof value === "object" ? JSON.stringify(value) : value));
       }
       row.append(dl);

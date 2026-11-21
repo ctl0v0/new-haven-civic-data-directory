@@ -14,6 +14,7 @@ import nhpsSnapshot from "../data/nhps-attendance.json" with { type: "json" };
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, schoolAddress,
   schoolRowsForAddress, snapshotIsCurrent } from "../parcel/school-attendance.js";
+import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
 
 const write = (statement, values = []) => indexQuery(statement, values, { write: true });
 
@@ -205,29 +206,31 @@ async function linkReviewedSubparcelParents(runId) {
 async function linkStateAddresses(runId, sourceId) {
   const addressRun = await write(`SELECT run_id FROM search_active_runs
     WHERE source_id = 'addresses' AND scope_key = 'all'`);
-  if (!addressRun.length) throw new Error("Complete City address baseline is required for State site joins");
+  if (!addressRun.length) throw new Error("Complete City address baseline is required for State address joins");
   await write(`WITH matches AS (
     SELECT r.run_id, r.source_id, r.record_id, a.record_id AS address_id,
       ap.city_parcel_id, ap.city_objectid, ap.join_status
     FROM search_records r
     JOIN search_records a ON a.run_id = $2 AND a.source_id = 'addresses'
       AND a.fields->>'normalized_address' = r.fields->>'normalized_site_address'
-    JOIN search_record_parcels ap ON ap.run_id = a.run_id
+    LEFT JOIN search_record_parcels ap ON ap.run_id = a.run_id
       AND ap.source_id = 'addresses' AND ap.record_id = a.record_id
     WHERE r.run_id = $1 AND r.source_id = $3
       AND length(r.fields->>'normalized_site_address') > 0
   ), flags AS (
     SELECT record_id, COUNT(DISTINCT (city_parcel_id, city_objectid)) AS parcel_count,
-      bool_and(join_status = 'exact') AS address_exact
+      bool_and(join_status IS NOT DISTINCT FROM 'exact') AS address_exact
     FROM matches GROUP BY record_id
   )
   INSERT INTO search_record_parcels (run_id, source_id, record_id,
     city_parcel_id, city_objectid, city_address_objectid, match_method, join_status)
   SELECT m.run_id, m.source_id, m.record_id, m.city_parcel_id,
-    m.city_objectid, m.address_id::bigint, 'state-site-city-address-point',
+    m.city_objectid, m.address_id::bigint, $4,
     CASE WHEN f.parcel_count = 1 AND f.address_exact THEN 'exact' ELSE 'ambiguous' END
-  FROM matches m JOIN flags f ON f.record_id = m.record_id`,
-  [runId, Number(addressRun[0].run_id), sourceId]);
+  FROM matches m JOIN flags f ON f.record_id = m.record_id
+  WHERE m.city_parcel_id IS NOT NULL`,
+  [runId, Number(addressRun[0].run_id), sourceId,
+    sourceId === CHARITY_SOURCE ? "state-registered-address-city-address-point" : "state-site-city-address-point"]);
 }
 
 export async function finishRun(runId, sourceId, expectedCount,

@@ -5,6 +5,8 @@ import { municipalPermitCatalogRows, municipalTypeShard } from "../search-index/
 import { municipalPermitTypes } from "../parcel/permit-types.js";
 import { importMunicipalPermitActivity } from "../search-index/import-permit-activity.js";
 import { importMunicipalBusinessLicenses } from "../search-index/import-municipal-licenses.js";
+import { STATE_ROSTERS } from "../search-index/socrata.js";
+import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
 
 const mode = process.argv[2] ?? "daily";
 if (!["daily", "hourly", "municipal", "licenses"].includes(mode))
@@ -13,7 +15,8 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
   throw new Error("SEARCH_DATABASE_WRITE_URL is required for index refresh");
 
 const cityLicenses = ["municipal-business-licenses", () => importMunicipalBusinessLicenses()];
-const stateLicenses = ["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].map((id) =>
+const charities = [CHARITY_SOURCE, () => importStateRoster(CHARITY_SOURCE)];
+const stateLicenses = Object.keys(STATE_ROSTERS).filter((id) => id !== CHARITY_SOURCE).map((id) =>
   [id, () => importStateRoster(id)]);
 const results = [];
 async function refreshSource([sourceId, refresh]) {
@@ -29,9 +32,10 @@ async function refreshSource([sourceId, refresh]) {
 }
 
 if (mode === "hourly") await refreshSource(cityLicenses);
-const jobs = mode === "licenses" ? [cityLicenses, ...stateLicenses] : mode === "daily" ? [
+const jobs = mode === "licenses" ? [charities, cityLicenses, ...stateLicenses] : mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
+  charities,
   cityLicenses,
   ["municity:all-permit-types:recent-windows", () => importMunicipalPermitWindows()],
   ["municity-permit-activity", () => importMunicipalPermitActivity()],

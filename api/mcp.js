@@ -427,7 +427,7 @@ export function createServer() {
     server,
     "search_indexed_records",
     "Search indexed official records and parcel links",
-    "Page matching records from one City or State source with exact City parcel links. Filter by published fields, parcel, or neighborhood. For City and State licenses, site_address filters the published license address linked to an official address point. Municipal permits require one exact PermitType or published group.",
+    "Page matching records from one City or State source with exact City parcel links. Filter by published fields, parcel, or neighborhood. For licenses and State charity registrations, site_address filters the published credential address linked to an official City address point. Municipal permits require one exact PermitType or published group.",
     z.object({
       source_id: z.enum(Object.keys(SEARCH_FIELDS)),
       equals: z.record(z.string(), z.union([z.string(), z.number()])).optional(),

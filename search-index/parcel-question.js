@@ -4,6 +4,7 @@ import { getDataContext, parcelUseCodesForSearch } from "../parcel/data-context.
 import { SourceError } from "../parcel/http.js";
 import { askParcelDataSchema, parcelQueryCatalog, parcelQueryPlanSchema } from "../parcel/query-contract.js";
 import { normalizeAddress } from "../parcel/resolve.js";
+import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
 import { ambiguousWorkDate, businessLicenseQuestion, interpretBaselineQuestion,
   permitContactQuestion, questionPermitCatalog, recentCalendarDates } from "./ask.js";
 import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
@@ -24,6 +25,7 @@ const explicitPermitDate = /\b(?:published )?permit ?date\b/i;
 const permitDateBasis = /\b(?:by|using|filter by|based on|use) (?:the )?(?:published )?permit ?date\b/i;
 const combinedPermits = /\b(?:both|either) (?:an? )?(?:kitchen )?(?:hood|plumbing|electrical|mechanical|roofing|water heater) permits? (?:and|or) (?:an? )?(?:kitchen )?(?:hood|plumbing|electrical|mechanical|roofing|water heater) permits?\b|\b(?:hood|plumbing|electrical|mechanical|roofing|water heater), (?:hood|plumbing|electrical|mechanical|roofing|water heater),? (?:and|or) (?:hood|plumbing|electrical|mechanical|roofing|water heater) (?:work|permits?)\b/i;
 const officialLiquor = /\b(?:connecticut|ct|state) liquor (?:permits?|licenses?)\b/i;
+const publicCharity = /\bpublic charit(?:ies|y)\b/i;
 const cityLicenses = /\b(?:city|municipal) business licenses?\b/i;
 const addressMention = /\b\d{1,6}[A-Za-z]? (?:[a-z0-9][a-z0-9.'’-]* ){1,6}(?:street|st|avenue|ave|road|rd|boulevard|blvd|place|pl|drive|dr|court|ct|lane|ln|terrace|ter|way)\b/i;
 
@@ -36,6 +38,8 @@ function questionEvent(question) {
     return { source: PERMIT_ACTIVITY_SOURCE, kind: "application", field: "ApplicationDate" };
   if (!cityLicenses.test(question) && officialLiquor.test(question))
     return { source: "ct-liquor-permits", field: "effective_date" };
+  if (publicCharity.test(question))
+    return { source: CHARITY_SOURCE, field: "issuedate" };
   if (!permitWords.test(question) && /\bbusiness licenses?\b/i.test(question) &&
       !/\b(?:state|connecticut|ct)\b/i.test(question)) return { source: MUNICIPAL_LICENSE_SOURCE, field: "IssueDate" };
   if (explicitPermitDate.test(question) || /\b(?:pulled permits?|permits? (?:pulled|dated))\b/i.test(question))
@@ -56,6 +60,9 @@ function missingQuestionFilter(question, plan, { event, window, usePermitDate })
   if (ward && (plan.scope.kind !== "ward" || plan.scope.ward !== Number(ward))) return `Search City Ward ${ward}.`;
   if (officialLiquor.test(question) && !sources.includes("ct-liquor-permits"))
     return "Search the official Connecticut liquor roster for parcels with linked permits.";
+  if (publicCharity.test(question) && !sources.includes(CHARITY_SOURCE) &&
+      !(["address", "parcel"].includes(plan.scope.kind) && plan.include.some(({ source_id }) => source_id === CHARITY_SOURCE)))
+    return "Use Connecticut public charity registrations for this search.";
   if (cityLicenses.test(question) && !sources.includes(MUNICIPAL_LICENSE_SOURCE) &&
       !(plan.scope.kind === "address" && plan.include.some(({ source_id }) => source_id === MUNICIPAL_LICENSE_SOURCE)))
     return "Use the City’s business license source for this query.";
@@ -161,7 +168,7 @@ function modelPlan(parsed, question, { now, usePermitDate, window, event }) {
       }
       if (source_id === PERMIT_ACTIVITY_SOURCE && field === "permit_type" && operator === "equals" &&
           item.equals?.permit_type?.toLowerCase() === String(value).trim().toLowerCase()) continue;
-      if (["PermitDate", "IssueDate", "ApplicationDate", "DateCompleted", "CloseDate", "sale_date", "effective_date", "effectivedate"].includes(field))
+      if (["PermitDate", "IssueDate", "ApplicationDate", "DateCompleted", "CloseDate", "sale_date", "effective_date", "effectivedate", "issuedate"].includes(field))
         throw new Error("Use a published date field with a calendar range.");
       if (Object.hasOwn(item[operator] ?? {}, field))
         throw new Error("The interpreted query contains competing filters for the same field.");
@@ -246,6 +253,9 @@ export async function askParcelData(input, { execute = queryParcelData, interpre
   const question = checked.data.question.replace(/\s+/g, " ");
   if (/\bcottage[- ]food\b/i.test(question)) return { status: "unsupported", question,
     reason_code: "unverified_source", reason: "Connecticut publishes cottage food credentials. A source with a verified licensed site address and date is needed before this search can link them to City parcels." };
+  if (qualifiedRadius.test(question) && publicCharity.test(question))
+    return { status: "unsupported", question, reason_code: "unsupported_scope",
+      reason: "Charity registration searches can use a City neighborhood, parcel or registered address." };
   if (qualifiedRadius.test(question) && (permitWords.test(question) || /\b(?:licenses?|licensed)\b/i.test(question)))
     return { status: "unsupported", question, reason_code: "unsupported_scope",
       reason: "Permit and license searches can use a City neighborhood or a specific parcel or address. A radius filter for those records is unavailable." };

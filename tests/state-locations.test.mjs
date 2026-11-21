@@ -44,6 +44,17 @@ test("State site locations join only through exact City addresses with a unique 
           type: "Adult-Use Cannabis Only", street: "100 MAIN ST", city: "New Haven" },
         { license: "ACRE.2", business: "Other LLC", street: "101 MAIN ST", city: "New Haven" },
       ]);
+      if (url.pathname.endsWith("/ngch-56tr.json")) {
+        assert.match(url.searchParams.get("$where"), /PUBLIC CHARITY.*PUBLIC CHARITY - EXEMPT/);
+        assert.equal(url.searchParams.get("$order"), "credentialid");
+        return json([
+          { credentialid: "2671715", credential: "PUBLIC CHARITY", fullcredentialcode: "CHR.0068611",
+            businessname: "CONNECTICUT COMMUNITY BICYCLE WORKSHOP INC", dba: "BRADLEY STREET BICYCLE CO-OP",
+            address: "100 MAIN ST", city: "NEW HAVEN", status: "ACTIVE",
+            issuedate: "2024-11-19T00:00:00.000", expirationdate: "2027-11-30T00:00:00.000" },
+          { credentialid: "123", credential: "PUBLIC CHARITY - EXEMPT", address: "102 MAIN ST", city: "NEW HAVEN" },
+        ]);
+      }
     }
     if (url.pathname.includes("New_Haven_Addresses_Authoritative_view")) {
       if (url.searchParams.get("geometryType") === "esriGeometryPolygon")
@@ -64,10 +75,11 @@ test("State site locations join only through exact City addresses with a unique 
     throw Error(`Unexpected upstream: ${url}`);
   };
 
-  const [liquor, childCare, cannabis] = await Promise.all([
+  const [liquor, childCare, cannabis, charity] = await Promise.all([
     getSourceRecords("ct-liquor-permits", selected),
     getSourceRecords("ct-child-care-licenses", selected),
     getSourceRecords("ct-cannabis-retail", selected),
+    getSourceRecords("ct-public-charities", selected),
   ]);
   assert.equal(liquor.status, "ok");
   assert.equal(liquor.items[0].category, "Permit");
@@ -92,6 +104,19 @@ test("State site locations join only through exact City addresses with a unique 
   assert.deepEqual(cannabis.items.map((item) => item.attributes.license), ["ACRE.1"]);
   assert.equal(publishedStatus(cannabis.items[0]), null);
   assert.equal(displayGroup(cannabis.items[0]).key, "reported");
+  assert.equal(charity.items.length, 1);
+  assert.match(charity.warning, /non-unique City parcel joins/);
+  const [registration] = charity.items;
+  assert.equal(registration.category, "Registration");
+  assert.equal(registration.source_record_id, "2671715");
+  assert.equal(registration.attributes.dba, "BRADLEY STREET BICYCLE CO-OP");
+  assert.equal(registration.attributes.registered_address_as_published, "100 MAIN ST");
+  assert.equal(registration.attributes.site_address_as_published, undefined);
+  assert.equal(registration.match.method, "state-registered-address-city-address-point-unique-parcel");
+  assert.equal(registration.event_date, "2024-11-19");
+  assert.equal(addressEvidence(registration, "100 Main Street").matches_query, true);
+  assert.equal(addressEvidence(registration, "102 Main St").matches_query, false);
+  assert.equal(displayGroup(registration, new Date("2026-11-21T00:00:00Z")).key, "reported");
   assert.ok(requests.filter((url) => url.pathname.includes("New_Haven_Addresses_Authoritative_view") &&
     url.searchParams.get("geometryType") === "esriGeometryPolygon").length === 1);
   assert.ok(requests.every((url) => ["data.ct.gov", "gis.newhavenct.gov"].includes(url.hostname)));

@@ -1,3 +1,5 @@
+import { CHARITY_SOURCE, CHARITY_SOURCE_URL } from "./charity-registrations.js";
+
 export const GIS = "https://gis.newhavenct.gov/server/rest/services/Hosted/";
 export const LAYERS = Object.freeze({
   parcels:
@@ -397,6 +399,16 @@ export const SOURCES = Object.freeze([
     mode: "live",
     coverage:
       "The State roster identifies operating cannabis and medical marijuana retail locations. Its street field is linked only when City address points resolve exclusively to this parcel. The roster does not publish an individual status or update date for each row.",
+  },
+  {
+    id: CHARITY_SOURCE,
+    group: "business",
+    title: "Connecticut public charity registrations",
+    url: CHARITY_SOURCE_URL,
+    verification_url: "https://portal.ct.gov/dcp/knowledge-base/articles/charities/verifying-a-charity",
+    mode: "live",
+    coverage:
+      "Public Charity and Public Charity - Exempt eLicense rows in New Haven. The State address must match City address points that resolve exclusively to this parcel. The link identifies the registered address. Published legal name, DBA, credential, status and dates are retained.",
   },
   {
     id: "inspections",

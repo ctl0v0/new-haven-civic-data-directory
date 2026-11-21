@@ -1,5 +1,6 @@
 import useCodes from "../data/city-use-codes.json" with { type: "json" };
 import { SourceError } from "./http.js";
+import { CHARITY_SOURCE, CHARITY_SOURCE_URL } from "./charity-registrations.js";
 
 const parcelLayer = "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0";
 const vendor = "https://www.municityconnect.com/#/app/NewHavenCityCT/landing";
@@ -54,6 +55,10 @@ export const DATA_CONTEXT = Object.freeze([
     official_source_url: neighborhoods,
     source_fact: "The City hosts mapped neighborhood polygons.",
     reading_rule: "A spatially intersecting City parcel can be filtered by the published neighborhood polygon; the relationship is a map intersection." },
+  { id: "ct-public-charity-registration", term: "Connecticut public charity registration", source_id: CHARITY_SOURCE,
+    official_source_url: CHARITY_SOURCE_URL, field: "address",
+    source_fact: "Connecticut eLicense publishes public charity registrations, including organization names, DBAs, registered addresses, credential numbers, status and dates.",
+    reading_rule: "Match the registered street address to City address points that resolve to one parcel. Return the State registration and registered address as published. A date filter uses the State issue date." },
   { id: "assessor-ownership-history", term: "Assessor ownership history", source_id: "assessor-sales",
     official_source_url: "https://gis.vgsi.com/newhavenct/",
     source_fact: "The City assessor property card can publish ownership history rows with a sale date, price, and book and page reference.",

@@ -1,5 +1,6 @@
 import { normalizeAddress } from "./resolve.js";
 import { SourceError } from "./http.js";
+import { CHARITY_SOURCE } from "./charity-registrations.js";
 
 export function checkedQueryAddress(value) {
   if (value == null || value === "") return null;
@@ -30,6 +31,8 @@ function explicitAddress(item) {
     return { field: "LegalAddress", value: a.recorded_address };
   if (item.source_id === "ct-brownfields" && a.site_address_as_published)
     return { field: "site_address_as_published", value: a.site_address_as_published };
+  if (item.source_id === CHARITY_SOURCE && a.registered_address_as_published)
+    return { field: "address", value: a.registered_address_as_published };
   if (["ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"].includes(item.source_id) &&
     a.site_address_as_published)
     return { field: a.site_address_source_field, value: a.site_address_as_published };

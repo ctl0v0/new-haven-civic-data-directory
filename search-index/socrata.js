@@ -1,5 +1,6 @@
 import { fetchJson, SourceError } from "../parcel/http.js";
 import { normalizeAddress } from "../parcel/resolve.js";
+import { CHARITY_DATASET, CHARITY_FIELDS, CHARITY_SOURCE, CHARITY_WHERE, isCharityRegistration } from "../parcel/charity-registrations.js";
 
 export const STATE_ROSTERS = Object.freeze({
   "ct-liquor-permits": { dataset: "gwv2-eswx", city: "permit_city",
@@ -16,6 +17,9 @@ export const STATE_ROSTERS = Object.freeze({
     site: "street", credential: "license", status: null,
     type: "type", event_date: null,
     fields: ["business", "dba", "street", "city", "license", "type"] },
+  [CHARITY_SOURCE]: { dataset: CHARITY_DATASET, city: "city", site: "address",
+    id_field: "credentialid", status: "status",
+    type: "credential", event_date: "issuedate", fields: CHARITY_FIELDS },
 });
 
 function sourceDate(value) {
@@ -34,7 +38,8 @@ export async function stateRosterInventory(sourceId, { get = fetchJson } = {}) {
   const source = STATE_ROSTERS[sourceId];
   if (!source) throw new SourceError("Unknown State location roster", 400);
   const base = `https://data.ct.gov/resource/${source.dataset}.json`;
-  const where = `upper(${source.city})='NEW HAVEN'`;
+  const city = `upper(${source.city})='NEW HAVEN'`;
+  const where = sourceId === CHARITY_SOURCE ? `${city} AND ${CHARITY_WHERE}` : city;
   const countUrl = new URL(base);
   countUrl.searchParams.set("$select", "count(*)");
   countUrl.searchParams.set("$where", where);
@@ -60,23 +65,27 @@ export async function stateRosterRows(inventory, offset, limit = 500, { get = fe
       !Number.isSafeInteger(limit) ||
       limit < 1 || limit > 500) throw new SourceError("Invalid State roster page", 400);
   const url = new URL(inventory.base);
-  url.searchParams.set("$select", [":id", ...inventory.source.fields].join(","));
+  const idField = inventory.source.id_field ?? ":id";
+  url.searchParams.set("$select", [...new Set([idField, ...inventory.source.fields])].join(","));
   url.searchParams.set("$where", inventory.where);
-  url.searchParams.set("$order", ":id");
+  url.searchParams.set("$order", idField);
   url.searchParams.set("$offset", String(offset));
   url.searchParams.set("$limit", String(limit));
   const rows = await get(url, { timeout: 20000, maxBytes: 4_000_000 });
   if (!Array.isArray(rows) || rows.length !== Math.min(limit, inventory.source_count - offset))
     throw new SourceError("State roster page did not match the official count");
   return rows.map((row) => {
-    const id = row[":id"];
-    if (typeof id !== "string" || !/^row-[A-Za-z0-9_.~-]+$/.test(id) ||
+    const id = String(row[idField] ?? "");
+    const validId = inventory.source_id === CHARITY_SOURCE
+      ? isCharityRegistration(row) : /^row-[A-Za-z0-9_.~-]+$/.test(id);
+    if (!validId ||
         String(row[inventory.source.city] ?? "").toUpperCase() !== "NEW HAVEN")
       throw new SourceError("State roster row ID or city did not match the official page");
     const fields = Object.fromEntries(Object.entries(row).filter(([key]) => key !== ":id"));
     fields.normalized_site_address = normalizeAddress(row[inventory.source.site]);
     const sourceUrl = new URL(inventory.base);
-    sourceUrl.searchParams.set("$where", `:id='${id}'`);
+    if (idField === ":id") sourceUrl.searchParams.set("$where", `:id='${id}'`);
+    else sourceUrl.searchParams.set(idField, id);
     return { record_id: id, source_url: sourceUrl.href,
       published_type: inventory.source.type ? row[inventory.source.type] ?? null : null,
       published_status: inventory.source.status ? row[inventory.source.status] ?? null : null,

@@ -1,4 +1,5 @@
 import { LAYERS } from "./config.js";
+import { CHARITY_DATASET, CHARITY_FIELDS, CHARITY_SOURCE, CHARITY_WHERE, isCharityRegistration } from "./charity-registrations.js";
 import { arcgis, cached, fetchJson, sqlString, SourceError } from "./http.js";
 import { normalizeAddress } from "./resolve.js";
 
@@ -6,6 +7,7 @@ const DATASETS = Object.freeze({
   "ct-liquor-permits": { id: "gwv2-eswx", city: "permit_city", site: "permit_address", credential: "credential" },
   "ct-child-care-licenses": { id: "h8mr-dn95", city: "city", site: "address2", credential: "licensenumber" },
   "ct-cannabis-retail": { id: "42yd-3x3d", city: "city", site: "street", credential: "license" },
+  [CHARITY_SOURCE]: { id: CHARITY_DATASET, city: "city", site: "address", credential: "credentialid" },
 });
 const CITY_ROW_LIMIT = 2001;
 const ADDRESS_POINT_LIMIT = 1000;
@@ -20,10 +22,19 @@ async function stateCityRows(sourceId) {
   const definition = DATASETS[sourceId];
   return cached(`state-location-city:${sourceId}`, async () => {
     const url = new URL(`https://data.ct.gov/resource/${definition.id}.json`);
-    url.searchParams.set("$where", `upper(${definition.city})='NEW HAVEN'`);
+    const where = `upper(${definition.city})='NEW HAVEN'`;
+    if (sourceId === CHARITY_SOURCE) {
+      url.searchParams.set("$where", `${where} AND ${CHARITY_WHERE}`);
+      url.searchParams.set("$select", CHARITY_FIELDS.join(","));
+      url.searchParams.set("$order", "credentialid");
+    } else url.searchParams.set("$where", where);
     url.searchParams.set("$limit", String(CITY_ROW_LIMIT));
     const rows = await fetchJson(url, { timeout: 12000, maxBytes: 4_000_000 });
     if (!Array.isArray(rows)) throw new SourceError("State roster returned no record array");
+    if (sourceId === CHARITY_SOURCE && (rows.some((row) =>
+      !isCharityRegistration(row) || String(row.city).toUpperCase() !== "NEW HAVEN") ||
+      new Set(rows.map((row) => String(row.credentialid))).size !== rows.length))
+      throw new SourceError("The State returned an invalid or duplicate New Haven charity registration.");
     return rows;
   });
 }
@@ -48,8 +59,11 @@ async function cityPointsForAddress(localPoints, address) {
   const streets = [...new Set(examples.map((feature) =>
     String(feature.attributes?.full_street_name ?? "").toUpperCase()).filter(Boolean))];
   if (!house || !streets.length) return null;
-  const where = `house_number = '${sqlString(house)}' AND (${streets.map((street) =>
-    `UPPER(full_street_name) = '${sqlString(street)}'`).join(" OR ")})`;
+  const streetNames = [...new Set(examples.map((feature) =>
+    String(feature.attributes?.street_name ?? "").toUpperCase()).filter(Boolean))];
+  const streetClauses = [...streets.map((street) => `UPPER(full_street_name) = '${sqlString(street)}'`),
+    ...streetNames.map((street) => `UPPER(street_name) = '${sqlString(street)}'`)];
+  const where = `house_number = '${sqlString(house)}' AND (${streetClauses.join(" OR ")})`;
   return arcgis(LAYERS.addresses, {
     where,
     outFields: "objectid,house_number,full_street_name,street_name,suffix_type,unit,unit_type",
@@ -85,7 +99,8 @@ async function verifySiteAddress(localPoints, address, parcel) {
   })).values()];
   if (pointGeometries.length > 25) return { linked: false, incomplete: true };
   const parcels = await Promise.all(pointGeometries.map(parcelAtPoint));
-  if (parcels.some((row) => !row || Number(row.objectid) !== Number(parcel.attributes.objectid)))
+  if (parcels.some((row) => !row || Number(row.objectid) !== Number(parcel.attributes.objectid) ||
+      Number(row.parcel_id) !== Number(parcel.attributes.parcel_id)))
     return { linked: false, ambiguous: true };
   return {
     linked: true,
