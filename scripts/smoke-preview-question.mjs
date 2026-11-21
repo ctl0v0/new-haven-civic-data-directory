@@ -177,15 +177,25 @@ try {
   console.warn(JSON.stringify({ event: 'preview_browse_east_rock_failed', name: error?.name, message: error?.message }));
 }
 
-// Check the City's alternate address evidence without calling Google.
+// Only run a billable Google check on an explicitly marked Preview build.
 try {
-  const { nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
-  const result = await nearbyBusinessOrigins({ parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' });
+  const { nearbyBusinessCount, nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
+  const parcel = { parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' };
+  const result = await nearbyBusinessOrigins(parcel);
   const origin = result.origins.find(({ id }) => id === result.default_origin);
   console.log(JSON.stringify({ event: 'preview_nearby_business_origin', configured: result.configured,
     origins: result.origins.length, exact_address: origin?.method === 'city-address-point', warning: result.warning }));
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-smoke]')) {
+    const category = 'ice_cream_shop';
+    const checked = await nearbyBusinessCount({ ...parcel, category });
+    if (checked.origin.id !== origin?.id || checked.category !== category || checked.radius_meters !== 1609 ||
+        !Number.isSafeInteger(checked.count) || checked.count < 0)
+      throw new Error('The live business count did not match the verified City origin, category or radius');
+    console.log(JSON.stringify({ event: 'preview_nearby_business_live', status: 'ok',
+      category, radius_meters: checked.radius_meters, exact_address: true }));
+  }
 } catch (error) {
-  console.warn(JSON.stringify({ event: 'preview_nearby_business_origin_failed', message: error?.message }));
+  console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status, message: error?.message }));
 }
 
 // Exercise the same read-only query used by the feed UI, REST and MCP.
