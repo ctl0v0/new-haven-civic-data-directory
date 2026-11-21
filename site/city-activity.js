@@ -1,3 +1,5 @@
+import { savedVacancyAddresses } from "./vacancy-session.js";
+
 const typeLabels = {
   sale: "Sale", permit: "Permit", license: "License", application: "Application",
   review: "Review", inspection: "Inspection",
@@ -18,7 +20,7 @@ const title = (event) => event.activity === "sale" && event.price !== null && ev
   Number.isFinite(Number(event.price)) ? `Sale · ${money.format(Number(event.price))}`
   : [typeLabels[event.activity], event.business_name ?? event.published_type].filter(Boolean).join(" · ");
 
-const filterKeys = ["neighborhood", "from", "to", "activity", "permit_type"];
+const filterKeys = ["neighborhood", "from", "to", "activity", "permit_type", "collection", "listing_query"];
 const newHavenCalendar = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
 });
@@ -34,6 +36,8 @@ function linkedParcel(item) {
   const params = new URLSearchParams({
     parcel_id: item.city_parcel_id, objectid: item.city_objectid, view: "records", section,
   });
+  const addresses = event.matched_listing_addresses?.length ? event.matched_listing_addresses : item.listing_addresses;
+  if (addresses?.length === 1) params.set("query_address", addresses[0]);
   if (section === "activity") {
     const application = event.activity === "application";
     params.set("category", application ? "Application" : "Permit");
@@ -56,6 +60,9 @@ export function initCityActivity({ api, el, link }) {
   const reset = byId("activity-reset");
   const permitType = form.elements.permit_type;
   const neighborhood = form.elements.neighborhood;
+  const collection = form.elements.collection;
+  const listingQuery = form.elements.listing_query;
+  const listingScope = byId("activity-listing-scope");
   let permitCatalog;
   let requestedFilters = null;
   let loadVersion = 0;
@@ -76,6 +83,8 @@ export function initCityActivity({ api, el, link }) {
       event.address, event.department, event.results])
       if (detail != null && detail !== "") details.append(` · ${detail}`);
     section.append(details, link(event.source_url, "Official record"));
+    if (event.matched_listing_addresses?.length)
+      section.append(el("p", `Source address matches ${event.matched_listing_addresses.join(", ")}`, "city-activity-meta"));
     return section;
   }
 
@@ -97,6 +106,8 @@ export function initCityActivity({ api, el, link }) {
       heading.append(parcel);
       li.append(heading);
       if (item.neighborhoods.length) li.append(el("p", item.neighborhoods.join(" · "), "city-activity-meta"));
+      if (item.listing_addresses?.length)
+        li.append(el("p", `Civic Fit listings · ${item.listing_addresses.join(", ")}`, "city-activity-meta"));
       if (item.events.length === 1) {
         li.append(el("p", title(item.events[0]), "city-activity-event-title"), record(item.events[0], false));
       } else {
@@ -118,6 +129,14 @@ export function initCityActivity({ api, el, link }) {
     if (!permits) permitType.value = "";
   }
 
+  function updateListingFilter() {
+    if (!listingQuery) return;
+    const active = collection.value === "civic-fit";
+    byId("activity-listing-query").hidden = !active;
+    listingQuery.disabled = !active;
+    if (!active) listingQuery.value = "";
+  }
+
   function setFilterValues(params, neighborhoods) {
     if (neighborhoods)
       neighborhood.replaceChildren(new Option("All neighborhoods", ""),
@@ -125,8 +144,10 @@ export function initCityActivity({ api, el, link }) {
     const selected = params.get("neighborhood") ?? "";
     if (selected && ![...neighborhood.options].some(({ value }) => value === selected))
       neighborhood.add(new Option(selected, selected));
-    for (const key of filterKeys) form.elements[key].value = params.get(key) ?? "";
+    for (const key of filterKeys)
+      if (form.elements[key]) form.elements[key].value = params.get(key) ?? "";
     updatePermitFilter();
+    updateListingFilter();
   }
 
   function readFilters(source) {
@@ -136,6 +157,7 @@ export function initCityActivity({ api, el, link }) {
       if (value) filters.set(key, value);
     }
     if (filters.has("permit_type") && !filters.has("activity")) filters.set("activity", "permit");
+    if (filters.get("collection") !== "civic-fit") filters.delete("listing_query");
     return filters;
   }
 
@@ -157,7 +179,10 @@ export function initCityActivity({ api, el, link }) {
     status.textContent = cursor ? "Loading more activity…" : "Loading activity…";
     resultList.setAttribute("aria-busy", "true");
     try {
-      const data = await api(`/api/v1/city-activity?${query}`);
+      const addresses = filters.get("collection") === "civic-fit" ? savedVacancyAddresses() : null;
+      const data = await api(`/api/v1/city-activity?${query}`, addresses ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ addresses }),
+      } : undefined);
       if (version !== loadVersion) return;
       if (!cursor) {
         applied = new URLSearchParams(Object.entries(data.filters).filter(([, value]) => value));
@@ -180,12 +205,19 @@ export function initCityActivity({ api, el, link }) {
         resultList.replaceChildren();
         currentDay = null;
         count = 0;
+        listingScope.hidden = !data.collection || data.collection.status === "needs_import";
+        if (data.collection) {
+          const { linked_count, listing_count, matching_listings, matching_parcels } = data.collection;
+          listingScope.textContent = `${matching_listings} matching listings on ${matching_parcels} City parcels · ${linked_count} of ${listing_count} imported addresses linked`;
+        }
       }
       render(data.items);
       count += data.items.length;
       nextCursor = data.next_cursor;
       more.hidden = !nextCursor;
-      status.textContent = data.coverage.status === "unconfigured" || data.coverage.status === "unavailable"
+      status.textContent = data.collection?.status === "needs_import" ? "Import the approved Civic Fit addresses in Browse parcel map."
+        : data.collection?.status === "unavailable" ? "The City address index is unavailable for this listing collection."
+        : data.coverage.status === "unconfigured" || data.coverage.status === "unavailable"
         ? "The index needed for this feed is unavailable."
         : count ? `Showing ${count} activity ${count === 1 ? "item" : "items"}.`
           : "No indexed activity matches these filters.";
@@ -195,6 +227,7 @@ export function initCityActivity({ api, el, link }) {
         requestedFilters = null;
         resultList.replaceChildren();
         coverage.hidden = more.hidden = true;
+        listingScope.hidden = true;
       }
       status.textContent = error.message;
     } finally {
@@ -206,6 +239,7 @@ export function initCityActivity({ api, el, link }) {
   }
 
   form.elements.activity.addEventListener("change", updatePermitFilter);
+  collection?.addEventListener("change", updateListingFilter);
   permitType.addEventListener("focus", () => {
     permitCatalog ??= api("/api/v1/permit-types").then(({ groups }) => {
       const names = [...new Set(groups.flatMap(({ types }) => types.map(({ name }) => name)))].sort();

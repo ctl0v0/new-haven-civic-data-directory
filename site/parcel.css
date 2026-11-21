@@ -413,6 +413,28 @@ body.browse-expanded .browse-workspace { grid-template-columns: min(46rem, 55vw)
 .browse-sidebar .map-status:empty { min-height: 0; margin: 0; }
 .browse-map-layers { border-block: 1px solid var(--line); margin-top: var(--space-4); font-size: .85rem; }
 .browse-map-layers > summary { cursor: pointer; font-weight: 700; padding: var(--space-3) 0; }
+#vacancy-panel > p { margin: 0 0 var(--space-2); }
+.vacancy-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.vacancy-filters label { display: grid; gap: var(--space-1); margin: 0; }
+.vacancy-filters :is(input, select) { width: 100%; min-width: 0; min-height: 2.5rem; padding: .35rem .55rem; }
+.vacancy-filters select { color: inherit; font: inherit; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface-raised); }
+.vacancy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-block: var(--space-3); }
+.vacancy-actions label { display: inline-flex; align-items: center; gap: var(--space-1); margin: 0; }
+.vacancy-actions input { width: auto; }
+.vacancy-actions button, #vacancy-import button { padding: .4rem .6rem; }
+#vacancy-list { list-style: none; padding: 0; margin: 0; max-block-size: 16rem; overflow: auto; }
+#vacancy-list li { display: grid; padding: .4rem 0; border-top: 1px solid var(--line); }
+#vacancy-list button { justify-self: start; }
+#vacancy-list button[aria-current="true"] { text-decoration-thickness: 2px; }
+#vacancy-upload { margin-block: var(--space-2); }
+#vacancy-upload summary { cursor: pointer; color: var(--civic); }
+#vacancy-import { margin-top: var(--space-2); }
+.leaflet-marker-icon.vacancy-pin {
+  border: 2px solid var(--on-civic);
+  border-radius: 50%;
+  background: var(--civic);
+  box-shadow: 0 0 0 1px var(--ink);
+}
 #browse-context-layers h2 { font-size: .95rem; margin: var(--space-4) 0 var(--space-2); }
 body.browse-mode #record-content { margin-top: 1rem; }
 body.browse-mode #parcel-summary, body.browse-mode #parcel-map-section { display: none; }
@@ -909,6 +931,16 @@ body.browse-mode .record-review-workspace #group-nav .data-nav-button[aria-curre
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
+}
+.vacancy-activity-filters {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 17rem));
+  gap: .75rem;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
 }
 #activity-status {
   min-height: 1.5em;

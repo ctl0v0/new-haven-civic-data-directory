@@ -1,5 +1,7 @@
 import { brief, eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate } from "./parcel-record-text.js";
 import { statusTone } from "./plat/status.js";
+import { initVacancyLayer } from "./vacancy-layer.js";
+import { consumeVacancyLaunch } from "./vacancy-session.js";
 import { createParcelMap, createStreetLayer, mapColor, mapLayerColor, recordedUseStyles, watchBrowseMapColors } from "./parcel-map-sources.js";
 
 const $ = (id) => document.getElementById(id);
@@ -109,6 +111,8 @@ let browseRenderer = null;
 let browseColors;
 let browsePaths = new Map();
 let browseSelectedLayer = null;
+let browseListingBoundary = null;
+let vacancyBrowser = null;
 let browseContextLayers = [];
 let browseTimer = null;
 let browseRequest = null;
@@ -381,6 +385,8 @@ async function loadOverview(qs, version) {
   }
 }
 function clearBrowseDataMap() {
+  browseListingBoundary?.remove();
+  browseListingBoundary = null;
   if (browseMap) {
     if (browseSelectedLayer) browseMap.removeLayer(browseSelectedLayer);
     for (const layer of browseContextLayers) browseMap.removeLayer(layer);
@@ -1004,6 +1010,12 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   closeStorefrontOpportunity();
   const priorParams = restoreState ? new URL(location.href).searchParams : null;
   const browsing = viewer === "browse";
+  const browseParams = new URL(location.href).searchParams;
+  const collectionFilters = new URLSearchParams();
+  if (browsing && browseParams.get("collection") === "civic-fit") {
+    for (const key of ["collection", "neighborhood", "listing_query"])
+      if (browseParams.get(key)) collectionFilters.set(key, browseParams.get(key));
+  }
   $("browse-open-records").hidden = true;
   resetMap();
   clearBrowseDataMap();
@@ -1044,7 +1056,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   history.replaceState(
     null,
     "",
-    `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}${searchedAddress ? `&query_address=${encodeURIComponent(searchedAddress)}` : ""}${browsing ? "&view=map" : maplessRecords ? "&view=records" : ""}`,
+    `/parcel?parcel_id=${encodeURIComponent(item.parcel_id)}${item.objectid ? `&objectid=${encodeURIComponent(item.objectid)}` : ""}${searchedAddress ? `&query_address=${encodeURIComponent(searchedAddress)}` : ""}${browsing ? "&view=map" : maplessRecords ? "&view=records" : ""}${collectionFilters.size ? "&" + collectionFilters : ""}`,
   );
   saveDataUrl();
   $("groups").replaceChildren();
@@ -1443,6 +1455,7 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
       browseMap.invalidateSize();
       void loadBrowseParcels();
     }
+    if (url.searchParams.get("collection") === "civic-fit") vacancyBrowser?.open();
     if (selected && requestedParcelKey === parcelKey(selected) && !browseSelectedLayer) {
       void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
     }
@@ -1646,11 +1659,13 @@ async function loadBrowseZoning(qs, version, detail) {
     if (version === browseSelectionVersion) detail.textContent = "Zoning unavailable";
   }
 }
-async function selectBrowseParcel(feature) {
+async function selectBrowseParcel(feature, { listing = null } = {}) {
   const p = feature.properties ?? {};
   if (p.parcel_id == null || p.objectid == null) return;
+  browseListingBoundary?.remove();
+  browseListingBoundary = null;
   const key = parcelKey(p);
-  if (selected && parcelKey(selected) !== key) {
+  if (selected && (parcelKey(selected) !== key || (listing && listing.id !== normalizedAddress(searchedAddress)))) {
     ++viewVersion;
     selected = null;
     requestedParcelKey = null;
@@ -1667,11 +1682,19 @@ async function selectBrowseParcel(feature) {
   previous?.setStyle(browseParcelStyle(previous.feature));
   const path = browsePaths.get(key);
   path?.setStyle(browseParcelStyle(feature)).bringToFront();
-  const title = p.address?.trim() || `City parcel ${p.parcel_id}`;
+  const title = listing?.address ?? (p.address?.trim() || `City parcel ${p.parcel_id}`);
   const heading = el("h2", title);
   heading.id = "browse-selection-title";
   $("browse-selection-summary").replaceChildren(heading,
     el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "t-caption"));
+  if (listing) {
+    const location = listing.match === "city-address-point" ? "City address point" : "City parcel reference point";
+    const caption = el("p", "Civic Fit listing · ", "t-caption");
+    caption.append(listing.location_source_url ? link(listing.location_source_url, location) : document.createTextNode("City parcel link"));
+    $("browse-selection-summary").append(caption);
+    if (p.address && listing.id !== normalizedAddress(p.address))
+      $("browse-selection-summary").append(el("p", `City parcel address ${p.address}`, "t-caption"));
+  }
   const zoning = el("dd", "Checking City zoning districts…");
   const facts = el("dl", null, "p-kv browse-selection-facts");
   const useFact = el("div");
@@ -1699,7 +1722,8 @@ async function selectBrowseParcel(feature) {
     try {
       const saved = new URL(location.href).searchParams;
       await choose({ parcel_id: p.parcel_id, objectid: p.objectid,
-        address: p.address, match: { method: "map-selection" } }, null, "browse",
+        address: p.address, match: { method: listing?.match === "city-address-point" ? "address-point-intersection" : "map-selection" } },
+      listing?.address ?? null, "browse",
       saved.get("parcel_id") === String(p.parcel_id) && saved.get("objectid") === String(p.objectid));
       if (version === browseSelectionVersion) setMobileBrowseView("records");
     } finally {
@@ -1740,6 +1764,29 @@ async function selectBrowseParcel(feature) {
     if (version === browseSelectionVersion)
       photoStatus.textContent = "Parcel photo sources unavailable.";
   }
+}
+
+async function selectVacancyListing(listing, recenter) {
+  const p = { parcel_id: listing.parcel_id, objectid: listing.objectid,
+    address: listing.parcel_address, mblu: listing.mblu, recorded_use: listing.recorded_use,
+    source_url: listing.parcel_source_url };
+  if (recenter && listing.geometry) {
+    const [lon, lat] = listing.geometry.coordinates;
+    browseMap.setView([lat, lon], Math.max(MIN_BROWSE_ZOOM, browseMap.getZoom()));
+  }
+  void selectBrowseParcel({ properties: p }, { listing });
+  if (!window.matchMedia("(max-width: 44rem)").matches)
+    $("browse-selection").scrollIntoView({ block: "nearest" });
+  const version = browseSelectionVersion;
+  const recordVersion = viewVersion;
+  const params = new URLSearchParams({ parcel_id: p.parcel_id, objectid: p.objectid });
+  try {
+    const feature = await api(`/api/v1/geometry?${params}`);
+    if (version !== browseSelectionVersion || recordVersion !== viewVersion || browseSelectedLayer) return;
+    browseListingBoundary = window.L.geoJSON(feature, { interactive: false,
+      style: { color: mapColor("parcel"), weight: 4, fill: false } }).addTo(browseMap);
+    if (!listing.geometry && recenter) browseMap.fitBounds(browseListingBoundary.getBounds(), { maxZoom: 17 });
+  } catch { /* Preserve the linked address preview when geometry is temporarily unavailable. */ }
 }
 async function fetchBrowseViewport(bounds, zoom, signal, depth = 0) {
   const west = bounds.getWest();
@@ -1874,6 +1921,19 @@ function initBrowseMap() {
     browseTimer = setTimeout(() => { void loadBrowseParcels(); }, 75);
   });
   leaflet.control.scale({ metric: false, imperial: true }).addTo(browseMap);
+  if ($("vacancy-panel")) vacancyBrowser = initVacancyLayer({
+    map: browseMap, leaflet, api, el, selectListing: selectVacancyListing,
+    showActivity(neighborhood, term) {
+      const url = new URL(location.href);
+      url.searchParams.set("collection", "civic-fit");
+      for (const [key, value] of [["neighborhood", neighborhood], ["listing_query", term]]) {
+        if (value) url.searchParams.set(key, value);
+        else url.searchParams.delete(key);
+      }
+      history.replaceState(null, "", url);
+      showExplorerTab("activity");
+    },
+  });
   void loadBrowseParcels();
 }
 function filterState(id) {
@@ -3356,6 +3416,11 @@ $("records-tab").parentElement.addEventListener("keydown", (event) => {
   target.click();
 });
 const initial = new URL(location.href).searchParams;
+if ($("vacancy-panel") && consumeVacancyLaunch()) {
+  initial.set("collection", "civic-fit");
+  initial.set("view", "map");
+  history.replaceState(null, "", `/parcel?${initial}`);
+}
 if (initial.get("view") === "guide") showExplorerTab("guide", { section: initial.get("guide") ?? "home" });
 if (initial.get("view") === "ask" && !$("ask-tab").hidden) showExplorerTab("ask");
 if (initial.get("view") === "activity" && !$("activity-tab").hidden) showExplorerTab("activity");

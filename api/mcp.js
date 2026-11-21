@@ -1,6 +1,6 @@
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { bearerIdentity, sameOrigin } from "../parcel/auth.js";
+import { bearerIdentity, pilotPreviewEnabled, sameOrigin } from "../parcel/auth.js";
 import { json, readRequestText, SourceError } from "../parcel/http.js";
 import { schemaGuide } from "../parcel/guide-schema.js";
 import { getDataContext } from "../parcel/data-context.js";
@@ -79,8 +79,12 @@ export function createServer() {
     title: "New Haven Parcel Data Pilot",
   });
   tool(server, "list_city_activity", "New Haven citywide parcel activity",
-    "List published, dated records with a verified New Haven parcel link. Defaults to seven local calendar days including today. Filter by official City neighborhood, inclusive date range, activity type, or exact published permit type. Review source coverage before treating results as exhaustive.",
-    cityActivitySchema, listCityActivity);
+    "List published, dated records with a verified New Haven parcel link. Defaults to seven local calendar days including today. Filter by official City neighborhood, dates, activity type, or exact permit type. In the private Preview, collection civic-fit scopes the feed to an approved listing export supplied in listing_addresses or configured on the server. Review source coverage before treating results as exhaustive.",
+    cityActivitySchema, (input) => {
+      if (input.collection && !pilotPreviewEnabled())
+        throw new SourceError("Listing collection unavailable.", 404);
+      return listCityActivity(input);
+    });
   const parcelId = z.string().regex(/^\d{1,12}$/);
   const common = {
     parcel_id: parcelId,

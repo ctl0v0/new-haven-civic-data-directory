@@ -8,6 +8,7 @@ import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 import { recentPermitRun, RECENT_PERMIT_SCOPES } from "./municity.js";
 import { PERMIT_ACTIVITY_KINDS, PERMIT_ACTIVITY_SOURCE, PERMIT_ACTIVITY_TYPES } from "./permit-activity-source.js";
 import { STATE_ROSTERS } from "./socrata.js";
+import { listingAddressKey, MAX_LISTING_ADDRESSES, previewListingAddresses, vacancyLayer, VACANCY_COLLECTION_ID } from "./vacancy-layer.js";
 
 const kinds = ["sale", "permit", "license", "application", "review", "inspection"];
 export const cityActivitySchema = z.strictObject({
@@ -16,6 +17,9 @@ export const cityActivitySchema = z.strictObject({
   to: z.iso.date().optional(),
   activity: z.enum(kinds).optional(),
   permit_type: z.string().trim().min(1).max(100).optional(),
+  collection: z.literal(VACANCY_COLLECTION_ID).optional(),
+  listing_query: z.string().trim().min(1).max(100).optional(),
+  listing_addresses: z.array(z.string().max(160)).min(1).max(MAX_LISTING_ADDRESSES).optional(),
   cursor: z.string().min(1).max(3000).optional(),
   limit: z.number().int().min(1).max(50).optional(),
 });
@@ -104,7 +108,11 @@ const activitySql = `WITH dated AS (
     WHERE b.run_id = $6::bigint AND b.source_id = 'neighborhoods' AND b.join_status = 'exact'
       AND b.city_parcel_id = projects.parcel_id::bigint AND b.city_objectid = projects.objectid::bigint
   ) neighborhood ON true
-  WHERE $7::text IS NULL OR neighborhood.matches_filter
+  WHERE ($7::text IS NULL OR neighborhood.matches_filter)
+    AND ($11::jsonb IS NULL OR EXISTS (
+      SELECT 1 FROM jsonb_to_recordset($11::jsonb) AS l(parcel_id text, objectid text)
+      WHERE l.parcel_id = projects.parcel_id AND l.objectid = projects.objectid
+    ))
   ORDER BY projects.event_date DESC, projects.objectid, projects.parcel_id, projects.project_id
   LIMIT $8 OFFSET $9`;
 
@@ -166,10 +174,13 @@ function publicEvent(row) {
 }
 
 export async function listCityActivity(input = {}, { query = indexQuery,
-  configured = indexConfigured, now = new Date() } = {}) {
+  configured = indexConfigured, now = new Date(), resolveListings = vacancyLayer } = {}) {
   const parsed = cityActivitySchema.safeParse(input);
   if (!parsed.success) throw new SourceError("Invalid city activity filters", 400);
-  const { permit_type, neighborhood = null, cursor, limit = 25 } = parsed.data;
+  const { permit_type, neighborhood = null, cursor, limit = 25,
+    collection, listing_query, listing_addresses } = parsed.data;
+  if (!collection && (listing_query || listing_addresses))
+    throw new SourceError("Choose the Civic Fit collection to filter by listing.", 400);
   const activity = parsed.data.activity ?? (permit_type ? "permit" : null);
   if (permit_type && activity !== "permit")
     throw new SourceError("A permit type can only filter permit activity", 400);
@@ -178,10 +189,26 @@ export async function listCityActivity(input = {}, { query = indexQuery,
   const from = parsed.data.from ?? (parsed.data.to
     ? new Date(Date.parse(to) - 6 * 86400_000).toISOString().slice(0, 10) : defaults.from);
   if (from > to) throw new SourceError("The start date must be on or before the through date", 400);
-  const filters = { from, to, activity, neighborhood, ...(permit_type ? { permit_type } : {}) };
+  const filters = { from, to, activity, neighborhood, ...(permit_type ? { permit_type } : {}),
+    ...(collection ? { collection } : {}), ...(listing_query ? { listing_query } : {}) };
   const sourceIds = Object.keys(sources).filter((id) => !activity || sources[id].kinds.includes(activity) ||
     ["parcels", "neighborhoods"].includes(id));
-  const empty = { filters, neighborhoods: [], items: [], next_cursor: null };
+  const layer = collection ? await resolveListings(listing_addresses ?? previewListingAddresses(), { query, configured }) : null;
+  const listings = layer?.listings.filter(({ address, neighborhoods, neighborhood_aliases = [], status }) => status === "linked"
+    && (!listing_query || address.toLowerCase().includes(listing_query.toLowerCase()))
+    && (!neighborhood || [...neighborhoods, ...neighborhood_aliases].some((name) => name.toLowerCase() === neighborhood.toLowerCase())));
+  const members = new Map();
+  for (const entry of listings ?? []) {
+    const key = `${entry.parcel_id}:${entry.objectid}`;
+    if (!members.has(key)) members.set(key, []);
+    members.get(key).push(entry);
+  }
+  const scope = layer ? { collection: { id: collection, status: layer.status,
+    listing_count: layer.listings.length, linked_count: layer.listings.filter(({ status }) => status === "linked").length,
+    matching_listings: listings.length, matching_parcels: members.size } } : {};
+  const empty = { filters, ...scope, neighborhoods: [], items: [], next_cursor: null };
+  if (layer && ["needs_import", "unavailable"].includes(layer.status))
+    return { ...empty, coverage: { status: "unavailable", sources: [] } };
   if (!configured()) return { ...empty, coverage: { status: "unconfigured", sources: [] } };
 
   const active = await query(activeRunsSql, [sourceIds.filter((id) => id !== "municity"),
@@ -195,8 +222,10 @@ export async function listCityActivity(input = {}, { query = indexQuery,
   const parcelRun = runs.get("parcels")?.run_id;
   const neighborhoodRun = runs.get("neighborhoods")?.run_id;
   const coverage = { status: !parcelRun || (neighborhood && !neighborhoodRun) ? "unavailable"
-    : checks.some((check) => check.status !== "indexed") ? "partial" : "indexed", sources: checks };
-  const queryHash = fingerprint({ filters, limit });
+    : layer?.status === "partial" || checks.some((check) => check.status !== "indexed") ? "partial" : "indexed", sources: checks };
+  const parcelScope = layer ? [...members.values()].map(([{ parcel_id, objectid }]) => ({ parcel_id, objectid })) : null;
+  const queryHash = fingerprint({ filters, limit, ...(layer ? { listings: listings.map(({ id, parcel_id, objectid }) =>
+    [id, parcel_id, objectid]).sort() } : {}) });
   const sourceHash = fingerprint(sourceIds.map((id) => [id, String(runs.get(id)?.run_id ?? "")]));
   const { offset } = readSearchCursor(cursor, queryHash, sourceHash);
   const names = neighborhoodRun ? await query(`SELECT DISTINCT ${cityNeighborhood} AS name,
@@ -208,18 +237,30 @@ export async function listCityActivity(input = {}, { query = indexQuery,
       !names.some(({ name, alias }) => [name, alias].some((value) =>
         value?.toLowerCase() === neighborhood.toLowerCase())))
     throw new SourceError("Select a name from the City neighborhood layer", 400);
-  if (coverage.status === "unavailable") return { ...empty, neighborhoods, coverage };
+  if (coverage.status === "unavailable" || (layer && !parcelScope.length)) return { ...empty, neighborhoods, coverage };
   const dataRuns = sourceIds.filter((id) => id !== "neighborhoods" && (id !== "parcels" || !activity || activity === "sale") &&
     runs.has(id)).map((source_id) => ({ source_id, run_id: String(runs.get(source_id).run_id) }));
   const rows = await query(activitySql, [JSON.stringify(dataRuns), from, to, activity ? [activity] : kinds,
-    parcelRun, neighborhoodRun ?? null, neighborhood, limit + 1, offset, permit_type ?? null]);
-  const items = rows.slice(0, limit).map((row) => ({
-    id: `${row.parcel_id}:${row.objectid}:${row.project_id}`,
-    city_parcel_id: row.parcel_id, city_objectid: row.objectid,
-    city_address: row.city_address, parcel_source_url: row.parcel_source_url,
-    neighborhoods: row.neighborhoods ?? [], event_date: day(row.event_date), events: row.events.map(publicEvent),
-  }));
-  return { filters, neighborhoods, items, coverage, next_cursor: rows.length > limit
+    parcelRun, neighborhoodRun ?? null, neighborhood, limit + 1, offset, permit_type ?? null,
+    parcelScope ? JSON.stringify(parcelScope) : null]);
+  const items = rows.slice(0, limit).map((row) => {
+    const matchedListings = members.get(`${row.parcel_id}:${row.objectid}`) ?? [];
+    return {
+      id: `${row.parcel_id}:${row.objectid}:${row.project_id}`,
+      city_parcel_id: row.parcel_id, city_objectid: row.objectid,
+      city_address: row.city_address, parcel_source_url: row.parcel_source_url,
+      neighborhoods: row.neighborhoods ?? [], event_date: day(row.event_date),
+      ...(layer ? { listing_addresses: matchedListings.map(({ address }) => address) } : {}),
+      events: row.events.map((event) => {
+        if (!layer) return publicEvent(event);
+        const roster = STATE_ROSTERS[event.source_id];
+        const explicit = roster ? event.fields[roster.site] : event.fields.LegalAddress;
+        const exact = explicit ? matchedListings.filter(({ id }) => id === listingAddressKey(explicit)) : [];
+        return { ...publicEvent(event), matched_listing_addresses: exact.map(({ address }) => address) };
+      }),
+    };
+  });
+  return { filters, ...scope, neighborhoods, items, coverage, next_cursor: rows.length > limit
     ? makeSearchCursor({ v: 1, query: queryHash, source: sourceHash, offset: offset + limit,
       expires: Date.now() + 30 * 60_000 }) : null };
 }

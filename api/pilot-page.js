@@ -12,7 +12,8 @@ const header =
 const footer =
   "</main><footer>Independent research preview. Confirm consequential facts with the original source.</footer></body></html>";
 const login =
-  '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>';
+  '<section class="login"><h1>Parcel pilot</h1><p>Enter the pilot passcode to search New Haven property records.</p><form method="post" action="/api/pilot-session"><label>Passcode <input type="password" name="passphrase" autocomplete="current-password" required></label><button>Enter pilot</button></form>' +
+  (pilotPreviewEnabled() ? '<script src="/vacancy-session.js" type="module"></script>' : "");
 export { pilotPreviewEnabled as queryWorkbenchVisible };
 const previewToolsVisible = pilotPreviewEnabled();
 const askHidden = previewToolsVisible ? "" : " hidden";
@@ -169,7 +170,7 @@ const app = `
       <aside class="browse-sidebar">
         <div class="p-panel__head browse-sidebar-heading"><h1>Browse parcels</h1><button id="browse-panel-toggle" type="button" class="secondary" aria-expanded="false">Expand panel</button></div>
         <section id="browse-selection" aria-labelledby="browse-selection-title">
-          <div id="browse-selection-summary" aria-live="polite"><h2 id="browse-selection-title">Select a parcel</h2><p class="meta">Choose an outline on the map to see the parcel address and official photo.</p></div>
+          <div id="browse-selection-summary" aria-live="polite"><h2 id="browse-selection-title">Select a parcel</h2><p class="meta">Choose a property on the map to preview its address and official photo.</p></div>
           <div id="browse-selection-actions" class="browse-selection-actions" hidden>
             <button id="browse-request-records" type="button">Request parcel data</button>
             <button id="browse-open-records" class="secondary" type="button" hidden>View full records without map</button>
@@ -177,6 +178,29 @@ const app = `
           <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
           <div id="browse-selection-preview" class="browse-selection-preview" hidden></div>
         </section>
+        ${previewToolsVisible ? `<details id="vacancy-panel" class="browse-map-layers">
+          <summary>Civic Fit listings</summary>
+          <p class="t-caption">The Civic Fit export provides listing addresses. Pins use City address points or parcel reference points.</p>
+          <p id="vacancy-status" class="map-status" role="status"></p>
+          <div id="vacancy-controls" hidden>
+            <div class="vacancy-filters">
+              <label>Find an address <input type="search" id="vacancy-search" maxlength="100"></label>
+              <label>Neighborhood <select id="vacancy-neighborhood"><option value="">All neighborhoods</option></select></label>
+            </div>
+            <div class="vacancy-actions">
+              <label><input type="checkbox" id="vacancy-show-pins" checked> Show listing pins</label>
+              <button id="vacancy-fit" type="button" class="secondary">Fit pins</button>
+              <button id="vacancy-activity-link" type="button" class="secondary">View listing activity</button>
+            </div>
+            <ul id="vacancy-list" aria-label="Civic Fit listing addresses"></ul>
+          </div>
+          <details id="vacancy-upload"><summary>Import Civic Fit addresses</summary>
+            <form id="vacancy-import">
+              <label>Address export CSV <input id="vacancy-csv" type="file" accept=".csv,text/csv" required></label>
+              <button type="submit" class="secondary">Import addresses</button>
+            </form>
+          </details>
+        </details>` : ""}
         <details id="browse-map-layers" class="browse-map-layers">
           <summary>Map display and layers</summary>
           <div class="browse-use-controls">
@@ -205,6 +229,10 @@ const app = `
         <button class="secondary" type="button" data-activity-days="30" aria-pressed="false">Past 30 days</button>
       </div>
       <form id="activity-filters">
+        ${previewToolsVisible ? `<fieldset class="vacancy-activity-filters">
+          <label>Properties <select name="collection"><option value="">All New Haven parcels</option><option value="civic-fit">Civic Fit listings</option></select></label>
+          <label id="activity-listing-query" hidden>Listing address <input type="search" name="listing_query" maxlength="100" disabled></label>
+        </fieldset>` : ""}
         <label>Neighborhood <select name="neighborhood"><option value="">All neighborhoods</option></select></label>
         <label>From <input name="from" type="date"></label>
         <label>Through <input name="to" type="date"></label>
@@ -221,6 +249,7 @@ const app = `
         </label>
       </form>
       <p id="activity-status" role="status" aria-live="polite"></p>
+      <p id="activity-listing-scope" class="t-caption" hidden></p>
       <details id="activity-coverage" hidden><summary>Source coverage</summary><ul id="activity-sources"></ul></details>
       <button id="activity-reset" class="secondary" type="button" hidden>Reset filters</button>
       <div id="activity-results"></div>
