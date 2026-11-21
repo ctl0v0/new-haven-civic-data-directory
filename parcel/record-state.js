@@ -82,7 +82,7 @@ export function displayGroup(item, asOf = new Date()) {
 
 export function orderDisplayRecords(items, group, asOf = new Date()) {
   if (!["activity", "business", "ownership"].includes(group)) return items;
-  return items.map((item) => ({ ...item, display_group: displayGroup(item, asOf) }))
+  const ordered = items.map((item) => ({ ...item, display_group: displayGroup(item, asOf) }))
     .sort((a, b) => {
       const bucket = rank[a.display_group.key] - rank[b.display_group.key];
       if (bucket) return bucket;
@@ -94,8 +94,22 @@ export function orderDisplayRecords(items, group, asOf = new Date()) {
           ? (ownerSourceRank[a.source_id] ?? 99) - (ownerSourceRank[b.source_id] ?? 99)
         : (businessSourceRank[a.source_id] ?? 99) - (businessSourceRank[b.source_id] ?? 99);
       if (category) return category;
-      return String(b.event_date ?? "").localeCompare(String(a.event_date ?? "")) || a.id.localeCompare(b.id);
+      return newestRecordFirst(a, b);
     });
+  if (group === "ownership") return ordered;
+  const usesChronology = group === "business"
+    ? (item) => item.source_id !== "municipal-occupants"
+    : (item) => item.category === "License";
+  // Keep the other record categories in display order while ordering all
+  // credentials before paging, regardless of the status on a credential.
+  const credentials = ordered.filter(usesChronology).sort(newestRecordFirst);
+  let next = 0;
+  return ordered.map((item) => usesChronology(item) ? credentials[next++] : item);
+}
+
+export function newestRecordFirst(a, b) {
+  return String(b.event_date ?? "").localeCompare(String(a.event_date ?? "")) ||
+    String(a.id ?? a.source_record_id ?? "").localeCompare(String(b.id ?? b.source_record_id ?? ""));
 }
 
 export function displayGroupCounts(items) {

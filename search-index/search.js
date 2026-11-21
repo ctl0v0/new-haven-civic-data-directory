@@ -40,6 +40,7 @@ export const PARCEL_QUERY_FIELDS = Object.freeze({ ...SEARCH_FIELDS,
 });
 const ADDRESS_DEPENDENT = new Set(["trash-pickup", ...Object.keys(STATE_ADDRESS_SOURCES),
   "school-attendance", MUNICIPAL_LICENSE_SOURCE]);
+const DATE_ORDERED_BUSINESS = new Set([MUNICIPAL_LICENSE_SOURCE, ...Object.keys(STATE_ADDRESS_SOURCES)]);
 const ONE_OF_FIELDS = Object.freeze({ parcels: ["use_code"] });
 export const NUMBER_FIELDS = Object.freeze({
   parcels: ["units_commercial", "units_residential", "units_condo",
@@ -247,11 +248,12 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit, proje
   const evidence = evidenceRequirements.map((requirement) => {
     const sourceRun = runCondition("j.run_id", requirement.source_id);
     const filters = rowConditions(requirement, "r");
+    const dateOrder = (alias) => DATE_ORDERED_BUSINESS.has(requirement.source_id) ? `${alias}.event_date DESC NULLS LAST, ` : "";
     if (projection) {
       const source = add(requirement.source_id);
       return `(SELECT jsonb_build_object('source_id', ${source}::text,
         'matching_record_count', coalesce(max(m.total), 0),
-        'records', coalesce(jsonb_agg(to_jsonb(m) - 'total' ORDER BY m.record_id), '[]'::jsonb))
+        'records', coalesce(jsonb_agg(to_jsonb(m) - 'total' ORDER BY ${dateOrder("m")}m.record_id), '[]'::jsonb))
         FROM (SELECT r.record_id, r.source_url, r.published_type, r.published_status,
             r.event_date, r.fields, array_agg(DISTINCT j.match_method ORDER BY j.match_method) AS match_methods,
             array_agg(DISTINCT j.city_address_objectid ORDER BY j.city_address_objectid) FILTER (WHERE j.city_address_objectid IS NOT NULL)
@@ -261,7 +263,7 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit, proje
             AND j.city_parcel_id = (p.fields->>'parcel_id')::bigint
             AND j.city_objectid = (p.fields->>'objectid')::bigint AND j.join_status = 'exact'
             ${filters.length ? `AND ${filters.join(" AND ")}` : ""}
-          GROUP BY r.run_id, r.source_id, r.record_id ORDER BY r.record_id LIMIT 50) m)`;
+          GROUP BY r.run_id, r.source_id, r.record_id ORDER BY ${dateOrder("r")}r.record_id LIMIT 50) m)`;
     }
     return `(SELECT jsonb_build_object('source_id', ${add(requirement.source_id)}::text,
       'matching_record_count', count(DISTINCT r.record_id),
@@ -270,7 +272,7 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit, proje
         'published_type', r.published_type, 'published_status', r.published_status,
         'event_date', r.event_date,
         'city_address_objectid', j.city_address_objectid)
-        ORDER BY r.record_id, j.city_address_objectid)->0))
+        ORDER BY ${dateOrder("r")}r.record_id, j.city_address_objectid)->0))
       FROM search_record_parcels j JOIN search_records r
         ON r.run_id = j.run_id AND r.source_id = j.source_id AND r.record_id = j.record_id
       WHERE ${sourceRun} AND j.source_id = ${add(requirement.source_id)}

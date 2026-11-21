@@ -49,15 +49,17 @@ test("owner names, State LLC roles and assessor sales stay in the ownership grou
   assert.equal(displayGroup({ id: "city-sale", source_id: "parcel-sale", attributes: { price: 0 } }, asOf).key, "owner_history");
 });
 
-test("municipal business records sort by published status without including owner LLC roles", () => {
+test("business licensing and registration dates determine order while preserving published status", () => {
   const rows = [
     { id: "void", source_id: "municipal-business-licenses", event_date: "2021-01-01", attributes: { status: "Void" } },
     { id: "issued", source_id: "municipal-business-licenses", event_date: "2026-09-01", attributes: { status: "Issued", expiration_date: "2027-01-01" } },
+    { id: "registration", source_id: "ct-business-registrations", event_date: "2026-10-01", attributes: { status: "Dissolved" } },
+    { id: "undated", source_id: "ct-business-registrations", event_date: null, attributes: { status: "Active" } },
     { id: "occupant", source_id: "municipal-occupants", event_date: "2026-09-01", attributes: { inactive: false } },
   ];
   const ordered = orderDisplayRecords(rows, "business", asOf);
-  assert.deepEqual(ordered.map((row) => row.id), ["issued", "void", "occupant"]);
-  assert.deepEqual(ordered.map((row) => row.display_group.key), ["reported", "past", "unclassified"]);
+  assert.deepEqual(ordered.map((row) => row.id), ["registration", "issued", "void", "undated", "occupant"]);
+  assert.deepEqual(ordered.map((row) => row.display_group.key), ["past", "reported", "past", "reported", "unclassified"]);
 });
 
 test("activity keeps City categories under the same status section", () => {

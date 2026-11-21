@@ -20,6 +20,7 @@ export function eventDateLabel(item) {
   if (["ct-liquor-permits", "ct-child-care-licenses"].includes(item.source_id)) return "Effective date";
   if (item.source_id === "ct-public-charities") return "Registration issue date";
   if (item.source_id === "ct-business-registrations") return "Formation or registration date";
+  if (item.source_id === "municipal-business-licenses") return "Issue date";
   if (item.source_id === "municity") {
     const fields = {
       Permit: [["PermitDate", "Permit date"], ["CreatedDate", "Created date"]],

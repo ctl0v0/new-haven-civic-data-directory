@@ -2156,7 +2156,7 @@ test("REST and MCP return the same environmental parcel group", async () => {
   assert.deepEqual(mcpData.result.structuredContent, restData);
 });
 
-test("business group prioritizes issued licenses, separates voided licenses, and has REST/MCP parity", async () => {
+test("business licenses sort newest first across statuses with REST and MCP parity", async () => {
   const today = new Date().toISOString().slice(0, 10);
   globalThis.fetch = async (input) => {
     const url = new URL(input);
@@ -2166,9 +2166,9 @@ test("business group prioritizes issued licenses, separates voided licenses, and
     if (url.pathname.endsWith("/Children")) return response({
       License: [
         { License_ID: 1, BusinessName: "Current license name", Status: "Issued",
-          IssueDate: today, ExpirationDate: "2099-12-31" },
-        { License_ID: 2, BusinessName: "Past license name", Status: "Void",
-          IssueDate: "2021-01-01", ExpirationDate: "2022-01-01" },
+          IssueDate: "2021-01-01", ExpirationDate: "2099-12-31" },
+        { License_ID: 2, BusinessName: "Newer void license", Status: "Void", IssueDate: today },
+        { License_ID: 4, BusinessName: "Undated license", Status: "Issued" },
       ],
       Occupant: [{ Occupant_ID: 3, Name: "Listed occupant", InActive: false,
         CreatedDate: today }],
@@ -2184,9 +2184,9 @@ test("business group prioritizes issued licenses, separates voided licenses, and
   assert.equal(rest.status, 200);
   const data = await rest.json();
   assert.deepEqual(data.items.map((item) => item.attributes.business_name ?? item.attributes.occupant_name),
-    ["Current license name", "Past license name", "Listed occupant"]);
+    ["Newer void license", "Current license name", "Undated license", "Listed occupant"]);
   assert.deepEqual(data.items.map((item) => item.display_group.key),
-    ["reported", "past", "unclassified"]);
+    ["past", "reported", "reported", "unclassified"]);
   assert.equal(data.display_group_counts.past, 1);
   const mcp = await mcpRoute.fetch(new Request("https://example.com/mcp", {
     method: "POST",

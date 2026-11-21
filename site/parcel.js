@@ -2373,7 +2373,8 @@ function appendHierarchicalRecord(parent, item) {
   target.category.hidden = false;
   target.count += 1;
   target.countNode.textContent = `${target.count} shown · ${state.data.facets.kind[key]} returned`;
-  if (state.id === "ownership") {
+  const dateOrder = state.id === "business" ? key !== "source:municipal-occupants" && key !== "Occupant" : key === "License";
+  if (state.id === "ownership" || dateOrder) {
     let list = target.statuses.get("all");
     if (!list) {
       list = el("div", null, "record-list");

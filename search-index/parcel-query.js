@@ -1,9 +1,10 @@
 import { getSourceRecords } from "../parcel/adapters.js";
 import { addressEvidence, checkedQueryAddress } from "../parcel/address-evidence.js";
-import { LAYERS } from "../parcel/config.js";
+import { LAYERS, source } from "../parcel/config.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
 import { businessAddress, REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 import { parcelUseCodesForSearch, reviewedUseCodeValues } from "../parcel/data-context.js";
+import { newestRecordFirst } from "../parcel/record-state.js";
 import { SourceError } from "../parcel/http.js";
 import { nearbyFeatureCounts } from "../parcel/nearby-counts.js";
 import { permitDetails } from "../parcel/permit-details.js";
@@ -216,6 +217,7 @@ async function liveSource(sourceId, wanted, feature, plan, dependencies) {
     schoolAddress(item.attributes.address)?.address === schoolFocus.address)
     : addressFocus ? result.items.filter((item) => addressEvidence(item, plan.scope.address)?.matches_query)
     : recordCategory ? result.items.filter(({ category }) => category === recordCategory) : result.items;
+  const ordered = source(sourceId)?.group === "business" ? [...selected].sort(newestRecordFirst) : selected;
   const countEstablished = result.count_established ?? (recordCategory ?
     !result.omitted_categories?.includes(recordCategory) && !result.truncated_categories?.includes(recordCategory) : undefined);
   return { ...result,
@@ -224,7 +226,7 @@ async function liveSource(sourceId, wanted, feature, plan, dependencies) {
     ...(countEstablished === undefined ? {} : { count_established: countEstablished }),
     ...(schoolFocus && !selected.length && good.has(result.status) ? { status: "not_linked",
       warning: "No official NHPS attendance-zone row could be linked to the exact searched address." } : {}),
-    items: selected.map((item) => {
+    items: ordered.map((item) => {
       const school = sourceId === "school-attendance";
       const attributes = school ? { ...item.attributes,
         street_name: item.attributes.street_name_as_published,

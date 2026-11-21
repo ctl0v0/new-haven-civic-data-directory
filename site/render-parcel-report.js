@@ -549,7 +549,7 @@ function addressDirectory(rows, addresses, title) {
   const mapped = new Set(addresses.map(({ address }) => normalizeAddress(address)));
   const row = (address, labels, units = []) => `<div class="p-dir__row">
     <div class="p-dir__num">${escape(address)}${units.length ? `<small>Unit ${escape(units.join(", "))}</small>` : ""}</div>
-    <div class="p-dir__entities">${labels?.length ? labels.map(({ id, title, item, status }) =>
+    <div class="p-dir__entities">${labels?.length ? labels.sort(newestFirst).map(({ id, title, item, status }) =>
       `<a class="p-entity" href="#${id}"><span class="p-entity__name">${escape(title)}</span>
         <span class="p-entity__meta">${escape(businessRecordTypes[item.source_id] ?? sourceTitle(item.source_id))} ${pill(status)}</span></a>`).join("")
       : '<span class="p-dir__empty">No returned records at this address</span>'}</div></div>`;
