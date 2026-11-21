@@ -73,6 +73,7 @@ export async function walkingAreas(origin, key) {
   let response;
   try {
     response = await fetchJson(WALK_ENDPOINT, {
+      accept: "application/geo+json, application/json",
       method: "POST", timeout: 10000, maxBytes: 1_000_000,
       headers: { Authorization: key, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -81,10 +82,15 @@ export async function walkingAreas(origin, key) {
       }),
     });
   } catch (error) {
-    throw new SourceError(error.upstreamStatus === 429
-      ? "The walking service reached its quota. Try again later."
-      : "The walking service could not calculate an area from the selected address.",
-    error.upstreamStatus === 429 ? 429 : 502);
+    const status = error.upstreamStatus;
+    const message = status === 429 ? "The walking service reached its quota. Try again later."
+      : [401, 403].includes(status) ? "The walking service denied access. Check the HeiGIT key and its openrouteservice permissions."
+        : error.name === "TimeoutError" ? "The walking service timed out. Try again later."
+          : "The walking service could not calculate an area from the selected address.";
+    const unavailable = new SourceError(message, status === 429 ? 429 : [401, 403].includes(status) ? 503 : 502);
+    unavailable.upstreamStatus = status;
+    unavailable.upstreamErrorType = error.cause?.code ?? error.name;
+    throw unavailable;
   }
   return WALK_MINUTES.map((minutes) => {
     const matches = response?.type === "FeatureCollection" && Array.isArray(response.features)

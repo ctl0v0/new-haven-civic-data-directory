@@ -247,7 +247,8 @@ try {
     console.log(JSON.stringify({ event: 'preview_nearby_outdoor_places', status: 'ok', group, subcategories }));
   }
 } catch (error) {
-  console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status, message: error?.message }));
+  console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status,
+    upstream_status: error?.upstreamStatus, error_type: error?.upstreamErrorType, message: error?.message }));
 }
 
 // Verify the live matches service without logging Google listing fields.
