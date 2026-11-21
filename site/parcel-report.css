@@ -1,0 +1,95 @@
+:root {
+  color-scheme: light;
+  --ink: #102d28;
+  --muted: #49605a;
+  --rule: #cad7ce;
+  --paper: #fbfcf8;
+  --accent: #145f49;
+  font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: #edf2ec;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+a { color: var(--accent); text-underline-offset: .18em; }
+a:hover { color: #092c23; }
+button, input, summary { font: inherit; }
+button, summary { cursor: pointer; }
+:focus-visible { outline: 3px solid #137860; outline-offset: 3px; }
+.skip { position: absolute; top: -100px; left: 1rem; padding: .65rem; background: #fff; }
+.skip:focus { top: 1rem; z-index: 4; }
+.report-bar { background: #15392f; color: #fff; }
+.report-bar > div { max-width: 73rem; margin: auto; padding: .8rem clamp(1rem, 4vw, 3rem); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .65rem 1rem; }
+.report-bar a { color: #fff; font-size: .9rem; font-weight: 650; }
+.report-bar button { border: 1px solid #bfd7c9; border-radius: .32rem; background: #eef7ed; color: #163b31; padding: .35rem .75rem; font-weight: 650; }
+.report { max-width: 73rem; margin: 0 auto; padding: clamp(1.1rem, 4vw, 3rem); background: var(--paper); }
+.report-title { padding: 0 0 1.7rem; display: grid; align-items: start; gap: 1.5rem; }
+.report-title.with-photo { grid-template-columns: 1.35fr 1fr; }
+.eyebrow { margin: 0 0 .55rem; text-transform: uppercase; letter-spacing: .12em; color: #356b55; font-size: .76rem; font-weight: 750; }
+h1, h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 650; line-height: 1.07; }
+h1 { font-size: clamp(2.25rem, 6vw, 4.5rem); letter-spacing: -.05em; margin: 0 0 .75rem; overflow-wrap: anywhere; }
+h2 { font-size: clamp(1.55rem, 3vw, 2.3rem); letter-spacing: -.033em; margin: 0 0 1rem; }
+.caption, figcaption { color: var(--muted); font-size: .84rem; }
+.caption:empty { display: none; }
+figure { margin: 0; }
+.property-photo img { display: block; width: 100%; max-height: 25rem; object-fit: contain; background: #e8eee6; border: 1px solid var(--rule); border-radius: .35rem; }
+figcaption { display: flex; flex-wrap: wrap; gap: .2rem .85rem; margin-top: .5rem; }
+.mapped-addresses { margin-top: 1rem; }
+.mapped-addresses h2 { font: 700 .83rem/1.5 system-ui, sans-serif; letter-spacing: 0; margin: 0 0 .2rem; color: var(--muted); }
+.mapped-addresses ul { padding: 0; margin: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .93rem; }
+.mapped-addresses span { color: var(--muted); }
+.report-nav { display: flex; flex-wrap: wrap; gap: .25rem 1.15rem; border-block: 1px solid var(--rule); padding: .8rem 0; font-size: .86rem; font-weight: 650; }
+.report-section { margin-top: 2.3rem; }
+#report-map { height: clamp(16rem, 49vw, 28rem); width: 100%; border: 1px solid var(--rule); border-radius: .35rem; background: #e5ece3; }
+.map-key::before { content: ""; display: inline-block; width: .7rem; height: .7rem; margin-right: .35rem; border-radius: 50%; background: #416956; }
+.map-key.parcel-key::before { background: #f8c547; border: 2px solid #173e35; }
+.map-key[data-layer="parcel-addresses"]::before { background: #dc5c32; }
+.map-key[data-layer="zoning"]::before { background: #195e9d; }
+.map-key[data-layer="transit-stops"]::before { background: #2476ba; }
+.map-key[data-layer="metered-parking-spaces"]::before { background: #7550a4; }
+.map-options { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem 1rem; border: 1px solid var(--rule); padding: .4rem .7rem .6rem; font-size: .84rem; margin: .85rem 0; }
+.map-options legend { font-weight: 700; padding: 0 .25rem; }
+.map-options label { display: inline-flex; gap: .25rem; align-items: baseline; }
+.map-options input { accent-color: var(--accent); }
+.history-year, .record-section { border-top: 1px solid var(--rule); }
+.history-year:last-child, .record-section:last-child { border-bottom: 1px solid var(--rule); }
+summary { padding: .72rem 0; font-weight: 700; }
+summary h3 { display: inline; font: inherit; }
+summary span { font-weight: 500; color: var(--muted); font-size: .85rem; margin-left: .65rem; }
+.history-year ol { margin: 0; padding: 0; list-style: none; }
+.history-year li { display: grid; grid-template-columns: minmax(6.4rem, 15%) 1fr; align-items: baseline; gap: .65rem; padding: .43rem .4rem; border-top: 1px solid #e1e8de; }
+.history-year li time, .record-meta time { font-weight: 720; font-variant-numeric: tabular-nums; }
+.history-year li span { display: block; font-size: .78rem; color: var(--muted); }
+.record { padding: .8rem 0 1rem; border-top: 1px solid #e1e8de; scroll-margin-top: .8rem; overflow-wrap: anywhere; }
+.record:target { background: #eaf4ea; padding-inline: .55rem; }
+.record-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .35rem .8rem; }
+.record-head h4 { font-size: 1rem; margin: 0; }
+.record-head > a { font-size: .82rem; }
+.record-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: .28rem .65rem; font-size: .84rem; color: var(--muted); margin-top: .23rem; }
+.status { font-weight: 690; }
+.record-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .45rem 1.1rem; margin: .6rem 0 0; }
+.record-fields > div { min-width: 0; }
+.record-fields dt { font-size: .76rem; color: var(--muted); }
+.record-fields dd { margin: 0; font-size: .88rem; overflow-wrap: anywhere; white-space: pre-line; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-bottom: .6rem; }
+th, td { text-align: left; vertical-align: top; padding: .52rem .3rem; border-top: 1px solid #e1e8de; }
+tbody th { width: 36%; font-weight: 650; }
+td p { color: var(--muted); margin: .16rem 0 0; }
+@media (max-width: 42rem) {
+  .report-title.with-photo { grid-template-columns: 1fr; }
+  .property-photo img { max-height: 21rem; }
+}
+@media print {
+  @page { margin: 13mm; }
+  :root, .report { background: #fff; }
+  .report { max-width: none; padding: 0; font-size: 11pt; }
+  .skip, .report-bar, .report-nav, .map-options input, .map-options label:not(:has(input:checked)),
+  .map-options:not(:has(input:checked)), .leaflet-control-zoom { display: none; }
+  h1 { font-size: 30pt; }
+  h2, summary { break-after: avoid; }
+  .report-section { margin-top: 17pt; }
+  .report-title, .record, .map-figure, .history-year li, tr { break-inside: avoid; }
+  #report-map, .property-photo img { max-height: 58mm; }
+  #report-map, .map-key::before { print-color-adjust: exact; }
+}

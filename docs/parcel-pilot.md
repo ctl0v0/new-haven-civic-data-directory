@@ -78,6 +78,10 @@ The parcel-address route requires an exact returned address. This prevents a sea
 
 An address search remains visible as an address focus after parcel selection. Record and timeline badges say “Source address matches search” only when the returned record itself has a full address field that matches the query after street suffix and punctuation normalization. Eligible fields are the City parcel's `property_address`, City address-point number and street, the City address point used for a trash zone or NHPS street-range join, municipal `LegalAddress` on a permit, application, license, certificate, complaint or occupant, the State brownfield row's published site address, and the site-address field of a linked State liquor, child care or cannabis record. A municipal `Addr1` or generic `Address` field, free-text description, parcel MBLU, assessor row, and spatial proximity alone do not produce that badge. Rows without a badge remain visible as parcel-linked records; lack of a badge does not establish that they are unrelated to the searched storefront. For example, a `3 Edwards St` search can show the City address point badge while the Bar August license rows naming `990 State St` remain parcel records without that badge.
 
+### Property report
+
+Choose **Generate property report** in a loaded parcel’s header to open a private HTML report. It includes the verified photo when available, the parcel boundary and surrounding map, dated history, and grouped records from the existing parcel sources. Source coverage shows incomplete or unavailable results. **Print report** expands the record sections for printing or saving from the browser.
+
 ## REST API
 
 Send `Authorization: Bearer <PILOT_API_TOKEN>` from a private client. A signed browser session cookie also works for REST. Responses use `Cache-Control: private, no-store` even though upstream lookups are cached inside the server. Failed sources are reported per source so a missing result is distinguishable from an unavailable source.

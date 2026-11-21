@@ -17,6 +17,21 @@ const sourceSummary = (result) => ({
     date_covered: check.date_covered ?? null,
   })) ?? [],
 });
+if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[parcel-report-smoke]')) {
+  try {
+    const { parcelReport } = await import('../parcel/report.js');
+    const { renderParcelReport } = await import('../site/render-parcel-report.js');
+    const report = await parcelReport('11293', { objectid: '23816', query_address: '138 Bradley St' });
+    const html = renderParcelReport(report);
+    console.log(JSON.stringify({ event: 'preview_parcel_report', parcel_id: report.parcel.parcel_id,
+      groups: report.groups.map(({ group, items }) => [group, items.length]),
+      dated: report.groups.flatMap(({ items }) => items).filter(({ event_date }) => event_date).length,
+      photo: report.photo.status, map: Boolean(report.geometry), map_layers: report.context?.layers.length ?? 0,
+      references: html.includes('Sources and coverage'), charity: html.includes('BRADLEY STREET BICYCLE CO-OP') }));
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'preview_parcel_report_failed', message: error.message }));
+  }
+}
 if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[charity-registration-smoke]')) {
   const { CHARITY_SOURCE } = await import('../parcel/charity-registrations.js');
   const { stateRosterInventory } = await import('../search-index/socrata.js');

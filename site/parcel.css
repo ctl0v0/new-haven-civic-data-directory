@@ -331,6 +331,8 @@ body.browse-mode main { max-width: none; padding: 0; }
 body.record-only-mode main { max-width: none; padding: 1.5rem clamp(1rem, 3vw, 3rem) 4rem; }
 body.record-only-mode #parcel-map-section { display: none; }
 #nearby-business-open, #storefront-opportunity-open { margin-top: .55rem; }
+.parcel-report-link { display: inline-block; margin: .55rem .35rem 0 0; padding: .5rem .75rem; border-radius: .35rem; background: #165e49; color: #fff; font-size: .88rem; font-weight: 700; text-decoration: none; }
+.parcel-report-link:hover { background: #164b3b; color: #fff; text-decoration: underline; }
 #nearby-business-research { border-block: 1px solid #cbdacf; padding: 1rem 0; margin: 0 0 1.4rem; }
 #nearby-business-title { margin: 0 0 .85rem; font-size: 1.25rem; }
 #nearby-business-fields { display: flex; flex-wrap: wrap; align-items: end; gap: .65rem; border: 0; padding: 0; margin: 0; min-width: 0; }

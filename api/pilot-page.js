@@ -124,6 +124,7 @@ const app = `
         <div id="parcel-address-list" aria-live="polite"></div>
       </div>
       <p class="small parcel-overview-note">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
+      ${previewToolsVisible ? '<a id="parcel-report-link" class="parcel-report-link" hidden>Generate property report</a>' : ""}
       ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby places</button>' : ""}
       ${previewToolsVisible ? '<button id="storefront-opportunity-open" class="secondary" type="button" aria-controls="storefront-opportunity" aria-expanded="false">Analyze a vacant storefront</button>' : ""}
     </div><figure id="parcel-photo" class="parcel-photo" hidden>
@@ -242,7 +243,7 @@ const app = `
       <div id="ask-context" hidden></div>
     </div>
   </section>
-  <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
+  <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" type="module"></script>`;
 function escapeHtml(value) {
   return String(value).replace(
     /[&<>"']/g,

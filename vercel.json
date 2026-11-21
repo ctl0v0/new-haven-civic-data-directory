@@ -2,7 +2,14 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm ci",
-  "functions": { "api/v1/parcel-opportunity.js": { "maxDuration": 90 } },
-  "rewrites": [{"source":"/mcp","destination":"/api/mcp"},{"source":"/parcel","destination":"/api/pilot-page"}],
+  "functions": {
+    "api/v1/parcel-opportunity.js": { "maxDuration": 90 },
+    "api/parcel-report.js": { "maxDuration": 90 }
+  },
+  "rewrites": [
+    {"source":"/mcp","destination":"/api/mcp"},
+    {"source":"/parcel","destination":"/api/pilot-page"},
+    {"source":"/parcel-report","destination":"/api/parcel-report"}
+  ],
   "framework": null
 }
