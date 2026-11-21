@@ -1,4 +1,4 @@
-import { MAP_COLORS, STREET_TILES } from "./parcel-map-sources.js";
+import { STREET_TILES } from "./parcel-map-sources.js";
 import { renderRadiusReport } from "./storefront-opportunity.js";
 
 const mapData = document.getElementById("report-map-data");
@@ -20,14 +20,14 @@ function initializeMap() {
     mapStatus.textContent = tilesUnavailable ? "Some street map tiles were unavailable." : "";
   });
   streets.addTo(map);
-  const boundary = leaflet.geoJSON(geometry, {
-    style: { color: "#173e35", weight: 7, fillOpacity: 0 },
-  }).addTo(map);
-  leaflet.geoJSON(geometry, {
-    style: { color: "#f8c547", weight: 4, fillColor: "#f8c547", fillOpacity: 0.18 },
-  }).addTo(map);
+  const css = getComputedStyle(document.documentElement);
+  const color = (name) => css.getPropertyValue(`--${name}`).trim();
+  const boundaryStyle = () => ({ color: color("parcel-edge"), weight: 2, fillColor: color("parcel"), fillOpacity: 1 });
+  const boundary = leaflet.geoJSON(geometry, { style: boundaryStyle });
   const bounds = boundary.getBounds();
   const center = bounds.getCenter();
+  const radiusStyle = () => ({ radius, color: color("ink"), dashArray: "4 4", weight: 1.2, fill: false });
+  const restyleLayers = [];
   const latOffset = radius / 111195;
   const lonOffset = latOffset / Math.cos(center.lat * Math.PI / 180);
   const surrounding = leaflet.latLngBounds(
@@ -35,32 +35,51 @@ function initializeMap() {
     [center.lat + latOffset, center.lng + lonOffset],
   ).extend(bounds);
   map.fitBounds(surrounding, { padding: [12, 12], maxZoom: 18 });
+  const circle = leaflet.circle(center, radiusStyle()).addTo(map);
+  boundary.addTo(map);
   leaflet.control.scale({ metric: true, imperial: true }).addTo(map);
   for (const layer of layers) {
     const toggle = [...document.querySelectorAll(".map-options input")].find((input) => input.value === layer.id);
-    const color = MAP_COLORS[layer.id] ?? "#315e4e";
+    const token = layer.id === "zoning" ? "cat-document" :
+      layer.id === "transit-stops" ? "cat-permit" : layer.id === "metered-parking-spaces" ? "cat-license" : "ink";
+    const layerStyle = ({ properties }) => {
+      const out = layer.id === "transit-stops" && [0, false, "0"].includes(properties.InService);
+      return { color: color(out ? token : "surface-raised"), weight: 1.5,
+        fillColor: color(out ? "surface-raised" : token), fillOpacity: 0.95 };
+    };
+    const areaStyle = () => ({ color: color(token), weight: 1.4, fillOpacity: 0.12 });
     const overlay = leaflet.geoJSON({ type: "FeatureCollection", features: layer.features }, {
-      style: { color, weight: 2, fillOpacity: 0.04 },
-      pointToLayer: (_feature, latlng) => leaflet.circleMarker(latlng, {
-        radius: 5, color: "#fff", weight: 1.5, fillColor: color, fillOpacity: 0.95,
-      }),
+      style: (feature) => feature.geometry.type === "Point" ? layerStyle(feature) : areaStyle(),
+      pointToLayer: (feature, latlng) => leaflet.circleMarker(latlng, { radius: 4.5, ...layerStyle(feature) }),
       onEachFeature: ({ properties: p }, feature) => {
         const label = document.createElement("span");
+        const transit = p.StopName ? [p.StopName, p.StopId != null && `Stop ${p.StopId}`,
+          [0, false, "0"].includes(p.InService) && "Not in service"].filter(Boolean).join(" · ") : "";
         label.textContent = [p.house_number, p.full_street_name].filter(Boolean).join(" ") ||
-          p.zone_code || p.StopName || p.facilityid || layer.title;
+          p.zone_code || transit || p.facilityid || layer.title;
         feature.bindTooltip(label);
       },
     });
+    restyleLayers.push(() => overlay.eachLayer((item) =>
+      item.setStyle(item.feature.geometry.type === "Point" ? layerStyle(item.feature) : areaStyle())));
     const showLayer = () => toggle.checked ? overlay.addTo(map) : map.removeLayer(overlay);
     toggle.addEventListener("change", showLayer);
     showLayer();
   }
+  const refreshColors = () => {
+    boundary.setStyle(boundaryStyle());
+    circle.setStyle(radiusStyle());
+    restyleLayers.forEach((restyle) => restyle());
+  };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshColors);
+  new MutationObserver(refreshColors).observe(document.documentElement, { attributeFilter: ["data-theme"] });
+
 }
 
 if (mapData) {
   try { initializeMap(); }
   catch {
-    map?.remove();
+    try { map?.remove(); } catch { /* The map may have failed partway through initialization. */ }
     map = null;
     document.getElementById("report-map").hidden = true;
     mapStatus.textContent = "The parcel map could not be displayed.";
@@ -70,7 +89,7 @@ if (mapData) {
 const photo = document.getElementById("report-photo");
 if (photo) {
   const showMissingPhoto = () => {
-    photo.hidden = true;
+    document.getElementById("report-photo-frame").hidden = true;
     document.getElementById("report-photo-status").textContent = "Photo could not be loaded";
   };
   photo.addEventListener("error", showMissingPhoto, { once: true });
@@ -82,19 +101,37 @@ const jump = navigation.querySelector(".report-jump");
 const sectionSelect = document.getElementById("report-section-select");
 jump.hidden = false;
 const sizeNavigation = () => {
-  document.documentElement.style.setProperty("--report-nav-height", `${navigation.offsetHeight}px`);
+  const offset = matchMedia("(min-width: 1180px)").matches ? 12 : navigation.offsetHeight;
+  document.documentElement.style.setProperty("--report-nav-height", `${offset}px`);
 };
 new ResizeObserver(sizeNavigation).observe(navigation);
 sizeNavigation();
 
+const railLinks = [...navigation.querySelectorAll("a")];
+function setCurrent(id) {
+  for (const link of railLinks) {
+    if (link.hash === `#${id}`) link.setAttribute("aria-current", "true");
+    else link.removeAttribute("aria-current");
+  }
+  if ([...sectionSelect.options].some(({ value }) => value === id)) sectionSelect.value = id;
+}
+
 function revealTarget() {
   const target = document.getElementById(location.hash.slice(1));
-  if (!target?.matches(".report-section, .record")) return;
-  const detail = target.closest("details");
-  if (detail) detail.open = true;
-  sectionSelect.value = target.closest(".report-section").id;
-  target.scrollIntoView();
-  target.querySelector("h2, h4")?.focus({ preventScroll: true });
+  if (!target?.closest(".report-section")) return;
+  const chapter = target.closest(".report-section");
+  target.closest(".p-year")?.removeAttribute("hidden");
+  for (let parent = target; parent; parent = parent.parentElement) {
+    if (parent instanceof HTMLDetailsElement) parent.open = true;
+  }
+  const record = target.closest(".p-record");
+  document.querySelector(".p-record[data-targeted]")?.removeAttribute("data-targeted");
+  if (record) record.dataset.targeted = "";
+  setCurrent(chapter.id);
+  const landing = target.id === "geography" ? chapter : target;
+  landing.scrollIntoView();
+  const heading = landing.querySelector("h2, h3, h4") ?? record?.querySelector("h4");
+  (heading ?? landing).focus({ preventScroll: true });
 }
 document.getElementById("report-section-go").addEventListener("click", () => {
   const hash = `#${sectionSelect.value}`;
@@ -104,6 +141,101 @@ document.getElementById("report-section-go").addEventListener("click", () => {
 window.addEventListener("hashchange", revealTarget);
 revealTarget();
 
+const railObserver = new IntersectionObserver((entries) => {
+  const entry = entries.find(({ isIntersecting }) => isIntersecting);
+  if (entry) setCurrent(entry.target.id);
+}, { rootMargin: "-20% 0px -70% 0px" });
+for (const link of railLinks) {
+  const target = document.getElementById(link.hash.slice(1));
+  if (target) railObserver.observe(target);
+  link.addEventListener("click", () => {
+    if (link.hash === location.hash) revealTarget();
+  });
+}
+
+for (const toggle of document.querySelectorAll("[data-plat-layer]")) {
+  const layer = document.querySelector(`#plat-drawing [data-layer="${toggle.dataset.platLayer}"]`);
+  toggle.addEventListener("change", () => layer?.toggleAttribute("data-off", !toggle.checked));
+}
+
+for (const button of document.querySelectorAll("[data-copy]")) {
+  const label = button.getAttribute("aria-label");
+  let timer;
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(button.dataset.copy);
+      button.setAttribute("aria-label", "Copied");
+      button.dataset.copied = "";
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        button.setAttribute("aria-label", label);
+        delete button.dataset.copied;
+      }, 1500);
+    } catch {
+      const value = button.previousElementSibling;
+      const range = document.createRange();
+      range.selectNodeContents(value);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  });
+}
+
+function addFilters(container, filterAttribute, entries, valueAttribute, update) {
+  if (!container) return;
+  const buttons = [...container.querySelectorAll(`[data-filter-${filterAttribute}]`)];
+  for (const button of buttons) button.addEventListener("click", () => {
+    const active = button.getAttribute("aria-pressed") !== "true" ? button.dataset[`filter${filterAttribute[0].toUpperCase()}${filterAttribute.slice(1)}`] : "";
+    for (const other of buttons) other.setAttribute("aria-pressed", String(Boolean(active) && other === button));
+    for (const row of container.querySelectorAll(entries)) row.toggleAttribute("data-dim", Boolean(active) && row.dataset[valueAttribute] !== active);
+    update(active);
+  });
+}
+
+const timeline = document.getElementById("history");
+addFilters(timeline, "cat", "[data-cat].mark, .p-year li", "cat", (active) => {
+  for (const year of timeline.querySelectorAll(".p-year")) {
+    year.hidden = Boolean(active) && !year.querySelector("li:not([data-dim])");
+    if (active && !year.hidden) year.open = true;
+  }
+});
+const sources = document.getElementById("sources");
+addFilters(sources, "resp", "tr[data-response]", "response", () => {
+  for (const group of sources.querySelectorAll("tbody"))
+    group.querySelector(".p-ledger__group")?.toggleAttribute("data-dim", !group.querySelector("tr[data-response]:not([data-dim])"));
+});
+
+const chart = timeline?.querySelector(".p-timeline__chart");
+if (chart) {
+  const tip = document.createElement("div");
+  tip.className = "p-tip";
+  tip.hidden = true;
+  document.body.append(tip);
+  const hide = () => { tip.hidden = true; };
+  for (const mark of chart.querySelectorAll(".mark")) {
+    const show = () => {
+      const rect = mark.getBoundingClientRect();
+      tip.textContent = mark.getAttribute("aria-label");
+      tip.style.top = `${Math.max(6, rect.top - 48)}px`;
+      tip.style.left = `${Math.max(6, Math.min(rect.left, window.innerWidth - 286))}px`;
+      tip.hidden = false;
+    };
+    mark.addEventListener("focus", show);
+    mark.addEventListener("blur", hide);
+    mark.addEventListener("pointerenter", show);
+    mark.addEventListener("pointerleave", hide);
+    mark.addEventListener("keydown", (event) => {
+      if (event.key !== " ") return;
+      event.preventDefault();
+      location.hash = mark.getAttribute("href");
+      hide();
+    });
+  }
+  chart.addEventListener("scroll", hide, { passive: true });
+  chart.scrollLeft = chart.scrollWidth;
+}
+
 const profile = document.getElementById("nearby-profile");
 const profileButton = document.getElementById("profile-run");
 const profileOrigin = document.getElementById("profile-origin");
@@ -111,6 +243,7 @@ const profileStatus = document.getElementById("profile-status");
 const profileOutput = document.getElementById("profile-output");
 const profileQuery = new URLSearchParams(profile.dataset.parcelQuery);
 const opportunityPath = "/api/v1/parcel-opportunity";
+let profileOriginsVerified = false;
 profile.querySelector(".profile-controls").hidden = false;
 
 async function profileRequest(path, options) {
@@ -133,6 +266,7 @@ function profileLink(href, label) {
   try {
     const url = new URL(href);
     if (url.protocol === "https:") link.href = url.href;
+    link.className = "p-src";
   } catch { /* Keep the source label if its link is unavailable. */ }
   return link;
 }
@@ -145,20 +279,23 @@ profileOrigin.addEventListener("change", () => {
 
 profileButton.addEventListener("click", async () => {
   profileButton.disabled = true;
+  profileButton.setAttribute("aria-busy", "true");
   profileOutput.replaceChildren();
   try {
-    if (!profileOrigin.options.length) {
+    if (!profileOriginsVerified) {
+      const selected = profileOrigin.value;
       profileStatus.textContent = "Checking City address points…";
       const { origins, default_origin, radius_available, warning } =
         await profileRequest(`${opportunityPath}?${profileQuery}`);
       if (!origins.length) throw new Error(warning ?? "No verified City address point is available for this parcel.");
       if (!radius_available) throw new Error("The quarter-mile profile is awaiting the Preview Google Places Aggregate key.");
-      profileOrigin.add(new Option("Choose a City address point", ""));
+      profileOrigin.replaceChildren(new Option("Choose a City address point", ""));
       for (const point of origins) {
         const repeated = origins.filter(({ address }) => address === point.address).length > 1;
         profileOrigin.add(new Option(repeated ? `${point.address} · City point ${point.objectid}` : point.address, point.id));
       }
-      profileOrigin.value = default_origin ?? "";
+      profileOrigin.value = origins.some(({ id }) => id === selected) ? selected : default_origin ?? "";
+      profileOriginsVerified = true;
       profileOrigin.closest(".profile-origin").hidden = Boolean(profileOrigin.value && origins.length === 1);
     }
     if (!profileOrigin.value) {
@@ -172,7 +309,7 @@ profileButton.addEventListener("click", async () => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...Object.fromEntries(profileQuery), mode: "report_profile", origin: profileOrigin.value }),
     });
-    renderRadiusReport(profileOutput, data, { el: profileElement, link: profileLink });
+    renderRadiusReport(profileOutput, data, { el: profileElement, link: profileLink, plat: true });
     const available = data.categories.filter(({ status }) => status === "ok").length;
     profileStatus.textContent = `${available} of ${data.categories.length} category counts returned.`;
     profileButton.textContent = "Refresh quarter-mile profile";
@@ -180,6 +317,7 @@ profileButton.addEventListener("click", async () => {
     profileStatus.textContent = error.message;
   } finally {
     profileButton.disabled = false;
+    profileButton.removeAttribute("aria-busy");
     profileOrigin.disabled = false;
   }
 });

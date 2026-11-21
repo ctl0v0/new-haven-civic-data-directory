@@ -13,13 +13,13 @@ const checkedDate = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
 });
 
-export function renderRadiusReport(output, data, { el, link }) {
+export function renderRadiusReport(output, data, { el, link, plat = false }) {
   const countFormat = new Intl.NumberFormat("en-US");
   const summary = el("p", `${data.radius_label} straight-line from the `, "meta");
   summary.append(link(data.origin.source_url, "City address point"), " · Checked ",
     checkedDate.format(new Date(data.checked_at)), " ET");
   const note = el("p", "Google Maps counts listings marked operational. Categories can overlap.", "meta");
-  const table = el("table", null, "storefront-table storefront-radius-table");
+  const table = el("table", null, plat ? "p-ledger" : "storefront-table storefront-radius-table");
   table.setAttribute("aria-label", "Neighborhood counts");
   const header = el("tr");
   for (const label of ["Place category", "Count", "Source"]) {
@@ -32,7 +32,7 @@ export function renderRadiusReport(output, data, { el, link }) {
   table.append(head);
   for (const [group, rows] of Map.groupBy(data.categories, ({ group }) => group)) {
     const body = el("tbody");
-    const groupRow = el("tr");
+    const groupRow = el("tr", null, plat ? "p-ledger__group" : undefined);
     const groupName = el("th", group, "storefront-category-group");
     groupName.scope = "rowgroup";
     groupName.colSpan = 3;
@@ -43,7 +43,7 @@ export function renderRadiusReport(output, data, { el, link }) {
       const name = el("th", category.label);
       name.scope = "row";
       if (category.note) name.append(el("small", category.note, "meta"));
-      const count = el("td", null, "storefront-category-count");
+      const count = el("td", null, plat ? "storefront-category-count t-id" : "storefront-category-count");
       count.append(el("strong", category.status === "ok" ? countFormat.format(category.count) : "Unavailable"));
       const source = el("td");
       source.append(link(category.source_url, category.attribution));
@@ -53,7 +53,13 @@ export function renderRadiusReport(output, data, { el, link }) {
     }
     table.append(body);
   }
-  output.replaceChildren(el("h3", `Neighborhood around ${data.origin.address}`), summary, note, table);
+  output.replaceChildren(el("h3", `Neighborhood around ${data.origin.address}`), summary, note, plat ? tableFrame(table, el) : table);
+}
+
+function tableFrame(table, el) {
+  const frame = el("div", null, "p-tablewrap");
+  frame.append(table);
+  return frame;
 }
 
 export function renderStorefrontReport(output, data, { el, link, sourceNames }) {

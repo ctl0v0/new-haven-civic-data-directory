@@ -42,6 +42,11 @@ await writeFile(new URL('dist/catalog.json',root),JSON.stringify(entries,null,2)
 for (const source of parcelSources) if (source.directoryId && !entries.some(entry=>entry.id===source.directoryId)) throw new Error('Unknown parcel directory source '+source.directoryId);
 await writeFile(new URL('dist/parcel-source-catalog.json',root),JSON.stringify(parcelSources,null,2)+'\n');
 for (const name of ['style.css','search.js','request.js','request.html','agent-brief.js','readiness.js','build-readiness.html','source-checks.json','parcel.css','parcel.js','city-activity.js','query-explorer.js','permit-applications.js','storefront-opportunity.js','parcel-report.css','parcel-report.js','parcel-record-text.js','parcel-map-sources.js']) await copyFile(new URL('site/'+name,root),new URL('dist/'+name,root));
+await mkdir(new URL('dist/plat/fonts/', root), { recursive: true });
+for (const name of ['plat-tokens.css', 'plat-fonts.css', 'plat.css'])
+  await copyFile(new URL('site/plat/' + name, root), new URL('dist/plat/' + name, root));
+for (const name of await readdir(new URL('site/plat/fonts/', root)))
+  await copyFile(new URL('site/plat/fonts/' + name, root), new URL('dist/plat/fonts/' + name, root));
 await mkdir(new URL('dist/leaflet/images/',root),{recursive:true});
 for (const name of ['leaflet.css','leaflet.js']) await copyFile(new URL('node_modules/leaflet/dist/'+name,root),new URL('dist/leaflet/'+name,root));
 for (const name of (await readdir(new URL('node_modules/leaflet/dist/images/',root))).filter(name=>name.endsWith('.png'))) await copyFile(new URL('node_modules/leaflet/dist/images/'+name,root),new URL('dist/leaflet/images/'+name,root));
