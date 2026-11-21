@@ -481,6 +481,8 @@ details.display-section > summary strong { margin-right: auto; }
 .detail-date { margin: .65rem 0 .9rem; }
 .record-head { justify-content: flex-start; align-items: center; flex-wrap: wrap; }
 .record-head h3 { font-size: .98rem; }
+.p-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.p-pill::before { flex: 0 0 6px; }
 .address-badge { display: inline-block; background: var(--status-ok-soft); border-left: 3px solid var(--status-ok); color: var(--status-ok); padding: .2rem .55rem; font-size: .74rem; font-weight: 750; }
 .record-description { color: var(--ink); margin: .25rem 0 .4rem; font-size: .84rem; }
 .record-note { margin: .25rem 0; }

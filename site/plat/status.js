@@ -1,5 +1,5 @@
 export function statusTone(status) {
-  const word = status.trim().toLowerCase();
+  const word = String(status ?? "").trim().toLowerCase();
   if (word.startsWith("partial") || word === "unavailable" || word === "parcel link unavailable") return "partial";
   if (/^(no records|outside|inactive flag)/.test(word)) return "none";
   if (["issued", "active", "returned records", "in service"].includes(word)) return "ok";

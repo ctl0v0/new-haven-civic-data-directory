@@ -692,7 +692,7 @@ async function openRecordDetail(item, trigger) {
   }
 }
 function statusStamp(value) {
-  const stamp = el("span", brief(value, 45), "p-pill");
+  const stamp = el("span", String(value), "p-pill");
   stamp.dataset.tone = statusTone(value);
   return stamp;
 }
