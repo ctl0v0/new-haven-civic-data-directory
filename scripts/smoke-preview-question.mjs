@@ -194,6 +194,13 @@ try {
     console.log(JSON.stringify({ event: 'preview_nearby_business_live', status: 'ok',
       category, radius_meters: checked.radius_meters, exact_address: true }));
   }
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-categories-smoke]')) {
+    const categories = ['thai_restaurant', 'building_materials_store'];
+    const checked = await Promise.all(categories.map((category) => nearbyBusinessCount({ ...parcel, category })));
+    if (checked.some((item, index) => item.category !== categories[index] || item.origin.id !== origin?.id))
+      throw new Error('An expanded business type did not match the verified City search');
+    console.log(JSON.stringify({ event: 'preview_nearby_business_categories', status: 'ok', categories }));
+  }
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status, message: error?.message }));
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import businessCategoryCatalog from "../data/nearby-business-categories.json" with { type: "json" };
 import { checkedQueryAddress } from "./address-evidence.js";
 import { LAYERS } from "./config.js";
 import { parcelFeatureToGeoJSON } from "./geometry.js";
@@ -6,20 +7,8 @@ import { arcgis, fetchJson, SourceError } from "./http.js";
 import { loadParcel, normalizeAddress } from "./resolve.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "./search-cursor.js";
 
-export const businessCategories = Object.freeze({
-  restaurant: "Restaurants",
-  cafe: "Cafés",
-  ice_cream_shop: "Ice cream shops",
-  bakery: "Bakeries",
-  grocery_store: "Grocery stores",
-  convenience_store: "Convenience stores",
-  pharmacy: "Pharmacies",
-  barber_shop: "Barber shops",
-  hair_salon: "Hair salons",
-  hardware_store: "Hardware stores",
-  plumber: "Plumbers",
-  electrician: "Electricians",
-});
+export const businessCategoryGroups = businessCategoryCatalog.groups;
+export const businessCategories = Object.freeze(Object.assign({}, ...Object.values(businessCategoryGroups)));
 export const businessRadii = Object.freeze({ 402: "¼ mile", 805: "½ mile", 1609: "1 mile", 3219: "2 miles" });
 export const DEFAULT_BUSINESS_RADIUS = 1609;
 export const GOOGLE_BUSINESS_MATCH_LIMIT = 100;

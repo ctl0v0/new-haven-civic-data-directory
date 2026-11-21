@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { load } from "cheerio";
 import route from "../api/v1/nearby-business-count.js";
 import matchesRoute from "../api/v1/nearby-business-matches.js";
 import { LAYERS } from "../parcel/config.js";
+import { businessCategories, businessCategoryGroups } from "../parcel/nearby-business-count.js";
 
 const host = "https://pilot.example.test";
 const path = `${host}/api/v1/nearby-business-count`;
@@ -159,6 +161,20 @@ test("the route requires pilot access, Preview scope, and supported radius and c
   assert.equal((await countRequest()).status, 404);
   assert.equal((await originRequest()).status, 404);
   assert.equal(requests.length, 0);
+});
+
+test("the grouped Preview dropdown exposes the same supported categories as the API", async () => {
+  const { default: pilot } = await import("../api/pilot-page.js");
+  const response = await pilot.fetch(new Request(`${host}/parcel`, { headers: auth }));
+  const $ = load(await response.text());
+  const options = $("#nearby-business-type optgroup > option").toArray().map((option) => $(option).val());
+  assert.deepEqual(options, Object.keys(businessCategories));
+  assert.deepEqual($("#nearby-business-type optgroup").toArray().map((group) => $(group).attr("label")),
+    Object.keys(businessCategoryGroups));
+  assert.equal($("#nearby-business-type-filter").attr("aria-controls"), "nearby-business-type");
+  const count = await (await countRequest({ category: "thai_restaurant" })).json();
+  assert.equal(count.category_label, "Thai restaurants");
+  assert.deepEqual(requests.at(-1).filter.typeFilter.includedTypes, ["thai_restaurant"]);
 });
 
 test("one verified search returns live business names in bounded pages for the same match set", async () => {

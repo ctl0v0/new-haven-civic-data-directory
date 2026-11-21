@@ -2469,6 +2469,59 @@ function closeNearbyBusinessResearch() {
   $("nearby-business-result").hidden = true;
 }
 
+const nearbyBusinessType = $("nearby-business-type");
+const nearbyBusinessTypeFilter = $("nearby-business-type-filter");
+const nearbyBusinessTypeGroups = nearbyBusinessType ? [...nearbyBusinessType.children] : [];
+const defaultNearbyBusinessType = nearbyBusinessType?.value;
+let chosenNearbyBusinessType = defaultNearbyBusinessType;
+
+function normalizedBusinessType(value) {
+  return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function filterNearbyBusinessTypes() {
+  const words = normalizedBusinessType(nearbyBusinessTypeFilter.value).split(" ").filter(Boolean);
+  const matches = [];
+  for (const group of nearbyBusinessTypeGroups) {
+    const options = [...group.children].filter((option) => {
+      const searchText = normalizedBusinessType(`${group.label} ${option.textContent} ${option.value}`);
+      return words.every((word) => searchText.includes(word));
+    });
+    if (!options.length) continue;
+    const copy = group.cloneNode(false);
+    copy.append(...options.map((option) => option.cloneNode(true)));
+    matches.push(copy);
+  }
+  const prompt = new Option(matches.length ? "Choose a business type" : "No matching business types", "");
+  prompt.disabled = true;
+  nearbyBusinessType.replaceChildren(prompt, ...matches);
+  nearbyBusinessType.value = chosenNearbyBusinessType;
+  if (nearbyBusinessType.selectedIndex < 0) nearbyBusinessType.value = "";
+}
+
+function updateNearbyBusinessCountButton(form) {
+  $("nearby-business-count").disabled = !nearbyBusinessConfigured ||
+    !form.elements.origin.value || !form.elements.category.value;
+}
+
+function clearNearbyBusinessResults(form) {
+  $("nearby-business-result").replaceChildren();
+  $("nearby-business-result").hidden = true;
+  updateNearbyBusinessCountButton(form);
+  if (nearbyBusinessConfigured) $("nearby-business-status").textContent = "";
+}
+
+nearbyBusinessTypeFilter?.addEventListener("input", () => {
+  const previous = nearbyBusinessType.value;
+  filterNearbyBusinessTypes();
+  if (nearbyBusinessType.value !== previous) clearNearbyBusinessResults(nearbyBusinessType.form);
+});
+nearbyBusinessTypeFilter?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  nearbyBusinessType.focus();
+});
+
 $("nearby-business-open")?.addEventListener("click", async () => {
   if (!selected || requestedParcelKey !== parcelKey(selected)) return;
   const panel = $("nearby-business-research");
@@ -2483,6 +2536,8 @@ $("nearby-business-open")?.addEventListener("click", async () => {
   $("nearby-business-title").focus();
   const form = $("nearby-business-form");
   form.reset();
+  chosenNearbyBusinessType = defaultNearbyBusinessType;
+  filterNearbyBusinessTypes();
   const origin = form.elements.origin;
   origin.replaceChildren(new Option("Choose a City address or parcel center", ""));
   const status = $("nearby-business-status");
@@ -2510,7 +2565,7 @@ $("nearby-business-open")?.addEventListener("click", async () => {
     note.hidden = false;
     status.textContent = !data.configured ? "Live business counts are awaiting a Places Aggregate API key for this Preview."
       : !data.origins.length ? "No verified City address point is available for this search." : "";
-    $("nearby-business-count").disabled = !data.configured || !origin.value;
+    updateNearbyBusinessCountButton(form);
   } catch (error) {
     if (request === nearbyBusinessRequest) status.textContent = error.message;
   } finally {
@@ -2522,10 +2577,9 @@ $("nearby-business-open")?.addEventListener("click", async () => {
 });
 
 $("nearby-business-form")?.addEventListener("change", (event) => {
-  $("nearby-business-result").replaceChildren();
-  $("nearby-business-result").hidden = true;
-  $("nearby-business-count").disabled = !nearbyBusinessConfigured || !event.currentTarget.elements.origin.value;
-  if (nearbyBusinessConfigured) $("nearby-business-status").textContent = "";
+  if (event.target === nearbyBusinessTypeFilter) return;
+  if (event.target === nearbyBusinessType) chosenNearbyBusinessType = nearbyBusinessType.value;
+  clearNearbyBusinessResults(event.currentTarget);
 });
 
 function offerNearbyBusinessMatches(output, count, search) {
@@ -2604,7 +2658,7 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
   if (!maplessRecords || $("nearby-business-research").hidden || nearbyBusinessRequest || !nearbyBusinessConfigured) return;
   const form = event.currentTarget;
   const { origin, category, radius_meters } = form.elements;
-  if (!origin.value || !selected) return;
+  if (!origin.value || !category.value || !selected) return;
   const request = new AbortController();
   nearbyBusinessRequest = request;
   const status = $("nearby-business-status");

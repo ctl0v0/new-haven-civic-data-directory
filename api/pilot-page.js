@@ -4,7 +4,7 @@ import {
   pilotConfigured,
   pilotPreviewEnabled,
 } from "../parcel/auth.js";
-import { businessCategories, businessRadii, DEFAULT_BUSINESS_RADIUS,
+import { businessCategoryGroups, businessRadii, DEFAULT_BUSINESS_RADIUS,
   GOOGLE_BUSINESS_MATCH_LIMIT } from "../parcel/nearby-business-count.js";
 
 const header =
@@ -22,9 +22,14 @@ const nearbyBusinessResearch = previewToolsVisible ? `
     <form id="nearby-business-form">
       <fieldset id="nearby-business-fields" aria-label="Nearby business filters" disabled>
         <div class="nearby-business-field"><label for="nearby-business-origin">Search from</label><select id="nearby-business-origin" name="origin" required><option value="">Choose a City address</option></select></div>
-        <div class="nearby-business-field"><label for="nearby-business-type">Business type</label><select id="nearby-business-type" name="category">
-          ${Object.entries(businessCategories).map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}
-        </select></div>
+        <div class="nearby-business-field nearby-business-type-field">
+          <label for="nearby-business-type">Business type</label>
+          <input id="nearby-business-type-filter" type="search" aria-label="Filter business types" aria-controls="nearby-business-type" placeholder="Filter types" autocomplete="off" maxlength="80">
+          <select id="nearby-business-type" name="category" required>
+            ${Object.entries(businessCategoryGroups).map(([group, entries]) => `<optgroup label="${escapeHtml(group)}">${
+              Object.entries(entries).map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join("")}</optgroup>`).join("")}
+          </select>
+        </div>
         <div class="nearby-business-field"><label for="nearby-business-radius">Radius</label><select id="nearby-business-radius" name="radius_meters">
           ${Object.entries(businessRadii).map(([meters, label]) => `<option value="${meters}"${Number(meters) === DEFAULT_BUSINESS_RADIUS ? " selected" : ""}>${label}</option>`).join("")}
         </select></div>
@@ -184,14 +189,15 @@ const app = `
     </div>
   </section>
   <script src="/leaflet/leaflet.js" defer></script><script src="/parcel.js" defer></script>`;
-const escapeHtml = (value) =>
-  String(value).replace(
+function escapeHtml(value) {
+  return String(value).replace(
     /[&<>"']/g,
     (char) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
         char
       ],
   );
+}
 export default {
   fetch: (request) => {
     if (request.method !== "GET")
