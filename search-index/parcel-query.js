@@ -2,6 +2,7 @@ import { getSourceRecords } from "../parcel/adapters.js";
 import { addressEvidence, checkedQueryAddress } from "../parcel/address-evidence.js";
 import { LAYERS } from "../parcel/config.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
+import { businessAddress, REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 import { parcelUseCodesForSearch, reviewedUseCodeValues } from "../parcel/data-context.js";
 import { SourceError } from "../parcel/http.js";
 import { nearbyFeatureCounts } from "../parcel/nearby-counts.js";
@@ -108,18 +109,20 @@ async function indexedPermitNumber(number, query) {
   return { types, date: dates.length === 1 && /^\d{4}-\d{2}-\d{2}$/.test(dates[0]) ? dates[0] : null };
 }
 
-async function exactScope(scope, resolve) {
+async function exactScope(scope, resolve, registrationScope) {
   if (scope.kind !== "address" && (scope.kind !== "parcel" || scope.objectid)) return { scope };
   if (scope.kind === "address" && Boolean(scope.parcel_id) !== Boolean(scope.objectid))
     return unsupported("An address selection needs both the City parcel ID and object ID.");
-  const resolved = await resolve(scope.kind === "address" ? scope.address : scope.parcel_id);
+  const resolved = await resolve(scope.kind === "address"
+    ? registrationScope ? businessAddress(scope.address).street : scope.address : scope.parcel_id);
   const candidates = resolved.candidates.filter((item) => item.objectid != null &&
     (scope.kind !== "parcel" || String(item.parcel_id) === scope.parcel_id));
   const listedAddressMatches = scope.kind === "address" &&
     normalizeAddress(candidates[0]?.address) === normalizeAddress(scope.address);
   const chosen = scope.objectid ? candidates.find((item) => pair(item) === pair(scope))
     : !resolved.truncated && candidates.length === 1 &&
-      (candidates[0].match?.method !== "address-point-intersection" || listedAddressMatches) ? candidates[0] : null;
+      (candidates[0].match?.method !== "address-point-intersection" || listedAddressMatches ||
+        (registrationScope && !resolved.warnings?.length)) ? candidates[0] : null;
   if (chosen) return { scope: { kind: "parcel", parcel_id: String(chosen.parcel_id), objectid: String(chosen.objectid) },
     address_match: scope.kind === "address" ? { searched_address: scope.address, ...chosen.match } : undefined };
   if (!candidates.length) {
@@ -207,10 +210,11 @@ async function liveSource(sourceId, wanted, feature, plan, dependencies) {
   const recordCategory = sourceId === "municity" ? plan.include.find(({ source_id }) => source_id === sourceId)?.record_category : null;
   const schoolFocus = sourceId === "school-attendance" && plan.scope.kind === "address"
     ? schoolAddress(plan.scope.address) : null;
-  const charityFocus = sourceId === CHARITY_SOURCE && plan.scope.kind === "address";
+  const addressFocus = [CHARITY_SOURCE, REGISTRATION_SOURCE].includes(sourceId) && plan.scope.kind === "address" &&
+    plan.scope.address_mode !== "whole_parcel";
   const selected = schoolFocus ? result.items.filter((item) =>
     schoolAddress(item.attributes.address)?.address === schoolFocus.address)
-    : charityFocus ? result.items.filter((item) => addressEvidence(item, plan.scope.address)?.matches_query)
+    : addressFocus ? result.items.filter((item) => addressEvidence(item, plan.scope.address)?.matches_query)
     : recordCategory ? result.items.filter(({ category }) => category === recordCategory) : result.items;
   const countEstablished = result.count_established ?? (recordCategory ?
     !result.omitted_categories?.includes(recordCategory) && !result.truncated_categories?.includes(recordCategory) : undefined);
@@ -371,7 +375,8 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
   const invalid = parcelQueryPlanProblem(plan, entries);
   if (invalid) return unsupported(invalid, plan);
 
-  const location = await exactScope(plan.scope, resolve);
+  const registrationScope = [...plan.requirements, ...plan.include].some(({ source_id }) => source_id === REGISTRATION_SOURCE);
+  const location = await exactScope(plan.scope, resolve, registrationScope);
   if (!location.scope) return { ...location, plan };
   const isParcel = location.scope.kind === "parcel";
   const requirements = plan.requirements.map(({ date, ...item }) => ({ ...item,
@@ -445,7 +450,9 @@ export async function queryParcelData(input, { search = searchIndexedParcels, qu
   const searchPage = (indexCursor) => search({ requirements,
     limit: live ? Math.min(3, plan.limit) : plan.limit, cursor: indexCursor }, { query,
     projection: { sources: indexedSources, parcel: isParcel ? location.scope : null,
-      descending: plan.sort === "parcel_desc", permit_types: permitTypes } });
+      descending: plan.sort === "parcel_desc", permit_types: permitTypes,
+      ...(registrationScope && plan.scope.kind === "address" && plan.scope.address_mode !== "whole_parcel"
+        ? { registration_address: businessAddress(plan.scope.address) } : {}) } });
   let result;
   if (requirements.length) result = await searchPage(state.index_cursor);
   else {

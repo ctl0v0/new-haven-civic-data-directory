@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const groups = [
   ["property", "Building and addresses", "City parcel fields, assessor detail, address points, and address-level NHPS School Choice attendance zones."],
   ["ownership", "Parcel owner and owner LLC", "City and assessor owner names, published sale fields, matched State LLC entity roles, and assessor ownership history."],
-  ["business", "Businesses and occupants in records", "Municipal parcel records, State licensed locations, and charity registrations linked through City address points."],
+  ["business", "Businesses and occupants in records", "Municipal parcel records and State registrations and licensed locations linked through City address points."],
   ["activity", "Permits, applications, and cases", "Municipal work records, documents, complaints, and other parcel activity."],
   ["geography", "Zoning and boundaries", "Mapped districts that intersect the parcel."],
   ["environment", "Environmental records", "State environmental inventory rows linked by an official parcel identifier."],
@@ -47,6 +47,7 @@ const sourceNames = {
   "ct-child-care-licenses": "CT child care and youth camps",
   "ct-cannabis-retail": "CT cannabis retail locations",
   "ct-public-charities": "CT public charity registrations",
+  "ct-business-registrations": "CT business registrations",
   "lci-cases": "LCI cases",
   "managed-lots": "LCI managed lots",
   planning: "Planning cases",
@@ -99,12 +100,14 @@ const municipalCategoryTitles = {
   Complaint: "Complaints",
   Contact: "Contacts",
   License: "Licenses",
-  Registration: "Charity registrations",
+  Registration: "Registrations",
   Permit: "Permits",
   Occupant: "Occupants",
   Certificate: "Certificates",
 };
 let parcelMap = null;
+let recordLocator = null;
+let recordLocatorRequest = null;
 let browseMap = null;
 let browseLayer = null;
 let browseRenderer = null;
@@ -222,6 +225,7 @@ function showDataSection(id, updateUrl = true) {
   if (sectionPicker) sectionPicker.value = id;
   if (updateUrl) saveDataUrl();
   if (selected && requestedParcelKey === parcelKey(selected)) {
+    if (id === "overview" && maplessRecords) void loadRecordLocator(selectedQuery(), viewVersion);
     if (id === "timeline" && !feedLoaded) {
       feedLoaded = true;
       void loadFeed(selectedQuery(), viewVersion);
@@ -398,6 +402,10 @@ function clearBrowseDataMap() {
   $("browse-map-context-notes").replaceChildren();
 }
 function resetMap() {
+  recordLocator?.remove();
+  recordLocator = null;
+  recordLocatorRequest = null;
+  $("record-locator").hidden = true;
   if (parcelMap) {
     parcelMap.remove();
     parcelMap = null;
@@ -442,6 +450,48 @@ async function loadHeroPhoto(qs, version) {
     if (version !== viewVersion) return;
     setVerifiedPhoto(figure, $("parcel-photo-image"), $("parcel-photo-source"), data);
   } catch { if (version === viewVersion) figure.hidden = true; }
+}
+async function loadRecordLocator(qs, version) {
+  if (!maplessRecords || activeDataSection !== "overview") return;
+  if (recordLocator) {
+    requestAnimationFrame(() => recordLocator?.invalidateSize());
+    return;
+  }
+  if (recordLocatorRequest) return recordLocatorRequest;
+  const load = async () => {
+    try {
+      const feature = await api(`/api/v1/geometry?${qs}`);
+      if (version !== viewVersion || !maplessRecords || activeDataSection !== "overview" || !window.L) return;
+      const leaflet = window.L;
+      const geometry = leaflet.geoJSON(feature);
+      const bounds = geometry.getBounds();
+      if (!bounds.isValid()) return;
+      const figure = $("record-locator");
+      figure.hidden = false;
+      const container = $("record-locator-map");
+      const map = createParcelMap(leaflet, container);
+      recordLocator = map;
+      createStreetLayer(leaflet).addTo(map);
+      geometry.setStyle({ color: mapColor("parcel"), weight: 3,
+        fillColor: mapColor("parcel"), fillOpacity: .25 }).addTo(map);
+      map.fitBounds(bounds.pad(1), { padding: [10, 10], maxZoom: 17 });
+      $("record-locator-source").href = `${feature.properties.source_url}/${feature.properties.objectid}`;
+      const resize = new ResizeObserver(() => {
+        if (container.clientWidth) map.invalidateSize({ pan: false });
+      });
+      resize.observe(container);
+      map.once("unload", () => resize.disconnect());
+    } catch {
+      if (version !== viewVersion) return;
+      recordLocator?.remove();
+      recordLocator = null;
+      $("record-locator").hidden = true;
+    }
+  };
+  const pending = load();
+  recordLocatorRequest = pending;
+  try { await pending; }
+  finally { if (recordLocatorRequest === pending) recordLocatorRequest = null; }
 }
 function eventDateBlock(item, extraClass = "") {
   const block = el("div", null, `event-date${extraClass ? ` ${extraClass}` : ""}`);
@@ -554,6 +604,8 @@ function recordDescription(item) {
     return [a.type, a.street, "State operating-location roster; no row-level status published"].filter(Boolean).join(" · ");
   if (item.source_id === "ct-public-charities")
     return [a.credential, a.registered_address_as_published, a.status].filter(Boolean).join(" · ");
+  if (item.source_id === "ct-business-registrations")
+    return [a.business_type, a.billingstreet, a.billing_unit, a.status].filter(Boolean).join(" · ");
   if (item.source_id === "business-master")
     return [a.entity_type, a.alei ? `ALEI ${a.alei}` : null, a.registry_status ? `Registry status: ${a.registry_status}` : null].filter(Boolean).join(" · ");
   if (item.source_id === "business-principals")
@@ -861,6 +913,13 @@ function appendRecord(parent, item) {
       ["License", item.attributes.license],
       ["Business", item.attributes.business],
     ].filter(([, value]) => value)
+    : item.source_id === "ct-business-registrations" ? [
+      ["Business address", item.attributes.billingstreet],
+      ["Suite or unit", item.attributes.billing_unit],
+      ["State entity number", item.attributes.accountnumber],
+      ["Entity type", item.attributes.business_type],
+      ["Published status", item.attributes.status],
+    ].filter(([, value]) => value)
     : item.source_id === "ct-public-charities" ? [
       ["Registered address", item.attributes.registered_address_as_published],
       ["Legal name", item.attributes.businessname || item.attributes.name],
@@ -1109,7 +1168,8 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
     const tasks = [loadParcelAddresses(qs, version)];
     if (!browsing) tasks.push(loadHeroPhoto(qs, version));
     if (browsing) tasks.push(loadBrowseSelectedMap(qs, version));
-    else if (!maplessRecords) tasks.push(loadMap(qs, version));
+    else if (maplessRecords) tasks.push(loadRecordLocator(qs, version));
+    else tasks.push(loadMap(qs, version));
     tasks.push(loadSchoolAttendance(qs, version));
     tasks.push(loadOverview(qs, version));
     for (const [id, title] of groups) {
@@ -1460,8 +1520,9 @@ function showExplorerTab(tab, { noMap = false, section = guideSection } = {}) {
       void loadBrowseSelectedMap(selectedQuery(), viewVersion, true);
     }
   });
-  else if (readingRecords && !maplessRecords && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
-    if (parcelMap) parcelMap.invalidateSize();
+  else if (readingRecords && selected && requestedParcelKey === parcelKey(selected)) requestAnimationFrame(() => {
+    if (maplessRecords) void loadRecordLocator(selectedQuery(), viewVersion);
+    else if (parcelMap) parcelMap.invalidateSize();
     else void loadMap(selectedQuery(), viewVersion);
   });
 }
@@ -3031,14 +3092,15 @@ function appendProjectedRecords(parent, match) {
     const row = el("li");
     const fields = record.fields ?? {};
     const charityName = match.source_id === "ct-public-charities" ? fields.dba || fields.businessname || fields.name : null;
-    const title = charityName ?? fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
+    const registryName = match.source_id === "ct-business-registrations" ? fields.name : null;
+    const title = registryName ?? charityName ?? fields.Fullname ?? fields.CompanyName ?? fields.BusinessName ?? fields.business ??
       fields.PermitNo ?? record.permit_number ?? record.published_type ?? record.address ?? `Record ${record.record_id}`;
     const head = el("p");
     head.append(el("strong", title));
     for (const value of [record.published_role, record.published_type, record.published_status]
       .filter((value) => value && value !== title)) head.append(document.createTextNode(` · ${value}`));
     if (record.event_date) head.append(el("strong",
-      ` · ${record.date_field ? `${record.date_field} ` : ""}${String(record.event_date).slice(0, 10)}`, "ask-date"));
+      ` · ${record.date_field === "date_registration" ? "Formation or registration date " : record.date_field ? `${record.date_field} ` : ""}${String(record.event_date).slice(0, 10)}`, "ask-date"));
     row.append(head);
     const values = Object.entries(fields).filter(([, value]) => value != null && value !== "");
     if (values.length) {
@@ -3211,7 +3273,7 @@ function renderUnifiedAnswer(response, question, version) {
     const scope = plan.scope;
     line("Search area", scope.kind === "city" ? "Citywide · New Haven" : [
       scope.kind === "neighborhood" ? "City neighborhood" : scope.kind === "ward" ? "City ward" :
-        scope.kind === "parcel" ? "City parcel" : "Searched address",
+        scope.kind === "parcel" ? "City parcel" : scope.address_mode === "whole_parcel" ? "Whole parcel at address" : "Searched address",
       scope.name ?? scope.ward ?? scope.parcel_id ?? scope.address,
     ].join(" · "));
     for (const requirement of plan.requirements ?? []) {

@@ -1,6 +1,7 @@
 import useCodes from "../data/city-use-codes.json" with { type: "json" };
 import { SourceError } from "./http.js";
 import { CHARITY_SOURCE, CHARITY_SOURCE_URL } from "./charity-registrations.js";
+import { REGISTRATION_DATASET, REGISTRATION_DATE, REGISTRATION_SOURCE } from "./business-registrations.js";
 
 const parcelLayer = "https://gis.newhavenct.gov/server/rest/services/Hosted/New_Haven_Parcels_Authoritative_Parcel_Viewer/FeatureServer/0";
 const vendor = "https://www.municityconnect.com/#/app/NewHavenCityCT/landing";
@@ -59,6 +60,11 @@ export const DATA_CONTEXT = Object.freeze([
     official_source_url: CHARITY_SOURCE_URL, field: "address",
     source_fact: "Connecticut eLicense publishes public charity registrations, including organization names, DBAs, registered addresses, credential numbers, status and dates.",
     reading_rule: "Match the registered street address to City address points that resolve to one parcel. Return the State registration and registered address as published. A date filter uses the State issue date." },
+  { id: "state-business-registration", term: "State business registration", source_id: REGISTRATION_SOURCE,
+    field: REGISTRATION_DATE, official_source_url: `https://data.ct.gov/api/views/${REGISTRATION_DATASET}`,
+    context_reviewed_on: "2026-11-21",
+    source_fact: "The Connecticut Business Registry publishes a business address, entity number and status. Date_Registration is the formation date for domestic entities and the Connecticut registration date for foreign entities.",
+    reading_rule: "Use the published business street and a unique City address-point parcel link. The filing date describes the entity. A suite-level match also requires a City address point with that unit." },
   { id: "assessor-ownership-history", term: "Assessor ownership history", source_id: "assessor-sales",
     official_source_url: "https://gis.vgsi.com/newhavenct/",
     source_fact: "The City assessor property card can publish ownership history rows with a sale date, price, and book and page reference.",
@@ -79,7 +85,7 @@ export const DATA_CONTEXT = Object.freeze([
     official_source_url: vendor,
     source_fact: "The municipal service supplies rows and count information for its searches.",
     reading_rule: "A source limit, stale refresh, missing row, or unlinked permit makes an 'all parcels' answer incomplete; an empty result cannot be called zero." },
-].map((entry) => Object.freeze({ ...entry, context_reviewed_on: "2026-11-19" })));
+].map((entry) => Object.freeze({ context_reviewed_on: "2026-11-19", ...entry })));
 
 export function getDataContext(input = {}) {
   const term = String(input.term ?? "").trim().toLowerCase();

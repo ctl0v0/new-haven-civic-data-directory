@@ -3,21 +3,23 @@
 import { NUMBER_FIELDS, SEARCH_FIELDS } from "../search-index/search.js";
 import { MUNICIPAL_LICENSE_SOURCE } from "../search-index/municipal-licenses.js";
 import { PERMIT_ACTIVITY_TYPES } from "../search-index/permit-activity-source.js";
-import { STATE_ROSTERS } from "../search-index/socrata.js";
+import { STATE_ADDRESS_SOURCES } from "../search-index/socrata.js";
 import { indexConfigured, indexQuery } from "../search-index/db.js";
 import { SourceError } from "./http.js";
 import { parcelQueryCatalog } from "./query-contract.js";
 import { CHARITY_SOURCE } from "./charity-registrations.js";
+import { REGISTRATION_SOURCE } from "./business-registrations.js";
 
 const eventFields = { parcels: "sale_date", municity: "PermitDate",
   [MUNICIPAL_LICENSE_SOURCE]: "IssueDate",
-  ...Object.fromEntries(Object.entries(STATE_ROSTERS).map(([id, source]) => [id, source.event_date])) };
+  ...Object.fromEntries(Object.entries(STATE_ADDRESS_SOURCES).map(([id, source]) => [id, source.event_date])) };
 const valueFields = {
   parcels: ["use_code", "zone"], zoning: ["zone_code"], wards: ["ward"],
   neighborhoods: ["neighborhood", "neighborhood_label"], "trash-pickup": ["trash_day"],
   municity: ["PermStatus"], [MUNICIPAL_LICENSE_SOURCE]: ["LicenseType", "Status"],
   "ct-liquor-permits": ["status"], "ct-child-care-licenses": ["licensetype", "status"],
-  "ct-cannabis-retail": ["type"], [CHARITY_SOURCE]: ["credential", "status"], "managed-lots": ["status"],
+  "ct-cannabis-retail": ["type"], [CHARITY_SOURCE]: ["credential", "status"],
+  [REGISTRATION_SOURCE]: ["business_type", "status"], "managed-lots": ["status"],
 };
 
 export async function indexedQueryValues(source, field, { query = indexQuery, configured = indexConfigured } = {}) {
@@ -215,7 +217,7 @@ export function searchCapabilities() {
         event_date: "Only the source event_date value stored in the index; null dates do not match date bounds",
         event_date_field: eventFields[source_id] ?? null,
         observed_value_fields: (valueFields[source_id] ?? []).filter((field) => fields.includes(field)),
-        site_address_supported: source_id === MUNICIPAL_LICENSE_SOURCE || Object.hasOwn(STATE_ROSTERS, source_id),
+        site_address_supported: source_id === MUNICIPAL_LICENSE_SOURCE || Object.hasOwn(STATE_ADDRESS_SOURCES, source_id),
       }])),
     permit_activity_types: PERMIT_ACTIVITY_TYPES,
     diagnostics: {

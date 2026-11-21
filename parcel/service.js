@@ -17,6 +17,7 @@ import { nearbyFeatureCounts } from "./nearby-counts.js";
 import { municipalPermitTypes } from "./permit-types.js";
 import { recordedParcelUse } from "./data-context.js";
 import { CHARITY_SOURCE } from "./charity-registrations.js";
+import { REGISTRATION_SOURCE } from "./business-registrations.js";
 
 export { resolveParcel };
 export { parcelMapContext };
@@ -122,7 +123,7 @@ export async function parcelOverview(id, objectid = null) {
     property: ["parcels", "assessor-subareas", "assessor-valuations"],
     ownership: ["parcel-owner", "assessor-owner", "business-master"],
     business: ["municipal-business-licenses", "municipal-occupants",
-      CHARITY_SOURCE, "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"],
+      REGISTRATION_SOURCE, CHARITY_SOURCE, "ct-liquor-permits", "ct-child-care-licenses", "ct-cannabis-retail"],
     activity: ["municity", "lci-cases", "managed-lots"],
     geography: ["zoning", "neighborhoods"],
     environment: ["ct-brownfields"],
@@ -142,6 +143,7 @@ export async function parcelOverview(id, objectid = null) {
       item.source_id === "ct-child-care-licenses" ? a.name :
       item.source_id === "ct-cannabis-retail" ? a.dba ?? a.business :
       item.source_id === CHARITY_SOURCE ? a.dba || a.businessname || a.name :
+      item.source_id === REGISTRATION_SOURCE ? a.name :
       item.source_id === "zoning" ? a.zone_code ? `Zoning district ${a.zone_code}` : null :
       item.source_id === "neighborhoods" ? a.neighborhood ?? a.neighborhood_label ?? a.neighborhood_name ?? a.name :
       item.source_id === "ct-brownfields" ? a.site_name :

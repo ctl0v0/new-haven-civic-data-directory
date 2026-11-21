@@ -2,7 +2,7 @@ import { indexQuery } from "./db.js";
 import { createHash } from "node:crypto";
 import { arcgisInventory, arcgisFeatures } from "./arcgis.js";
 import { INDEX_DATASETS } from "./catalog.js";
-import { stateRosterInventory, stateRosterRows, STATE_ROSTERS } from "./socrata.js";
+import { stateRosterInventory, stateRosterRows, STATE_ADDRESS_SOURCES } from "./socrata.js";
 import { municipalPermitCatalogRows, municipalPermitTypeRows,
   sameMunicipalPermitRows, municipalDateSearchFormat, verifiedMunicipalPermitDays,
   municipalParcelRow, RECENT_PERMIT_WINDOWS } from "./municity.js";
@@ -15,6 +15,7 @@ import { municipalPermitTypes } from "../parcel/permit-types.js";
 import { NHPS_ATTENDANCE_URL, normalizeSchoolStreet, schoolAddress,
   schoolRowsForAddress, snapshotIsCurrent } from "../parcel/school-attendance.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
+import { REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 
 const write = (statement, values = []) => indexQuery(statement, values, { write: true });
 
@@ -203,10 +204,10 @@ async function linkReviewedSubparcelParents(runId) {
   [runId, active.parcels, active.addresses]);
 }
 
-async function linkStateAddresses(runId, sourceId) {
-  const addressRun = await write(`SELECT run_id FROM search_active_runs
-    WHERE source_id = 'addresses' AND scope_key = 'all'`);
-  if (!addressRun.length) throw new Error("Complete City address baseline is required for State address joins");
+async function linkStateAddresses(runId, sourceId, addressRunId) {
+  const addressRun = addressRunId ?? (await write(`SELECT run_id FROM search_active_runs
+    WHERE source_id = 'addresses' AND scope_key = 'all'`))[0]?.run_id;
+  if (!addressRun) throw new Error("Complete City address baseline is required for State address joins");
   await write(`WITH matches AS (
     SELECT r.run_id, r.source_id, r.record_id, a.record_id AS address_id,
       ap.city_parcel_id, ap.city_objectid, ap.join_status
@@ -229,8 +230,49 @@ async function linkStateAddresses(runId, sourceId) {
     CASE WHEN f.parcel_count = 1 AND f.address_exact THEN 'exact' ELSE 'ambiguous' END
   FROM matches m JOIN flags f ON f.record_id = m.record_id
   WHERE m.city_parcel_id IS NOT NULL`,
-  [runId, Number(addressRun[0].run_id), sourceId,
-    sourceId === CHARITY_SOURCE ? "state-registered-address-city-address-point" : "state-site-city-address-point"]);
+  [runId, Number(addressRun), sourceId,
+    sourceId === REGISTRATION_SOURCE ? "state-business-address-city-address-point"
+      : sourceId === CHARITY_SOURCE ? "state-registered-address-city-address-point" : "state-site-city-address-point"]);
+}
+
+async function registrationBaselines() {
+  const rows = await write(`SELECT a.source_id, a.run_id FROM search_active_runs a
+    JOIN search_source_runs r ON r.id = a.run_id
+    WHERE a.source_id IN ('parcels', 'addresses') AND a.scope_key = 'all' AND r.status = 'complete'
+      AND (a.source_id <> 'addresses' OR r.started_at >= (SELECT p.started_at
+        FROM search_active_runs b JOIN search_source_runs p ON p.id = b.run_id
+        WHERE b.source_id = 'parcels' AND b.scope_key = 'all'))`);
+  const baselines = Object.fromEntries(rows.map(({ source_id, run_id }) => [source_id, Number(run_id)]));
+  if (!baselines.parcels || !baselines.addresses)
+    throw new Error("Validated City parcels and address points are required for State business registration links");
+  return baselines;
+}
+
+export async function retainParcelRegistrations(runId, { query = indexQuery } = {}) {
+  const [row] = await query(`WITH classified AS MATERIALIZED (
+    SELECT r.record_id, CASE WHEN bool_and(j.join_status = 'exact')
+      AND count(DISTINCT (j.city_parcel_id, j.city_objectid)) = 1 THEN 'exact'
+      WHEN count(j.record_id) > 0 THEN 'ambiguous' ELSE 'unlinked' END AS link_status,
+      r.event_date
+    FROM search_records r LEFT JOIN search_record_parcels j USING (run_id, source_id, record_id)
+    WHERE r.run_id = $1 AND r.source_id = $2 GROUP BY r.record_id, r.event_date
+  ), dropped_links AS (
+    DELETE FROM search_record_parcels j USING classified c
+    WHERE j.run_id = $1 AND j.source_id = $2 AND j.record_id = c.record_id AND c.link_status <> 'exact'
+    RETURNING j.record_id
+  ), dropped_records AS (
+    DELETE FROM search_records r USING classified c
+    WHERE r.run_id = $1 AND r.source_id = $2 AND r.record_id = c.record_id AND c.link_status <> 'exact'
+      AND (SELECT count(*) FROM dropped_links) >= 0
+    RETURNING r.record_id
+  ) SELECT count(*) FILTER (WHERE link_status = 'exact')::int AS linked,
+    count(*) FILTER (WHERE link_status = 'ambiguous')::int AS ambiguous,
+    count(*) FILTER (WHERE link_status = 'unlinked')::int AS unlinked,
+    count(*) FILTER (WHERE link_status = 'exact' AND event_date IS NULL)::int AS without_filing_date,
+    (SELECT count(*)::int FROM dropped_records) AS removed FROM classified`, [runId, REGISTRATION_SOURCE], { write: true });
+  if (!row || row.removed !== row.ambiguous + row.unlinked)
+    throw new Error("Could not reconcile State registration parcel links");
+  return row;
 }
 
 export async function finishRun(runId, sourceId, expectedCount,
@@ -238,6 +280,7 @@ export async function finishRun(runId, sourceId, expectedCount,
   const count = await write(`SELECT COUNT(*)::integer AS n FROM search_records WHERE run_id = $1`, [runId]);
   const returned = Number(count[0].n);
   if (returned !== expectedCount) throw new Error(`Source count ${expectedCount} differs from indexed count ${returned}`);
+  const registrationBaseline = sourceId === REGISTRATION_SOURCE ? await registrationBaselines() : null;
   if (sourceId === "parcels") await linkCityParcels(runId);
   else if (sourceId === "ct-brownfields") await linkExactParcelKey(runId, sourceId, "Site_Parce");
   else if (sourceId === "managed-lots") await linkExactParcelKey(runId, sourceId, "mbp");
@@ -250,14 +293,18 @@ export async function finishRun(runId, sourceId, expectedCount,
   else if (["school-attendance", "municity-permit-types", "municity-permit-activity", MUNICIPAL_LICENSE_SOURCE].includes(sourceId)) {
     /* These imports supply their own parcel links when applicable. */
   }
-  else if (STATE_ROSTERS[sourceId]) await linkStateAddresses(runId, sourceId);
+  else if (STATE_ADDRESS_SOURCES[sourceId]) await linkStateAddresses(runId, sourceId, registrationBaseline?.addresses);
   else if (sourceId === "trash-pickup") await linkSpatial(runId, sourceId, { addressZone: true });
   else if (!["metered-parking-spaces", "transit-stops"].includes(sourceId))
     await linkSpatial(runId, sourceId);
   const statistics = await write(`SELECT COUNT(*)::integer AS linked,
     COUNT(*) FILTER (WHERE join_status = 'ambiguous')::integer AS ambiguous
     FROM search_record_parcels WHERE run_id = $1`, [runId]);
-  const retained = sourceId === "municity" ? await retainParcelPermits(runId) : null;
+  const retained = sourceId === "municity" ? await retainParcelPermits(runId)
+    : registrationBaseline ? await retainParcelRegistrations(runId) : null;
+  if (registrationBaseline) metadata = { ...metadata, parcel_only: true,
+    indexed_count: retained.linked, without_filing_date: retained.without_filing_date,
+    city_baselines: registrationBaseline };
   const linked = Number(retained?.linked ?? statistics[0].linked);
   const ambiguous = Number(retained?.ambiguous ?? statistics[0].ambiguous);
   const distinctLinked = Number((await write(`SELECT COUNT(DISTINCT record_id)::integer AS n
@@ -373,7 +420,7 @@ export async function importArcgisSource(sourceId) {
 }
 
 export async function importStateRoster(sourceId) {
-  if (!STATE_ROSTERS[sourceId]) throw new Error("Unknown State roster index source");
+  if (!STATE_ADDRESS_SOURCES[sourceId]) throw new Error("Unknown State roster index source");
   const runId = await beginRun(sourceId);
   try {
     const inventory = await stateRosterInventory(sourceId);
@@ -393,6 +440,10 @@ export async function importStateRoster(sourceId) {
       throw new Error("State roster count or publisher update time changed during refresh");
     return await finishRun(runId, sourceId, inventory.source_count);
   } catch (error) {
+    if (sourceId === REGISTRATION_SOURCE) {
+      await write(`WITH removed AS (DELETE FROM search_record_parcels WHERE run_id = $1 RETURNING record_id)
+        DELETE FROM search_records WHERE run_id = $1 AND (SELECT count(*) FROM removed) >= 0`, [runId]);
+    }
     await failRun(runId, error);
     throw error;
   }

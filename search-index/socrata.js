@@ -1,6 +1,8 @@
 import { fetchJson, SourceError } from "../parcel/http.js";
 import { normalizeAddress } from "../parcel/resolve.js";
 import { CHARITY_DATASET, CHARITY_FIELDS, CHARITY_SOURCE, CHARITY_WHERE, isCharityRegistration } from "../parcel/charity-registrations.js";
+import { businessAddress, REGISTRATION_DATASET, REGISTRATION_DATE, REGISTRATION_FIELDS, REGISTRATION_SOURCE,
+  REGISTRATION_WHERE, registrationDate, registrationUnit, validBusinessRegistration } from "../parcel/business-registrations.js";
 
 export const STATE_ROSTERS = Object.freeze({
   "ct-liquor-permits": { dataset: "gwv2-eswx", city: "permit_city",
@@ -22,6 +24,17 @@ export const STATE_ROSTERS = Object.freeze({
     type: "credential", event_date: "issuedate", fields: CHARITY_FIELDS },
 });
 
+export const STATE_ADDRESS_SOURCES = Object.freeze({ ...STATE_ROSTERS,
+  [REGISTRATION_SOURCE]: { dataset: REGISTRATION_DATASET, city: "billingcity", site: "billingstreet",
+    id_field: "id", status: "status", type: "business_type", event_date: REGISTRATION_DATE,
+    fields: REGISTRATION_FIELDS },
+});
+
+export function registryJoinIsCurrent(run, baselines) {
+  return ["parcels", "addresses"].every((id) => baselines.has(id) &&
+    Number(run.metadata?.city_baselines?.[id]) === Number(baselines.get(id).run_id));
+}
+
 function sourceDate(value) {
   if (!value) return null;
   const raw = String(value);
@@ -35,11 +48,12 @@ function sourceDate(value) {
 }
 
 export async function stateRosterInventory(sourceId, { get = fetchJson } = {}) {
-  const source = STATE_ROSTERS[sourceId];
+  const source = STATE_ADDRESS_SOURCES[sourceId];
   if (!source) throw new SourceError("Unknown State location roster", 400);
   const base = `https://data.ct.gov/resource/${source.dataset}.json`;
   const city = `upper(${source.city})='NEW HAVEN'`;
-  const where = sourceId === CHARITY_SOURCE ? `${city} AND ${CHARITY_WHERE}` : city;
+  const where = sourceId === REGISTRATION_SOURCE ? REGISTRATION_WHERE
+    : sourceId === CHARITY_SOURCE ? `${city} AND ${CHARITY_WHERE}` : city;
   const countUrl = new URL(base);
   countUrl.searchParams.set("$select", "count(*)");
   countUrl.searchParams.set("$where", where);
@@ -76,20 +90,22 @@ export async function stateRosterRows(inventory, offset, limit = 500, { get = fe
     throw new SourceError("State roster page did not match the official count");
   return rows.map((row) => {
     const id = String(row[idField] ?? "");
-    const validId = inventory.source_id === CHARITY_SOURCE
+    const registry = inventory.source_id === REGISTRATION_SOURCE;
+    const validId = registry ? validBusinessRegistration(row) : inventory.source_id === CHARITY_SOURCE
       ? isCharityRegistration(row) : /^row-[A-Za-z0-9_.~-]+$/.test(id);
     if (!validId ||
-        String(row[inventory.source.city] ?? "").toUpperCase() !== "NEW HAVEN")
+        String(row[inventory.source.city] ?? "").trim().toUpperCase() !== "NEW HAVEN")
       throw new SourceError("State roster row ID or city did not match the official page");
     const fields = Object.fromEntries(Object.entries(row).filter(([key]) => key !== ":id"));
-    fields.normalized_site_address = normalizeAddress(row[inventory.source.site]);
+    fields.normalized_site_address = registry ? businessAddress(row.billingstreet).address : normalizeAddress(row[inventory.source.site]);
+    if (registry) fields.normalized_business_unit = registrationUnit(row) || null;
     const sourceUrl = new URL(inventory.base);
     if (idField === ":id") sourceUrl.searchParams.set("$where", `:id='${id}'`);
     else sourceUrl.searchParams.set(idField, id);
     return { record_id: id, source_url: sourceUrl.href,
       published_type: inventory.source.type ? row[inventory.source.type] ?? null : null,
       published_status: inventory.source.status ? row[inventory.source.status] ?? null : null,
-      event_date: inventory.source.event_date ? sourceDate(row[inventory.source.event_date]) : null,
+      event_date: registry ? registrationDate(row) : inventory.source.event_date ? sourceDate(row[inventory.source.event_date]) : null,
       fields };
   });
 }

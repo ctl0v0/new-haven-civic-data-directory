@@ -3,13 +3,13 @@ import { indexSourceCatalog } from "../search-index/catalog.js";
 import { MUNICIPAL_LICENSE_SOURCE } from "../search-index/municipal-licenses.js";
 import { PERMIT_ACTIVITY_KINDS, PERMIT_ACTIVITY_SOURCE, PERMIT_ACTIVITY_TYPES } from "../search-index/permit-activity-source.js";
 import { NUMBER_FIELDS, PARCEL_QUERY_FIELDS } from "../search-index/search.js";
-import { STATE_ROSTERS } from "../search-index/socrata.js";
+import { STATE_ADDRESS_SOURCES } from "../search-index/socrata.js";
 import { SOURCES } from "./config.js";
 
 export const QUERY_CATALOG_VERSION = 1;
 export const queryDateFields = { parcels: "sale_date", municity: "PermitDate",
   [MUNICIPAL_LICENSE_SOURCE]: "IssueDate",
-  ...Object.fromEntries(Object.entries(STATE_ROSTERS).map(([id, source]) => [id, source.event_date])) };
+  ...Object.fromEntries(Object.entries(STATE_ADDRESS_SOURCES).map(([id, source]) => [id, source.event_date])) };
 
 export const relatedPermitFields = {
   "permit-contacts": ["Contact_ID", "Fullname", "ContactRole", "ContactType", "CompanyName",
@@ -107,7 +107,8 @@ export const parcelQueryPlanSchema = z.strictObject({
   scope: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("city") }),
     z.strictObject({ kind: z.literal("parcel"), parcel_id: id, objectid: id.optional() }),
-    z.strictObject({ kind: z.literal("address"), address: label, parcel_id: id.optional(), objectid: id.optional() }),
+    z.strictObject({ kind: z.literal("address"), address: label, parcel_id: id.optional(), objectid: id.optional(),
+      address_mode: z.literal("whole_parcel").optional() }),
     z.strictObject({ kind: z.literal("neighborhood"), name: label }),
     z.strictObject({ kind: z.literal("ward"), ward: z.number().int().min(1).max(99) }),
   ]).default({ kind: "city" }),

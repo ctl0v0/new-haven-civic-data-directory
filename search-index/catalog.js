@@ -2,7 +2,7 @@ import { LAYERS, SOURCES } from "../parcel/config.js";
 import { MAP_LAYERS, MAP_SOURCE_GAPS } from "../parcel/map-context.js";
 import { MUNICIPAL_PERMIT_TYPES_URL } from "../parcel/permit-types.js";
 import { PERMIT_ACTIVITY_TYPES } from "./permit-activity-source.js";
-import { STATE_ROSTERS } from "./socrata.js";
+import { STATE_ADDRESS_SOURCES } from "./socrata.js";
 
 // One physical import may serve several source records shown on a parcel.
 const alias = {
@@ -46,7 +46,7 @@ export const INDEX_DATASETS = Object.freeze({
     gate: "The citywide sweep indexes named licenses from verified municipal parcels in batches. A legal address is linked to a City address point when it agrees with the parcel. Issuance queries use the City's IssueDate field." },
   "municity-permit-types": { id: "municity-permit-types", kind: "municipal-catalog",
     cadence: "daily" },
-  ...Object.fromEntries(Object.keys(STATE_ROSTERS).map((id) => [id,
+  ...Object.fromEntries(Object.keys(STATE_ADDRESS_SOURCES).map((id) => [id,
     { id, kind: "socrata-location", cadence: "daily" }])),
 });
 

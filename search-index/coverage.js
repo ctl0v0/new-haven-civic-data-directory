@@ -2,6 +2,8 @@ import { indexConfigured, indexQuery } from "./db.js";
 import { indexSourceCatalog } from "./catalog.js";
 import { RECENT_PERMIT_SCOPES, RECENT_PERMIT_WINDOWS } from "./municity.js";
 import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
+import { REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
+import { registryJoinIsCurrent } from "./socrata.js";
 
 const maxAgeMs = (cadence) => cadence === "hourly" ? 2 * 3600_000 : 48 * 3600_000;
 
@@ -137,7 +139,9 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
         const run = active.get(source.index_source_id);
         const attempt = source.index_source_id
           ? latestAllBySource.get(source.index_source_id) : null;
-        const fresh = Boolean(run && source.cadence &&
+        const registry = source.source_id === REGISTRATION_SOURCE;
+        const currentLinks = !registry || Boolean(run && registryJoinIsCurrent(run, active));
+        const fresh = Boolean(run && currentLinks && source.cadence &&
           now - Date.parse(run.finished_at) <= maxAgeMs(source.cadence));
         return { ...source, indexed: Boolean(run), fresh,
           complete: Boolean(run && fresh && run.status === "complete" &&
@@ -152,7 +156,9 @@ export async function getSearchCoverage({ query = indexQuery } = {}) {
               coverage_date_to: run.coverage_date_to } : {}),
             ...(source.source_id === "municity-permit-activity" ? { type_inventory: run.metadata?.by_type } : {}),
             ...(source.source_id === MUNICIPAL_LICENSE_SOURCE ? { license_inventory: run.metadata } : {}),
-            last_successful_refresh: run.finished_at, warning: run.warning,
+            ...(registry ? { registration_inventory: run.metadata, links_match_city_baseline: currentLinks } : {}),
+            last_successful_refresh: run.finished_at, warning: currentLinks ? run.warning
+              : "State business registrations need to be linked to the current City parcel and address index.",
             latest_attempt_status: run.latest_attempt_status,
             latest_attempt_started_at: run.latest_attempt_started_at,
             latest_attempt_warning: run.latest_attempt_warning } :

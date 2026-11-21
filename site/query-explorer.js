@@ -479,7 +479,7 @@ export function createQueryExplorer({ api, el, link, schema, openTest, openQuest
             grid.append(input("City neighborhood", p, "neighborhood", { placeholder: neighborhoods }),
               input("City parcel ID", p, "city_parcel_id"), input("City feature ID", p, "city_objectid"));
             if (cap.indexed_source_fields[draft.requirements[0].source_id].site_address_supported)
-              grid.append(input("Verified license site address", p, "site_address", { placeholder: "1533 State St" }));
+              grid.append(input("Verified street address", p, "site_address", { placeholder: "820 State St" }));
             form.append(grid);
           }
         } else {

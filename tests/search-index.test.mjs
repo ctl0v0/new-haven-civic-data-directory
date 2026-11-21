@@ -70,7 +70,8 @@ test("index catalog names every parcel source and keeps documented gaps unavaila
   const catalog = indexSourceCatalog();
   assert.equal(catalog.filter((entry) => entry.source_id !== "transit-stops" &&
     entry.source_id !== "metered-parking-spaces" && entry.source_id !== "loading-zones" &&
-    entry.source_id !== "parking-availability").length, 44);
+    entry.source_id !== "parking-availability").length, 45);
+  assert.equal(catalog.find((entry) => entry.source_id === "ct-business-registrations").index_source_id, "ct-business-registrations");
   assert.equal(catalog.find((entry) => entry.source_id === "ct-public-charities").index_source_id, "ct-public-charities");
   assert.equal(catalog.find((entry) => entry.source_id === "municity-permit-types")
     .index_source_id, "municity-permit-types");

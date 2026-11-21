@@ -1,4 +1,5 @@
 import { CHARITY_SOURCE, CHARITY_SOURCE_URL } from "./charity-registrations.js";
+import { REGISTRATION_SOURCE, REGISTRATION_URL } from "./business-registrations.js";
 
 export const GIS = "https://gis.newhavenct.gov/server/rest/services/Hosted/";
 export const LAYERS = Object.freeze({
@@ -372,6 +373,14 @@ export const SOURCES = Object.freeze([
     mode: "gap",
     coverage:
       "Credential addresses lack a verified parcel identifier. Address-only matches are excluded from parcel records.",
+  },
+  {
+    id: REGISTRATION_SOURCE,
+    group: "business",
+    title: "Connecticut business registrations",
+    url: REGISTRATION_URL,
+    mode: "live",
+    coverage: "Secretary of the State Business Registry rows joined by the published business street to City address points that resolve to one parcel. Entity status and filing date describe the registration. The address is the business address on the published row.",
   },
   {
     id: "ct-liquor-permits",

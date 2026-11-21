@@ -7,6 +7,7 @@ import { importMunicipalPermitActivity } from "../search-index/import-permit-act
 import { importMunicipalBusinessLicenses } from "../search-index/import-municipal-licenses.js";
 import { STATE_ROSTERS } from "../search-index/socrata.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
+import { REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 
 const mode = process.argv[2] ?? "daily";
 if (!["daily", "hourly", "municipal", "licenses"].includes(mode))
@@ -16,6 +17,7 @@ if (!process.env.SEARCH_DATABASE_WRITE_URL)
 
 const cityLicenses = ["municipal-business-licenses", () => importMunicipalBusinessLicenses()];
 const charities = [CHARITY_SOURCE, () => importStateRoster(CHARITY_SOURCE)];
+const registrations = [REGISTRATION_SOURCE, () => importStateRoster(REGISTRATION_SOURCE)];
 const stateLicenses = Object.keys(STATE_ROSTERS).filter((id) => id !== CHARITY_SOURCE).map((id) =>
   [id, () => importStateRoster(id)]);
 const results = [];
@@ -35,6 +37,7 @@ if (mode === "hourly") await refreshSource(cityLicenses);
 const jobs = mode === "licenses" ? [charities, cityLicenses, ...stateLicenses] : mode === "daily" ? [
   ["parcels", () => importArcgisSource("parcels")],
   ["addresses", () => importArcgisSource("addresses")],
+  registrations,
   charities,
   cityLicenses,
   ["municity:all-permit-types:recent-windows", () => importMunicipalPermitWindows()],

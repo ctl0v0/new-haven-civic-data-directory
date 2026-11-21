@@ -5,12 +5,13 @@ import { SourceError } from "../parcel/http.js";
 import { askParcelDataSchema, parcelQueryCatalog, parcelQueryPlanSchema } from "../parcel/query-contract.js";
 import { normalizeAddress } from "../parcel/resolve.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
+import { REGISTRATION_DATE, REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 import { ambiguousWorkDate, businessLicenseQuestion, interpretBaselineQuestion,
   permitContactQuestion, questionPermitCatalog, recentCalendarDates } from "./ask.js";
 import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 import { parcelQueryPlanProblem, queryParcelData } from "./parcel-query.js";
 import { questionDates } from "./question-dates.js";
-import { contactFields, exactRecordQuestion, explicitParcelUse, permitFields } from "./question-routes.js";
+import { contactFields, exactRecordQuestion, explicitParcelUse, permitFields, registrationWords } from "./question-routes.js";
 import { PERMIT_ACTIVITY_SOURCE, PERMIT_ACTIVITY_TYPES } from "./permit-activity-source.js";
 
 const COMPLETION_GAP = "There is no verified work-completion date for this search. A permit date, a listed contractor, and an inspection close date record different events. You can instead search by published PermitDate.";
@@ -40,6 +41,7 @@ function questionEvent(question) {
     return { source: "ct-liquor-permits", field: "effective_date" };
   if (publicCharity.test(question))
     return { source: CHARITY_SOURCE, field: "issuedate" };
+  if (registrationWords.test(question)) return { source: REGISTRATION_SOURCE, field: REGISTRATION_DATE };
   if (!permitWords.test(question) && /\bbusiness licenses?\b/i.test(question) &&
       !/\b(?:state|connecticut|ct)\b/i.test(question)) return { source: MUNICIPAL_LICENSE_SOURCE, field: "IssueDate" };
   if (explicitPermitDate.test(question) || /\b(?:pulled permits?|permits? (?:pulled|dated))\b/i.test(question))
@@ -63,6 +65,9 @@ function missingQuestionFilter(question, plan, { event, window, usePermitDate })
   if (publicCharity.test(question) && !sources.includes(CHARITY_SOURCE) &&
       !(["address", "parcel"].includes(plan.scope.kind) && plan.include.some(({ source_id }) => source_id === CHARITY_SOURCE)))
     return "Use Connecticut public charity registrations for this search.";
+  if (registrationWords.test(question) && !sources.includes(REGISTRATION_SOURCE) &&
+      !(["address", "parcel"].includes(plan.scope.kind) && plan.include.some(({ source_id }) => source_id === REGISTRATION_SOURCE)))
+    return "Use the Connecticut Business Registry for business registrations.";
   if (cityLicenses.test(question) && !sources.includes(MUNICIPAL_LICENSE_SOURCE) &&
       !(plan.scope.kind === "address" && plan.include.some(({ source_id }) => source_id === MUNICIPAL_LICENSE_SOURCE)))
     return "Use the City’s business license source for this query.";
@@ -251,11 +256,18 @@ export async function askParcelData(input, { execute = queryParcelData, interpre
   if (!checked.success) throw new SourceError("Invalid parcel question or clarification", 400);
   const { clarification, plan_only } = checked.data;
   const question = checked.data.question.replace(/\s+/g, " ");
+  if (/\b(?:state|connecticut|ct) business licenses?\b/i.test(question) &&
+      !/\b(?:liquor|cannabis|child care|youth camp|public charit(?:y|ies))\b/i.test(question))
+    return { status: "clarify", question, reason_code: "state_business_record_type",
+      reason: "Do you mean business registrations from the Connecticut Business Registry, or a specific credential such as a liquor permit or child care license?" };
   if (/\bcottage[- ]food\b/i.test(question)) return { status: "unsupported", question,
     reason_code: "unverified_source", reason: "Connecticut publishes cottage food credentials. A source with a verified licensed site address and date is needed before this search can link them to City parcels." };
   if (qualifiedRadius.test(question) && publicCharity.test(question))
     return { status: "unsupported", question, reason_code: "unsupported_scope",
       reason: "Charity registration searches can use a City neighborhood, parcel or registered address." };
+  if (qualifiedRadius.test(question) && registrationWords.test(question))
+    return { status: "unsupported", question, reason_code: "unsupported_scope",
+      reason: "Business registration searches can use the city, a City neighborhood, ward, parcel or business address." };
   if (qualifiedRadius.test(question) && (permitWords.test(question) || /\b(?:licenses?|licensed)\b/i.test(question)))
     return { status: "unsupported", question, reason_code: "unsupported_scope",
       reason: "Permit and license searches can use a City neighborhood or a specific parcel or address. A radius filter for those records is unavailable." };

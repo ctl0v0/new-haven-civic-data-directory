@@ -128,10 +128,13 @@ const app = `
       ${previewToolsVisible ? '<a id="parcel-report-link" class="parcel-report-link" hidden>Generate property report</a>' : ""}
       ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby places</button>' : ""}
       ${previewToolsVisible ? '<button id="storefront-opportunity-open" class="secondary" type="button" aria-controls="storefront-opportunity" aria-expanded="false">Analyze a vacant storefront</button>' : ""}
-    </div><figure id="parcel-photo" class="parcel-photo" hidden>
+    </div><div class="parcel-hero-media"><figure id="parcel-photo" class="parcel-photo" hidden>
       <img id="parcel-photo-image" alt="Verified parcel photo">
       <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>
-    </figure></div>
+    </figure><figure id="record-locator" class="parcel-locator" hidden>
+      <div id="record-locator-map" role="region" aria-label="Street map of the selected parcel"></div>
+      <figcaption><a id="record-locator-source" target="_blank" rel="noopener noreferrer">City GIS parcel boundary</a></figcaption>
+    </figure></div></div>
   </section>
   ${nearbyBusinessResearch}
   ${storefrontResearch}

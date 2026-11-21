@@ -18,6 +18,61 @@ const point = (id, house, x) => ({
   geometry: { x, y: 41.305 },
 });
 
+test("State registrations use the official business street, retain units, and exclude ambiguous parcel joins", async () => {
+  const cityParcel = { ...selected, attributes: { parcel_id: 11483, objectid: 8207, property_address: "4 PEARL ST" } };
+  const address = (objectid, house_number, full_street_name, x, unit) => ({
+    attributes: { objectid, house_number, full_street_name, unit }, geometry: { x, y: 41.305 },
+  });
+  const state = address(10, "820", "STATE ST", -72.925, "2");
+  const pearl = address(11, "4", "PEARL ST", -72.924);
+  const ambiguous = address(12, "822", "STATE ST", -72.922);
+  const business = (number, billingstreet, fields = {}) => ({ id: `0018y000009pQ8nAA${number}`,
+    name: `Fixture business ${number}`, billingcity: "New Haven", billingstate: "CT", billingstreet, ...fields });
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    const where = url.searchParams.get("$where") ?? url.searchParams.get("where") ?? "";
+    if (url.pathname.endsWith("/n7gp-d28j.json")) {
+      assert.match(where, /NEW HAVEN.*billingstate.*'CT'/);
+      assert.match(where, /'820 %'/);
+      assert.match(where, /'4 %'/);
+      return json([
+        business(1, "820 State Street, Suite 2", { billing_unit: "STE 2", status: "Active", date_registration: "2020-06-01T00:00:00.000" }),
+        business(2, "4 Pearl St", { date_registration: "0001-01-01T00:00:00.000" }),
+        business(3, "820 State St", { billing_unit: "3" }),
+        business(4, "24 Main St", { mailing_address: "820 State St" }),
+        business(5, "822 State St"),
+      ]);
+    }
+    if (url.pathname.includes("New_Haven_Addresses_Authoritative_view")) {
+      if (url.searchParams.get("geometryType") === "esriGeometryPolygon")
+        return json({ features: [state, pearl, ambiguous] });
+      if (where.includes("'820'")) return json({ features: [state] });
+      if (where.includes("'4'")) return json({ features: [pearl] });
+      if (where.includes("'822'")) return json({ features: [ambiguous, address(13, "822", "STATE ST", -72.921)] });
+    }
+    if (url.pathname.includes("New_Haven_Parcels_Authoritative_Parcel_Viewer")) {
+      const { x } = JSON.parse(url.searchParams.get("geometry"));
+      return json({ features: [{ attributes: x === -72.921 ? { parcel_id: 1, objectid: 2 } : cityParcel.attributes }] });
+    }
+    throw Error(`Unexpected upstream: ${url}`);
+  };
+  const result = await getSourceRecords("ct-business-registrations", cityParcel);
+  assert.equal(result.status, "partial");
+  assert.match(result.warning, /non-unique City parcel joins/);
+  assert.deepEqual(result.items.map(({ attributes }) => attributes.name), ["Fixture business 1", "Fixture business 2", "Fixture business 3"]);
+  assert.deepEqual(result.items.map(({ event_date }) => event_date), ["2020-06-01", null, null]);
+  const [confirmed, , noCityUnit] = result.items;
+  assert.equal(confirmed.category, "Registration");
+  assert.equal(confirmed.match.verified_city_unit, "2");
+  assert.equal(confirmed.match.city_parcel_id, 11483);
+  assert.deepEqual(confirmed.match.city_address_point_objectids, [10]);
+  assert.equal(new URL(confirmed.source_url).searchParams.get("id"), confirmed.source_record_id);
+  assert.equal(addressEvidence(confirmed, "820 State St").matches_query, true);
+  assert.equal(addressEvidence(confirmed, "820 State St #2").matches_query, true);
+  assert.equal(addressEvidence(noCityUnit, "820 State St #3").matches_query, false);
+  assert.equal(addressEvidence(confirmed, "4 Pearl St").matches_query, false);
+});
+
 test("State site locations join only through exact City addresses with a unique parcel", async () => {
   const requests = [];
   globalThis.fetch = async (input) => {

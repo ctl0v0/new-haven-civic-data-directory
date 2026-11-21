@@ -16,6 +16,7 @@ import { stateLocationMatches } from "./state-locations.js";
 import { lookupNhpsStreet, NHPS_ATTENDANCE_URL, schoolAddress, schoolRowsForAddress } from "./school-attendance.js";
 import { AGENTS, MASTER, PRINCIPALS, entityChildren, findOfficialOwnerEntity, legalName } from "./business-registry.js";
 import { CHARITY_SOURCE } from "./charity-registrations.js";
+import { REGISTRATION_SOURCE, registrationDate, registrationUnit, registrationUrl } from "./business-registrations.js";
 
 const ISO = () => new Date().toISOString();
 const text = (value) =>
@@ -401,6 +402,28 @@ async function stateLocationRecords(parcel, sourceId) {
     };
   });
   return result(sourceId, items, { partial: checked.partial, warning: checked.warning });
+}
+
+async function registrationRecords(parcel) {
+  const checked = await stateLocationMatches(REGISTRATION_SOURCE, parcel);
+  if (checked.notLinked) return notLinked(REGISTRATION_SOURCE, checked.warning);
+  const items = checked.matches.map(({ row, addressPointIds, units }) => {
+    const unit = registrationUnit(row);
+    return { ...record(row.id, REGISTRATION_SOURCE, row, {
+      eventDate: registrationDate(row),
+      sourceUrl: registrationUrl(row.id),
+      match: {
+        method: "state-business-address-city-address-point-unique-parcel",
+        state_business_address_field: "billingstreet",
+        city_address_point_objectids: addressPointIds,
+        city_parcel_objectid: parcel.attributes.objectid,
+        city_parcel_id: parcel.attributes.parcel_id,
+        ...(unit && units.includes(unit) ? { verified_city_unit: unit } : {}),
+      },
+      note: "The published business address matches City address points on this parcel. The filing date describes the entity's formation or Connecticut registration. The business address is from the published registry row.",
+    }), category: "Registration" };
+  });
+  return result(REGISTRATION_SOURCE, items, { partial: checked.partial, warning: checked.warning });
 }
 
 function pointOnSegment([x, y], [ax, ay], [bx, by]) {
@@ -1848,6 +1871,7 @@ const ADAPTERS = Object.freeze({
   "municipal-business-licenses": municipalBusinessRecords,
   "municipal-occupants": municipalOccupantRecords,
   "business-master": registryMasterRecords,
+  [REGISTRATION_SOURCE]: registrationRecords,
   "business-principals": (p) => registryChildRecords(p, "business-principals", PRINCIPALS, "business_id"),
   "business-agents": (p) => registryChildRecords(p, "business-agents", AGENTS, "business_key"),
   "ct-liquor-permits": (p) => stateLocationRecords(p, "ct-liquor-permits"),

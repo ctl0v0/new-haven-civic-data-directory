@@ -1,16 +1,8 @@
 import { LAYERS } from "./config.js";
 import { arcgis, cached, fetchJson, sqlString, SourceError } from "./http.js";
+import { normalizeAddress } from "./street-address.js";
 
-export function normalizeAddress(value) {
-  return String(value ?? "")
-    .toUpperCase()
-    .replace(/\b(STREET|ST)\b/g, "ST")
-    .replace(/\b(AVENUE|AVE|AV)\b/g, "AVE")
-    .replace(/\b(ROAD|RD)\b/g, "RD")
-    .replace(/[^A-Z0-9 ]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export { normalizeAddress } from "./street-address.js";
 function candidate(feature, method, searchedAddress = null) {
   const a = feature.attributes ?? {};
   const listedAddress = normalizeAddress(a.property_address);

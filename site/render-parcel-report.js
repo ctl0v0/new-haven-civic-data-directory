@@ -1,5 +1,7 @@
 import { source } from "../parcel/config.js";
 import { normalizeAddress } from "../parcel/resolve.js";
+import { addressEvidence } from "../parcel/address-evidence.js";
+import { businessAddress, REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 import { eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate } from "./parcel-record-text.js";
 import { calc, coverageBar, coverageNote, coveragePill, coverageState, coverageTone, escape, factTile, fields,
   icon, ledger, panel, pill, recordSourceLink, safeUrl, section, sourceChecks, sourceLink, split, stack,
@@ -24,6 +26,7 @@ const businessRecordTypes = {
   "municipal-business-licenses": "City business license",
   "municipal-occupants": "City occupant record",
   "ct-public-charities": "State charity registration",
+  [REGISTRATION_SOURCE]: "State business registration",
   "ct-liquor-permits": "State liquor permit",
   "ct-child-care-licenses": "State child care or youth camp license",
   "ct-cannabis-retail": "State cannabis retail listing",
@@ -31,7 +34,7 @@ const businessRecordTypes = {
 const chapterExplanations = {
   ownership: "Sale prices come from the City parcel or assessor records. A published $0 is kept as recorded. Use official land records to confirm title and transfers.",
   activity: "Dates and statuses come from the municipal record. Check a permit’s inspection or closeout records to verify completion.",
-  business: "City occupant records list reported occupants. City licenses and State permits show the address on the credential. State charity registrations show the organization’s registered address. Check current occupancy separately.",
+  business: "City occupant records list reported occupants. City licenses and State permits show the address on the credential. State registries show the address published for an entity. Check current occupancy separately.",
 };
 const labels = {
   mblu: "MBLU", dba: "DBA", owner_name_1: "Owner", owner_name_2: "Co-owner", co_line: "Care of",
@@ -49,6 +52,9 @@ const labels = {
   total_assessed_parcel_value_x: "City assessed parcel value (X)",
   total_assessed_parcel_value_y: "City assessed parcel value (Y)",
   occupant_id: "City occupant ID",
+  accountnumber: "State entity number", billingstreet: "Business address", billing_unit: "Business suite or unit",
+  billingcity: "Business city", billingstate: "Business state", billingpostalcode: "Business ZIP",
+  date_registration: "Formation or registration date",
 };
 const municipalFields = {
   Permit: ["PermitNo", "PermitNumber", "PermitType", "Description", "LegalAddress", "PermitDate", "IssueDate", "ExpirationDate",
@@ -87,6 +93,7 @@ function valueText(value, key = "") {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   const text = String(value).trim();
   if (!text || blank.test(text)) return "";
+  if (key === "date_registration" && /^0001-01-01(?:T|$)/.test(text)) return "";
   if (/^year_(?:building_)?built$/.test(key) && /^0+$/.test(text)) return "";
   if (typeof value === "number" && /^(?:price|sale_price|total_assessed_)/i.test(key))
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
@@ -159,7 +166,7 @@ const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeSty
 const recordCount = (count, label = "record") => `${countText.format(count)} ${label}${count === 1 ? "" : "s"}`;
 const descriptionFor = (item) => item.category === "Permit" ? valueText(item.attributes?.Description) : "";
 const addressFor = ({ attributes: a = {} }) =>
-  valueText(a.registered_address_as_published ?? a.site_address_as_published ?? a.recorded_address ?? a.LegalAddress ?? a.Addr1);
+  valueText(a.registered_address_as_published ?? a.site_address_as_published ?? a.billingstreet ?? a.recorded_address ?? a.LegalAddress ?? a.Addr1);
 const identifierFor = ({ attributes: a = {} }) => valueText(permitNumber(a) || a.LicenseNumber || a.license_number ||
   a.fullcredentialcode || a.credential_number || a.credential || a.ApplicationNumber || a.ApplicaNo || a.CertificateNumber || a.complaint_number);
 const formattedCurrency = (value) => publishedNumber(value) === null ? valueText(value) : currency.format(publishedNumber(value));
@@ -187,7 +194,7 @@ function linkedRows(primary, secondary, primaryKey, secondaryKey) {
 function recordCard(row, { merged = [], extra = "", compact = false, className = "" } = {}) {
   const { item, id, title, dateLabel, dateText, status, address, identifier } = row;
   const permit = item.source_id === "municity" && item.category === "Permit";
-  const addressLabel = item.source_id === "ct-public-charities" ? "Registered address" :
+  const addressLabel = item.source_id === REGISTRATION_SOURCE ? "Business address" : item.source_id === "ct-public-charities" ? "Registered address" :
     item.attributes?.site_address_as_published ? "Site address" : "Recorded address";
   const description = descriptionFor(item);
   const date = item.event_date
@@ -213,7 +220,8 @@ function recordCard(row, { merged = [], extra = "", compact = false, className =
     <div class="p-record__head record-head"><h4 class="p-record__title" tabindex="-1">${escape(words)}${identifier && words !== identifier
       ? ` <span class="t-id">${escape(identifier)}</span>` : ""}</h4>${recordSource}</div>
     ${date || status || address ? `<div class="p-record__meta record-meta">${date} ${pill(status)}
-      ${address ? `<span>${addressLabel} <strong>${escape(address)}</strong></span>` : ""}</div>` : ""}
+      ${address ? `<span>${addressLabel} <strong>${escape(address)}</strong></span>` : ""}
+      ${row.exactAddress ? pill("Searched address") : ""}</div>` : ""}
     ${description ? `<p class="p-record__desc record-description">${escape(description)}</p>` : ""}
     ${extra}${fields(display)}
     ${verbatim(published.map(provenance))}
@@ -244,7 +252,7 @@ function reportTimeline(rows, generatedAt) {
     .map(occupantProjectionKey).filter(Boolean));
   const dated = rows.filter((row) => {
     const { item } = row;
-    return item.event_date && /^\d{4}-/.test(item.event_date) &&
+    return item.source_id !== REGISTRATION_SOURCE && item.event_date && /^\d{4}-/.test(item.event_date) &&
       !(item.source_id === "municipal-business-licenses" && originals.has(item.source_record_id)) &&
       !(item.source_id === "municipal-occupants" && occupants.has(occupantProjectionKey(row)));
   }).sort(newestFirst);
@@ -266,7 +274,7 @@ function reportTimeline(rows, generatedAt) {
     }) };
 }
 
-function makeRows(groups) {
+function makeRows(groups, searchedAddress) {
   let number = 0;
   return Object.keys(chapters).flatMap((chapter) => (groups.find(({ group }) => group === chapter)?.items ?? [])
     .filter(({ source_id }) => source_id !== "parcels" && source_id !== "addresses").flatMap((item) => {
@@ -275,7 +283,8 @@ function makeRows(groups) {
       if (!fields.length && !item.event_date && !status && !item.attributes?.public_document_url) return [];
       return [{ item, fields, status, id: `record-${++number}`, title: titleFor(item),
         raw: meaningfulFields(item, true), chapter, dateLabel: eventDateLabel(item), dateText: shortDate(item.event_date),
-        address: addressFor(item), identifier: identifierFor(item), eventCategory: eventCategory(item) }];
+        address: addressFor(item), identifier: identifierFor(item), eventCategory: eventCategory(item),
+        exactAddress: item.source_id === REGISTRATION_SOURCE && addressEvidence(item, searchedAddress)?.matches_query }];
     }));
 }
 
@@ -535,7 +544,8 @@ function businessMatch(rows, activity) {
 
 function addressDirectory(rows, addresses, title) {
   if (!addresses.length && !rows.some(({ address }) => address)) return "";
-  const entries = Map.groupBy(rows.filter(({ address }) => address), ({ address }) => normalizeAddress(address));
+  const entries = Map.groupBy(rows.filter(({ address }) => address), ({ item, address }) =>
+    item.source_id === REGISTRATION_SOURCE ? businessAddress(address).address : normalizeAddress(address));
   const mapped = new Set(addresses.map(({ address }) => normalizeAddress(address)));
   const row = (address, labels, units = []) => `<div class="p-dir__row">
     <div class="p-dir__num">${escape(address)}${units.length ? `<small>Unit ${escape(units.join(", "))}</small>` : ""}</div>
@@ -786,7 +796,7 @@ export function renderParcelReport({ parcel, searchedAddress, addresses, groups,
   const title = valueText(parcel.address) || `Parcel ${parcel.parcel_id}`;
   const query = new URLSearchParams({ parcel_id: parcel.parcel_id, objectid: parcel.objectid });
   if (searchedAddress) query.set("query_address", searchedAddress);
-  const rows = makeRows(groups);
+  const rows = makeRows(groups, searchedAddress);
   const inChapter = (chapter) => rows.filter((row) => row.chapter === chapter);
   const property = inChapter("property");
   const services = [...sourceRows(property, "trash-pickup", "school-attendance"), ...inChapter("representation")];

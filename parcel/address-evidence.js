@@ -1,6 +1,7 @@
 import { normalizeAddress } from "./resolve.js";
 import { SourceError } from "./http.js";
 import { CHARITY_SOURCE } from "./charity-registrations.js";
+import { businessAddress, REGISTRATION_SOURCE } from "./business-registrations.js";
 
 export function checkedQueryAddress(value) {
   if (value == null || value === "") return null;
@@ -42,6 +43,12 @@ function explicitAddress(item) {
 export function addressEvidence(item, queryAddress) {
   const address = checkedQueryAddress(queryAddress);
   if (!address) return null;
+  if (item.source_id === REGISTRATION_SOURCE && item.attributes?.billingstreet) {
+    const query = businessAddress(address);
+    return { source_field: "billingstreet", source_address: String(item.attributes.billingstreet),
+      matches_query: businessAddress(item.attributes.billingstreet).address === query.address &&
+        (!query.unit || query.unit === item.match?.verified_city_unit) };
+  }
   const source = explicitAddress(item);
   if (!source || !normalizeAddress(source.value)) return null;
   return {

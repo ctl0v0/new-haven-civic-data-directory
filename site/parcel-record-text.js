@@ -19,6 +19,7 @@ export function eventDateLabel(item) {
   if (item.source_id === "lci-cases") return "Filed date";
   if (["ct-liquor-permits", "ct-child-care-licenses"].includes(item.source_id)) return "Effective date";
   if (item.source_id === "ct-public-charities") return "Registration issue date";
+  if (item.source_id === "ct-business-registrations") return "Formation or registration date";
   if (item.source_id === "municity") {
     const fields = {
       Permit: [["PermitDate", "Permit date"], ["CreatedDate", "Created date"]],
@@ -57,6 +58,7 @@ export function recordTitle(item) {
   if (item.source_id === "ct-public-charities")
     return brief([a.dba || a.businessname || a.name || "State charity registration", a.fullcredentialcode]
       .filter(Boolean).join(" · "), 120);
+  if (item.source_id === "ct-business-registrations") return brief(a.name || "State business registration", 120);
   if (item.category === "Permit")
     return brief([a.PermitType, a.PermitNo ?? a.PermitNumber].filter(Boolean).join(" · ") || "Permit record", 120);
   if (item.category === "Application")

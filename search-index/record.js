@@ -2,6 +2,8 @@ import { SourceError } from "../parcel/http.js";
 import { INDEX_DATASETS } from "./catalog.js";
 import { indexConfigured, indexQuery } from "./db.js";
 import { RECENT_PERMIT_SCOPES } from "./municity.js";
+import { REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
+import { registryJoinIsCurrent } from "./socrata.js";
 
 export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) {
   const sourceId = String(input.source_id ?? "").trim();
@@ -28,7 +30,7 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
   try {
     const runs = await query(`SELECT r.id AS run_id, a.scope_key, r.status, r.expected_count,
       r.returned_count, r.ambiguous_count, r.unlinked_count,
-      r.source_updated_at, r.finished_at, r.warning,
+      r.source_updated_at, r.finished_at, r.warning, r.metadata,
       r.coverage_date_from, r.coverage_date_to,
       last.status AS latest_attempt_status, last.warning AS latest_attempt_warning
       FROM search_active_runs a JOIN search_source_runs r ON r.id = a.run_id
@@ -59,6 +61,13 @@ export async function getIndexedRecord(input = {}, { query = indexQuery } = {}) 
           latest_attempt_started_at: attempt.started_at } : {}) } };
     }
     key.scope_key = run.scope_key ?? scopeKey;
+    if (sourceId === REGISTRATION_SOURCE) {
+      const city = await query(`SELECT source_id, run_id FROM search_active_runs
+        WHERE source_id IN ('parcels', 'addresses') AND scope_key = 'all'`);
+      if (!registryJoinIsCurrent(run, new Map(city.map((entry) => [entry.source_id, entry]))))
+        return { ...key, found: false, complete_for_query: false, coverage: { index_status: "partial",
+          warning: "State business registrations need to be linked to the current City parcel and address index." } };
+    }
     const fresh = Date.now() - Date.parse(run.finished_at) <= 48 * 3600_000;
     const complete = fresh && run.status === "complete" &&
       run.latest_attempt_status !== "failed" &&

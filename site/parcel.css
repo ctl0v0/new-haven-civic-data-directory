@@ -315,6 +315,28 @@ summary:focus-visible {
 .parcel-photo { margin: 0; }
 .parcel-photo img { display: block; width: 100%; max-height: 11rem; object-fit: cover; border-radius: var(--radius-control); background: var(--surface-sunken); }
 .parcel-photo figcaption { margin-top: .4rem; color: var(--ink-muted); font-size: .76rem; line-height: 1.4; }
+.parcel-hero-media { min-width: 0; }
+.parcel-hero-media:has(> figure:not([hidden])) { display: grid; gap: .75rem; }
+body.record-only-mode .parcel-hero:not(.parcel-hero-compact) .parcel-hero-layout:has(.parcel-locator:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 26rem);
+}
+body.record-only-mode .parcel-hero-media:has(> figure:not([hidden]) + figure:not([hidden])) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.parcel-locator { margin: 0; min-width: 0; }
+.parcel-locator figcaption { margin-top: .4rem; font-size: .76rem; line-height: 1.4; }
+#record-locator-map, body.record-only-mode .parcel-hero-media img {
+  width: 100%; height: clamp(8rem, 12vw, 10rem); border-radius: var(--radius-control);
+}
+#record-locator-map { border: 1px solid var(--line); background: var(--surface-sunken); }
+body:not(.record-only-mode) .parcel-locator, .parcel-hero-compact .parcel-hero-media { display: none; }
+@media (max-width: 760px) {
+  body.record-only-mode .parcel-hero:not(.parcel-hero-compact) .parcel-hero-layout:has(.parcel-locator:not([hidden])) { grid-template-columns: 1fr; }
+  body.record-only-mode .parcel-photo { max-width: none; }
+}
+@media (max-width: 420px) {
+  body.record-only-mode .parcel-hero-media:has(> figure:not([hidden]) + figure:not([hidden])) { grid-template-columns: 1fr; }
+}
 body.browse-mode main { padding: 0; }
 body.record-only-mode main { padding-top: 1.5rem; }
 body.record-only-mode #parcel-map-section { display: none; }

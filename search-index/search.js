@@ -3,7 +3,8 @@ import { normalizeAddress } from "../parcel/resolve.js";
 import { fingerprint, makeSearchCursor, readSearchCursor } from "../parcel/search-cursor.js";
 import { GIS_INDEX_FIELDS } from "./arcgis.js";
 import { indexConfigured, indexQuery } from "./db.js";
-import { STATE_ROSTERS } from "./socrata.js";
+import { registryJoinIsCurrent, STATE_ADDRESS_SOURCES } from "./socrata.js";
+import { businessAddress, REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 import { recentPermitRun, RECENT_PERMIT_SCOPES } from "./municity.js";
 import { MUNICIPAL_LICENSE_FIELDS, MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 import { filteredPermitLinkGaps } from "./parcel-only-permits.js";
@@ -22,7 +23,7 @@ export const SEARCH_FIELDS = Object.freeze({
   cmt: GIS_INDEX_FIELDS.cmt,
   "ct-brownfields": GIS_INDEX_FIELDS["ct-brownfields"],
   "managed-lots": GIS_INDEX_FIELDS["managed-lots"],
-  ...Object.fromEntries(Object.entries(STATE_ROSTERS).map(([id, { fields }]) => [id, fields])),
+  ...Object.fromEntries(Object.entries(STATE_ADDRESS_SOURCES).map(([id, { fields }]) => [id, fields])),
   [MUNICIPAL_LICENSE_SOURCE]: MUNICIPAL_LICENSE_FIELDS,
   "school-attendance": ["street_name", "k8_school", "high_school"],
   municity: ["Permit_ID", "Application_ID", "PermitNo", "PermitType",
@@ -37,7 +38,7 @@ export const PARCEL_QUERY_FIELDS = Object.freeze({ ...SEARCH_FIELDS,
     "PermitApplicationStatus", "ApplicationStatus", "ApplicationNumber", "Department",
     "Task_ID", "TaskType", "ApprovalStatus", "Inspection_ID", "InspType", "Status", "Results"],
 });
-const ADDRESS_DEPENDENT = new Set(["trash-pickup", ...Object.keys(STATE_ROSTERS),
+const ADDRESS_DEPENDENT = new Set(["trash-pickup", ...Object.keys(STATE_ADDRESS_SOURCES),
   "school-attendance", MUNICIPAL_LICENSE_SOURCE]);
 const ONE_OF_FIELDS = Object.freeze({ parcels: ["use_code"] });
 export const NUMBER_FIELDS = Object.freeze({
@@ -54,11 +55,16 @@ const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0,
   : String(value ?? "").slice(0, 10);
 function dateCoverage(run, requirement) {
   if ((requirement?.event_date_from || requirement?.event_date_to) &&
-      run.metadata?.named_licenses_without_issue_date) return false;
+      (run.metadata?.named_licenses_without_issue_date || run.metadata?.without_filing_date)) return false;
   if (!run.coverage_date_from && !run.coverage_date_to) return true;
   return Boolean(requirement?.event_date_from && requirement?.event_date_to &&
     requirement.event_date_from >= dateOnly(run.coverage_date_from) &&
     requirement.event_date_to <= dateOnly(run.coverage_date_to));
+}
+
+function verifiedRegistrationUnit(row, point, unit) {
+  return `${row}.fields->>'normalized_business_unit' = ${unit}
+    AND upper(regexp_replace(trim(${point}.fields->>'unit'), '^(SUITE|STE[.]?|UNIT|APT[.]?|APARTMENT)[[:space:]]+|^#[[:space:]]*', '', 'i')) = ${unit}`;
 }
 async function missingAttempt(sourceId, scopeKey, query) {
   if (!scopeKey) return null;
@@ -194,6 +200,13 @@ export function buildIndexedSearchQuery(requirements, runs, offset, limit, proje
   }
   function rowConditions(requirement, alias) {
     const filters = sourceConditions(requirement, alias);
+    if (requirement.source_id === REGISTRATION_SOURCE && projection?.registration_address) {
+      const { address, unit } = projection.registration_address;
+      filters.push(`${alias}.fields->>'normalized_site_address' = ${add(address)}`);
+      if (unit) filters.push(`EXISTS (SELECT 1 FROM search_records a
+        WHERE a.run_id = ${add(runs.addresses)} AND a.source_id = 'addresses'
+          AND a.record_id = j.city_address_objectid::text AND ${verifiedRegistrationUnit(alias, "a", add(unit))})`);
+    }
     if (!projection || !permitRequirement || !activityRequirement ||
         !["municity", PERMIT_ACTIVITY_SOURCE].includes(requirement.source_id)) return filters;
     const isPermit = requirement.source_id === "municity";
@@ -352,6 +365,8 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery,
     if (!run) return { source_id, status: "not_indexed",
       ...(source_id === "municity" ? { scope_key: scope,
         ...(scope === municipalScope ? absentMunicipal : {}) } : source_id === MUNICIPAL_LICENSE_SOURCE ? absentLicenses : {}) };
+    if (source_id === REGISTRATION_SOURCE && !registryJoinIsCurrent(run, byId))
+      return { source_id, status: "not_indexed", warning: "State business registrations need to be linked to the current City parcel and address index." };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const dateCovered = dateCoverage(run, requirements.find((item) => item.source_id === source_id));
@@ -373,7 +388,7 @@ export async function searchIndexedParcels(input = {}, { query = indexQuery,
       returned_count: Number(run.returned_count), ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
       ...(gaps ? { filtered_parcel_link_gaps: gaps } : {}),
-      ...(source_id === MUNICIPAL_LICENSE_SOURCE ? { inventory: run.metadata } : {}),
+      ...([MUNICIPAL_LICENSE_SOURCE, REGISTRATION_SOURCE].includes(source_id) ? { inventory: run.metadata } : {}),
       warning: run.warning ?? null,
       latest_attempt_status: run.latest_attempt_status === "failed" &&
         run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
@@ -469,12 +484,13 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   const neighborhood = input.neighborhood == null ? null : String(input.neighborhood).trim();
   if (neighborhood != null && (!neighborhood || neighborhood.length > 80 ||
       /[\x00-\x1f]/.test(neighborhood))) throw new SourceError("Invalid City neighborhood", 400);
-  const licenseAddress = sourceId === MUNICIPAL_LICENSE_SOURCE || Object.hasOwn(STATE_ROSTERS, sourceId);
+  const licenseAddress = sourceId === MUNICIPAL_LICENSE_SOURCE || Object.hasOwn(STATE_ADDRESS_SOURCES, sourceId);
   const rawAddress = input.site_address;
-  const siteAddress = rawAddress == null ? null : normalizeAddress(rawAddress);
+  const registrationSite = sourceId === REGISTRATION_SOURCE && rawAddress != null ? businessAddress(rawAddress) : null;
+  const siteAddress = rawAddress == null ? null : registrationSite?.address ?? normalizeAddress(rawAddress);
   if (rawAddress != null && (!licenseAddress || typeof rawAddress !== "string" || rawAddress.length > 160 ||
       /[\x00-\x1f]/.test(rawAddress) || !/^\d+ [A-Z0-9]/.test(siteAddress)))
-    throw new SourceError("Provide a street address for a linked City or State credential source", 400);
+    throw new SourceError("Provide a street address for a linked City or State business or credential source", 400);
   const limit = input.limit == null ? 25 : Number(input.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
     throw new SourceError("limit must be 1–50", 400);
@@ -483,7 +499,8 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     ...(ADDRESS_DEPENDENT.has(sourceId) ? ["addresses"] : [])])];
   const criteria = { ...requirement, city_parcel_id: parcelId,
     city_objectid: objectId, ...(neighborhood ? { neighborhood } : {}),
-    ...(siteAddress ? { site_address: siteAddress } : {}) };
+    ...(siteAddress ? { site_address: siteAddress } : {}),
+    ...(registrationSite?.unit ? { site_unit: registrationSite.unit } : {}) };
   if (!indexConfigured()) return { criteria, items: [], next_cursor: null,
     complete_for_query: false, coverage: { index_status: "unconfigured",
       source_checks: requiredSources.map((source_id) => ({ source_id, status: "unconfigured" })) } };
@@ -525,6 +542,8 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
     if (!run) return { source_id, status: "not_indexed",
       ...(source_id === "municity" ? { scope_key: municipalScope,
         ...absentMunicipal } : source_id === MUNICIPAL_LICENSE_SOURCE ? absentLicenses : {}) };
+    if (source_id === REGISTRATION_SOURCE && !registryJoinIsCurrent(run, byId))
+      return { source_id, status: "not_indexed", warning: "State business registrations need to be linked to the current City parcel and address index." };
     const fresh = Number.isFinite(Date.parse(run.finished_at)) &&
       Date.now() - Date.parse(run.finished_at) <= sourceAge(source_id);
     const dateCovered = dateCoverage(run, source_id === sourceId ? requirement : null);
@@ -547,7 +566,7 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
       ambiguous_count: Number(run.ambiguous_count),
       unlinked_count: Number(run.unlinked_count), finished_at: run.finished_at,
       ...(gaps ? { filtered_parcel_link_gaps: gaps } : {}),
-      ...(source_id === MUNICIPAL_LICENSE_SOURCE ? { inventory: run.metadata } : {}),
+      ...([MUNICIPAL_LICENSE_SOURCE, REGISTRATION_SOURCE].includes(source_id) ? { inventory: run.metadata } : {}),
       warning: run.warning ?? null,
       latest_attempt_status: run.latest_attempt_status === "failed" &&
         run.latest_attempt_warning?.startsWith("MUNICIPAL_TYPE_CAP:")
@@ -600,7 +619,8 @@ export async function searchIndexedRecords(input = {}, { query = indexQuery } = 
   if (siteAddress) filters.push(`EXISTS (SELECT 1 FROM search_records a
       WHERE a.run_id = ${addressRun} AND a.source_id = 'addresses'
         AND a.record_id = j.city_address_objectid::text
-        AND a.fields->>'normalized_address' = ${add(siteAddress)}${validLicensePoint})`);
+        AND a.fields->>'normalized_address' = ${add(siteAddress)}${validLicensePoint}
+        ${registrationSite?.unit ? `AND ${verifiedRegistrationUnit("r", "a", add(registrationSite.unit))}` : ""})`);
   const addressJoin = addressRun == null ? "" : `
       LEFT JOIN search_records a ON a.run_id = ${addressRun}
         AND a.source_id = 'addresses'

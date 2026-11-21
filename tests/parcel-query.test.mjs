@@ -311,6 +311,31 @@ test("unsupported issuance, completion, cottage food, and radius queries never o
   }
 });
 
+test("business registry language distinguishes exact address, whole parcel, filing date, and license requests", async () => {
+  const source_id = "ct-business-registrations";
+  const options = { now, interpret: assert.fail, execute: assert.fail };
+  const at = await askParcelData({ question: "What businesses are registered at 820 State St?", plan_only: true }, options);
+  const whole = await askParcelData({ question: "Show State business registrations on the 4 Pearl St parcel", plan_only: true }, options);
+  const recent = await askParcelData({ question: "Show businesses registered in East Rock in the last 90 days", plan_only: true }, options);
+  assert.deepEqual(at.plan.scope, { kind: "address", address: "820 State St" });
+  assert.deepEqual(whole.plan.scope, { kind: "address", address: "4 Pearl St", address_mode: "whole_parcel" });
+  assert.deepEqual(recent.plan.scope, { kind: "neighborhood", name: "East Rock" });
+  assert.deepEqual(recent.plan.requirements, [{ source_id, date: { field: "date_registration", from: "2026-08-23", to: "2026-11-20" } }]);
+  const ambiguous = await askParcelData({ question: "Find State business licenses at 820 State St" }, options);
+  assert.equal(ambiguous.status, "clarify");
+  assert.equal(ambiguous.reason_code, "state_business_record_type");
+  const resolve = async (address) => ({ candidates: [{ parcel_id: 11483, objectid: 8207, address: "4 Pearl St",
+    match: { method: address.startsWith("820") ? "address-point-intersection" : "parcel-address" } }] });
+  const load = async () => ({ attributes: { parcel_id: 11483, objectid: 8207, property_address: "4 Pearl St" } });
+  const records = async () => ({ status: "ok", items: ["820 STATE ST", "4 PEARL ST"].map((billingstreet, i) => ({
+    source_id, source_record_id: String(i + 1), attributes: { billingstreet },
+  })) });
+  const [exactResult, parcelResult] = await Promise.all([at, whole].map(({ plan }) =>
+    queryParcelData({ plan }, { resolve, load, records })));
+  assert.deepEqual(exactResult.items[0].matching_sources[0].records.map(({ record_id }) => record_id), ["1"]);
+  assert.deepEqual(parcelResult.items[0].matching_sources[0].records.map(({ record_id }) => record_id), ["1", "2"]);
+});
+
 test("fallback plans keep the requested calendar and parcel-use meaning", async () => {
   const response = await askParcelData({ question: "Which commercial parcels had electrical permits pulled last month?", plan_only: true }, {
     now,

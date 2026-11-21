@@ -1,5 +1,6 @@
 import { MUNICIPAL_LICENSE_SOURCE } from "./municipal-licenses.js";
 import { CHARITY_SOURCE } from "../parcel/charity-registrations.js";
+import { REGISTRATION_DATE, REGISTRATION_SOURCE } from "../parcel/business-registrations.js";
 
 export const permitFields = ["PermitNo", "PermitType", "PermStatus", "PermitDate", "LegalAddress"];
 export const contactFields = ["Fullname", "ContactRole", "CompanyName", "Phone", "Email", "EMailAddress", "ContactLicenseNumber"];
@@ -10,6 +11,7 @@ const categoryByPhrase = { commercial: "business_space", "strictly commercial": 
 const tradeNames = { plumbing: "Plumbing", electrical: "Electrical", mechanical: "Mechanical", building: "Building" };
 const action = /^(?:show(?: me)?|find|list|pull|any) (?:all )?(?:the )?/i;
 const street = String.raw`\d{1,6}[A-Za-z]? [a-z0-9.' -]{1,90} (?:st(?:reet)?|av(?:e(?:nue)?)?|r(?:d|oad)|blvd|boulevard|pl(?:ace)?|dr(?:ive)?|ct|court|ln|lane|ter(?:race)?|way)`;
+export const registrationWords = /\bbusiness (?:registry|registrations?)\b|\bbusinesses (?:are |that (?:are |were )?)?registered\b/i;
 const permitNumberPattern = String.raw`[A-Z]{1,8}-\d{2,4}-\d{1,12}`;
 export const permitNumber = new RegExp(`^${permitNumberPattern}$`, "i");
 
@@ -38,6 +40,38 @@ export function explicitParcelUse(question) {
 
 export function exactRecordQuestion(question, window) {
   const text = question.replace(/[?.!]$/, "");
+  const registrySubject = window ? text.slice(0, window.start).trimEnd() : text;
+  const registry = (!window || !text.slice(window.end).trim()) && registrySubject.match(
+    /^(?:show(?: me)?|find|list|what|which) (?:all |the )?(?:(active|dissolved|forfeited) )?(?:(?:state |connecticut |ct )?business registrations?|businesses (?:are |that (?:are |were )?)?registered(?: with (?:the state|connecticut))?)(?: (at|for|in|on|named|with) (.+))?$/i);
+  if (registry) {
+    const [, status, relation, location] = registry;
+    const target = location?.replace(/^the /i, "");
+    const requirement = { source_id: REGISTRATION_SOURCE,
+      ...(status ? { equals: { status } } : {}),
+      ...(window ? { date: { field: REGISTRATION_DATE, from: window.from, to: window.to } } : {}) };
+    const include = [{ source_id: REGISTRATION_SOURCE }];
+    const entity = target?.match(/^(?:state )?(?:entity (?:number|id)|alei) (\d{1,16})$/i);
+    if (relation?.toLowerCase() === "named" || (relation?.toLowerCase() === "with" && entity)) {
+      const field = entity ? "accountnumber" : "name";
+      requirement.equals = { ...requirement.equals, [field]: entity?.[1] ?? target.replace(/^["“]|["”]$/g, "") };
+      return { plan: { scope: city, requirements: [requirement], include } };
+    }
+    const parcel = target?.match(/^(?:city )?parcel(?: id)? (\d{1,12})$/i);
+    const scopedRequirements = window || status ? [requirement] : [];
+    if (parcel) return { plan: { scope: { kind: "parcel", parcel_id: parcel[1] }, requirements: scopedRequirements, include } };
+    if (/^\d+\s/.test(target ?? "")) {
+      const address = target.replace(/ parcel$/i, "");
+      const suite = String.raw`(?:(?:,? (?:suite|ste\.?|unit|apt\.?) | #\s*)[a-z0-9-]+)?`;
+      if (!new RegExp(`^${street}${suite}$`, "i").test(address)) return null;
+      return { plan: { scope: { kind: "address", address,
+        ...(address !== target ? { address_mode: "whole_parcel" } : {}) }, requirements: scopedRequirements, include } };
+    }
+    const ward = target?.match(/^ward (\d{1,2})$/i);
+    if (target && !ward && relation?.toLowerCase() !== "in") return null;
+    const scope = ward ? { kind: "ward", ward: Number(ward[1]) }
+      : target && !/^new haven$/i.test(target) ? { kind: "neighborhood", name: target.replace(/ neighborhood$/i, "") } : city;
+    return { plan: { scope, requirements: [requirement], include } };
+  }
   const history = !window && permitHistory(text);
   if (history) return { plan: history };
   const charity = !window && text.match(/^(?:show(?: me)?|find|list|what are|which are) (?:the )?(?:(?:state|ct|connecticut) )?public charit(?:ies|y registrations)(?: (at|for|in) (.+?)(?: neighborhood)?)?$/i);
