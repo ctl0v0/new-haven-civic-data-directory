@@ -165,6 +165,25 @@
 @media (min-width: 760px) { .p-factsband .p-facts { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .p-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .p-fact { padding: 12px; } .p-fact__value { font-size: 1.125rem; } }
 
+/* Record previews use the available column width, including inside the map sidebar. */
+.p-facts--preview { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(16rem, calc(100% / 3))), 1fr)); }
+.p-fact--preview { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.p-fact--preview .p-panel__head { gap: var(--space-1) var(--space-3); }
+.p-fact--preview h3 { flex: 1 1 8rem; min-width: 0; margin: 0; font-size: 1rem; line-height: 1.35; }
+.p-fact--preview .p-count { white-space: nowrap; }
+.p-fact__list { display: grid; list-style: none; margin: 0; padding: 0; font-size: .875rem; }
+.p-fact__list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+.p-fact__list > li:last-child { padding-bottom: 0; }
+.p-fact__label { overflow-wrap: anywhere; }
+.p-fact__label time { display: block; font-weight: 600; }
+
 /* ---------- Layout: rail + main ---------- */
 .p-layout { display: grid; grid-template-columns: minmax(0, 1fr); padding: 0 clamp(16px, 4vw, 48px) 48px; }
 .p-main { min-width: 0; display: grid; gap: var(--space-8); }

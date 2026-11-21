@@ -136,7 +136,7 @@ const app = `
   ${storefrontResearch}
   <section id="snapshot" class="snapshot" aria-labelledby="snapshot-title" hidden>
     <div class="p-section__head"><h2 class="t-section" id="snapshot-title">At a glance</h2></div>
-    <div id="snapshot-grid" class="p-facts snapshot-grid"></div>
+    <div id="snapshot-grid"></div>
     <div id="overview-counts"></div>
   </section>
   <section id="school-attendance-summary" class="school-attendance-summary" aria-labelledby="school-attendance-title" hidden>

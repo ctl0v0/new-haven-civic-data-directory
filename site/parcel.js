@@ -299,6 +299,47 @@ function renderDataNav() {
   updateDataNavCounts();
   showDataSection(activeDataSection, false);
 }
+
+function overviewSectionButton(id) {
+  const button = el("button", groups.find(([key]) => key === id)?.[1] ?? id, "overview-link");
+  button.type = "button";
+  button.addEventListener("click", () => navigateDataSection(id, true));
+  return button;
+}
+
+function overviewTile(group, highlights) {
+  const tile = el("article", null, "p-fact p-fact--preview");
+  const heading = el("div", null, "p-panel__head");
+  const title = el("h3");
+  title.append(overviewSectionButton(group.id));
+  heading.append(title, el("span", `${group.record_count.toLocaleString()} returned`, "p-count"));
+  tile.append(heading);
+  if (!highlights.length) return tile;
+
+  const list = el("ul", null, "p-fact__list");
+  for (const item of highlights.slice(0, 2)) {
+    const row = el("li");
+    const text = el("div", null, "p-fact__label");
+    text.append(el("span", item.label));
+    const date = shortDate(item.event_date);
+    if (date) {
+      const time = el("time", date, "t-caption");
+      time.dateTime = item.event_date;
+      text.append(time);
+    }
+    row.append(text);
+    if (item.source_url) {
+      const source = link(item.source_url, "Source");
+      source.className = "p-src";
+      source.setAttribute("aria-label", date ? `Source for ${item.label}, ${date}` : `Source for ${item.label}`);
+      row.append(source);
+    }
+    list.append(row);
+  }
+  tile.append(list);
+  return tile;
+}
+
 async function loadOverview(qs, version) {
   try {
     const data = await api(`/api/v1/overview?${qs}`);
@@ -317,10 +358,7 @@ async function loadOverview(qs, version) {
       const list = el("ul");
       for (const { id, sources } of needsReview) {
         const row = el("li");
-        const open = el("button", groups.find(([key]) => key === id)?.[1] ?? id, "overview-link");
-        open.type = "button";
-        open.addEventListener("click", () => navigateDataSection(id, true));
-        row.append(open, el("span", sources.filter(({ status }) =>
+        row.append(overviewSectionButton(id), el("span", sources.filter(({ status }) =>
           ["partial", "unavailable", "not_integrated", "not_linked"].includes(status))
           .map((source) => `${sourceName(source.source_id)} · ${sourceIssueReason(source)}`).join(" · "), "meta"));
         list.append(row);
@@ -328,36 +366,18 @@ async function loadOverview(qs, version) {
       details.append(list);
       counts.append(details);
     }
-    const grid = $("snapshot-grid");
-    grid.replaceChildren();
+    const grid = el("div", null, "p-facts p-facts--preview");
     const first = ["activity", "business", "geography", "ownership", "property", "representation", "environment"];
     for (const id of first) {
       const group = data.groups.find((entry) => entry.id === id);
       if (!group?.record_count) continue;
-      const section = el("section", null, "p-fact overview-group");
-      const heading = el("div", null, "overview-group-heading");
-      const open = el("button", groups.find(([key]) => key === id)[1], "overview-link");
-      open.type = "button";
-      open.addEventListener("click", () => navigateDataSection(id, true));
-      heading.append(open, el("p", `${group.record_count.toLocaleString()} returned`, "p-fact__value"));
-      section.append(heading);
-      const items = data.highlights?.[id] ?? [];
-      if (items.length) {
-        const list = el("ul", null, "overview-highlights");
-        for (const item of items.slice(0, 2)) {
-          const row = el("li");
-          row.append(el("span", `${item.label}${item.event_date ? ` · ${shortDate(item.event_date)}` : ""}`));
-          if (item.source_url) row.append(link(item.source_url, "Source"));
-          list.append(row);
-        }
-        section.append(list);
-      }
-      grid.append(section);
+      grid.append(overviewTile(group, data.highlights?.[id] ?? []));
     }
-    if (!grid.childElementCount)
-      grid.append(el("p", "No parcel records were returned. Check source coverage for details.", "meta"));
+    $("snapshot-grid").replaceChildren(grid.childElementCount ? grid
+      : el("p", "No parcel records were returned. Check source coverage for details.", "meta"));
   } catch (error) {
-    if (version === viewVersion) $("overview-counts").replaceChildren(el("p", `Overview unavailable: ${error.message}`, "source-warning"));
+    if (version === viewVersion)
+      $("snapshot-grid").replaceChildren(el("p", `Overview unavailable: ${error.message}`, "source-warning"));
   }
 }
 function clearBrowseDataMap() {
