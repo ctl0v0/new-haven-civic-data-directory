@@ -198,6 +198,47 @@ try {
   console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status, message: error?.message }));
 }
 
+// Verify both permissions on the shared key without logging Google listing fields.
+if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-details-smoke]')) {
+  let stage = 'city_origin';
+  try {
+    const { nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
+    const { fetchJson } = await import('../parcel/http.js');
+    const data = await nearbyBusinessOrigins({ parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' });
+    const origin = data.origins.find(({ id }) => id === data.default_origin);
+    const apiKey = process.env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
+    if (!apiKey || origin?.method !== 'city-address-point')
+      throw new Error('The Preview key or the verified City address point is unavailable');
+    stage = 'places_aggregate';
+    let place;
+    for (const type of ['ice_cream_shop', 'grocery_store']) {
+      const matches = await fetchJson('https://areainsights.googleapis.com/v1:computeInsights', {
+        method: 'POST', maxBytes: 32_000,
+        headers: { 'X-Goog-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ insights: ['INSIGHT_COUNT', 'INSIGHT_PLACES'], filter: {
+          locationFilter: { circle: { latLng: { latitude: origin.latitude, longitude: origin.longitude }, radius: 1609 } },
+          typeFilter: { includedTypes: [type] }, operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
+        } }),
+      });
+      place = matches.placeInsights?.find(({ place: name }) => /^places\/[a-zA-Z0-9_-]+$/.test(name))?.place;
+      if (place) break;
+    }
+    if (!place) throw new Error('The tested categories did not return a usable Place ID');
+    stage = 'place_details';
+    const details = await fetchJson(`https://places.googleapis.com/v1/${place}`, {
+      maxBytes: 16_000,
+      headers: { 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': 'displayName,formattedAddress,googleMapsUri' },
+    });
+    if (!details.displayName?.text || !details.formattedAddress || !details.googleMapsUri)
+      throw new Error('Place Details omitted a requested display field');
+    console.log(JSON.stringify({ event: 'preview_place_details', status: 'ok', exact_address_origin: true,
+      fields_verified: ['displayName', 'formattedAddress', 'googleMapsUri'] }));
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'preview_place_details_failed', stage,
+      status: error?.upstreamStatus ?? error?.status, message: error?.message }));
+  }
+}
+
 // Exercise the same read-only query used by the feed UI, REST and MCP.
 try {
   const { listCityActivity } = await import('../search-index/city-activity.js');
