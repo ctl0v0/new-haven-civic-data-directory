@@ -182,12 +182,30 @@ const { opportunityAvailability } = await import('../parcel/storefront-opportuni
 console.log(JSON.stringify({ event: 'preview_storefront_opportunity', ...opportunityAvailability() }));
 
 try {
-  const { nearbyBusinessCount, nearbyBusinessMatches, nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
+  const { countPlacesInWalkingArea, nearbyBusinessCount, nearbyBusinessMatches, nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
   const parcel = { parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' };
   const result = await nearbyBusinessOrigins(parcel);
   const origin = result.origins.find(({ id }) => id === result.default_origin);
   console.log(JSON.stringify({ event: 'preview_nearby_business_origin', configured: result.configured,
     origins: result.origins.length, exact_address: origin?.method === 'city-address-point', warning: result.warning }));
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-walk-smoke]')) {
+    const routingKey = process.env.OPENROUTESERVICE_API_KEY?.trim();
+    const googleKey = process.env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
+    if (!routingKey || !googleKey || origin?.method !== 'city-address-point')
+      throw new Error('The walking and Google keys and exact City address are required for the live check');
+    const { walkingAreas } = await import('../parcel/walking-areas.js');
+    const windows = await walkingAreas(origin, routingKey);
+    const checks = await Promise.all(windows.map(async ({ minutes, ring, reason }) => {
+      if (!ring) return { minutes, status: 'unavailable', reason };
+      try {
+        await countPlacesInWalkingArea(googleKey, ring, ['grocery_store'], 6000);
+        return { minutes, status: 'ok' };
+      } catch (error) {
+        return { minutes, status: 'unavailable', reason: error.message };
+      }
+    }));
+    console.log(JSON.stringify({ event: 'preview_storefront_walking_check', checks }));
+  }
   if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-smoke]')) {
     const category = 'ice_cream_shop';
     const checked = await nearbyBusinessCount({ ...parcel, category });
