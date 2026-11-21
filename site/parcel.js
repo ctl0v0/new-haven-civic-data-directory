@@ -1,5 +1,5 @@
 import { brief, eventDateLabel, fieldLabel, recordStatus, recordTitle, shortDate } from "./parcel-record-text.js";
-import { MAP_COLORS, STREET_TILES } from "./parcel-map-sources.js";
+import { createParcelMap, MAP_COLORS, STREET_TILES } from "./parcel-map-sources.js";
 
 const $ = (id) => document.getElementById(id);
 const groups = [
@@ -1162,7 +1162,7 @@ async function loadMap(qs, version) {
     if (!leaflet) throw Error("Map renderer unavailable");
     const container = $("parcel-map");
     container.hidden = false;
-    const map = leaflet.map(container, { scrollWheelZoom: false, keyboard: true });
+    const map = createParcelMap(leaflet, container);
     parcelMap = map;
     let activeBackground = "Street map";
     $("parcel-map-status").textContent = "Selected City parcel boundary shown. Loading street map…";
@@ -1820,7 +1820,7 @@ function initBrowseMap() {
     $("browse-use-key").hidden = event.currentTarget.value !== "use";
     browseLayer?.setStyle(browseParcelStyle);
   });
-  browseMap = leaflet.map($("browse-map"), { scrollWheelZoom: false, keyboard: true });
+  browseMap = createParcelMap(leaflet, $("browse-map"));
   browseRenderer = leaflet.canvas({ padding: .2 });
   addMapBackgrounds(browseMap);
   browseMap.setView([41.3083, -72.9279], MIN_BROWSE_ZOOM);

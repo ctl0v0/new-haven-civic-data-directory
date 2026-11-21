@@ -98,7 +98,7 @@
 .p-plat .scale-text { fill: var(--ink-muted); font: 500 10px var(--font-mono); }
 .p-plat [data-layer][data-off] { display: none; }
 
-.p-locator svg { display: block; width: 100%; height: auto; }
+.p-locator > svg { display: block; width: 100%; height: auto; }
 .p-locator .tiles { filter: grayscale(0.85) contrast(0.95); }
 :root[data-theme="dark"] .p-locator .tiles { filter: grayscale(1) invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .p-locator .tiles { filter: grayscale(1) invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9); } }

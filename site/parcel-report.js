@@ -1,4 +1,4 @@
-import { STREET_TILES } from "./parcel-map-sources.js";
+import { createParcelMap, STREET_TILES } from "./parcel-map-sources.js";
 import { renderRadiusReport } from "./storefront-opportunity.js";
 
 const mapData = document.getElementById("report-map-data");
@@ -8,7 +8,7 @@ let map;
 function initializeMap() {
   const leaflet = window.L;
   const { geometry, layers, radius } = JSON.parse(mapData.textContent);
-  map = leaflet.map("report-map", { scrollWheelZoom: false });
+  map = createParcelMap(leaflet, "report-map");
   const streets = leaflet.tileLayer(STREET_TILES, {
     maxZoom: 23, maxNativeZoom: 23,
     attribution: '<a href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer">Street map · Esri and contributors</a>',
