@@ -1,0 +1,21 @@
+/* Plat foundations for directory and explorer pages. */
+@import url("./plat-tokens.css");
+@import url("./plat-fonts.css");
+
+:root {
+  font-family: var(--font-text);
+  color: var(--ink);
+  background: var(--ground);
+}
+
+h1, h2, h3, .site-brand {
+  font-family: var(--font-display);
+  font-stretch: 100%;
+}
+h1, h2, h3 { text-wrap: balance; }
+
+input, select, textarea { accent-color: var(--civic); }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
