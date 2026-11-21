@@ -381,6 +381,10 @@ body.record-only-mode #parcel-map-section { display: none; }
 .storefront-table th, .storefront-table td { border-bottom: 1px solid #d6e3d9; padding: .5rem .35rem; overflow-wrap: anywhere; vertical-align: top; text-align: left; }
 .storefront-table th:first-child { width: 52%; }
 .storefront-table small { display: block; }
+.storefront-half-mile-table th:first-child { width: 48%; }
+.storefront-half-mile-table th:nth-child(2) { width: 22%; }
+.storefront-half-mile-table .storefront-category-group { background: #eef4ef; color: #194b38; }
+.storefront-category-count { font-variant-numeric: tabular-nums; }
 .storefront-notice { padding: .42rem .6rem; background: #f7efdc; border-left: 3px solid #8c631e; }
 body.browse-mode .parcel-tabs { padding: 0 1.4rem; margin: 0; }
 .browse-workspace { display: grid; grid-template-columns: clamp(28rem, 36vw, 34rem) minmax(0, 1fr); gap: 0; min-height: calc(100dvh - 8rem); }

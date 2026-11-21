@@ -2546,7 +2546,7 @@ $("nearby-business-clear-types")?.addEventListener("click", () => {
   clearNearbyBusinessResults(nearbyBusinessGroup.form);
 });
 
-async function openNearbyBusinessResearch({ radiusMeters, originId } = {}) {
+async function openNearbyBusinessResearch() {
   if (!selected || requestedParcelKey !== parcelKey(selected)) return;
   const panel = $("nearby-business-research");
   if (!panel.hidden) {
@@ -2561,7 +2561,6 @@ async function openNearbyBusinessResearch({ radiusMeters, originId } = {}) {
   $("nearby-business-title").focus();
   const form = $("nearby-business-form");
   form.reset();
-  if (radiusMeters) form.elements.radius_meters.value = String(radiusMeters);
   $("nearby-business-subcategories").open = false;
   resetNearbyBusinessTypes();
   const origin = form.elements.origin;
@@ -2583,7 +2582,7 @@ async function openNearbyBusinessResearch({ radiusMeters, originId } = {}) {
       const label = repeated ? `${choice.address} · City point ${choice.objectid}` : choice.address ?? "City parcel's mapped center";
       origin.add(new Option(label, choice.id));
     }
-    origin.value = originId ?? data.default_origin ?? "";
+    origin.value = data.default_origin ?? "";
     nearbyBusinessConfigured = data.configured;
     note.textContent = data.warning ?? (!origin.value && searchedAddress
       ? `A City point for ${searchedAddress} could not be verified. Choose a published address from this parcel.`
@@ -2732,6 +2731,7 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
 
 let storefrontRequest = null;
 let storefrontConfigured = false;
+let storefrontHalfMileConfigured = false;
 
 function closeStorefrontOpportunity() {
   const panel = $("storefront-opportunity");
@@ -2739,6 +2739,7 @@ function closeStorefrontOpportunity() {
   storefrontRequest?.abort();
   storefrontRequest = null;
   storefrontConfigured = false;
+  storefrontHalfMileConfigured = false;
   panel.hidden = true;
   $("storefront-opportunity-open").setAttribute("aria-expanded", "false");
   $("storefront-report").replaceChildren();
@@ -2746,9 +2747,9 @@ function closeStorefrontOpportunity() {
 }
 
 function updateStorefrontRun(form) {
-  $("storefront-run").disabled = !storefrontConfigured || !form.elements.origin.value ||
-    !form.elements.confirmed_vacancy.checked;
-  $("storefront-half-mile").disabled = !form.elements.origin.value;
+  const ready = form.elements.origin.value && form.elements.confirmed_vacancy.checked;
+  $("storefront-run").disabled = !storefrontConfigured || !ready;
+  $("storefront-half-mile").disabled = !storefrontHalfMileConfigured || !ready;
 }
 
 $("storefront-opportunity-open")?.addEventListener("click", async () => {
@@ -2774,6 +2775,7 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
   const checks = $("storefront-space-checks");
   checks.replaceChildren();
   storefrontConfigured = false;
+  storefrontHalfMileConfigured = false;
   $("storefront-walking-options").hidden = true;
   $("storefront-half-mile").hidden = true;
   updateStorefrontRun(form);
@@ -2799,12 +2801,12 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
       checks.append(label);
     }
     storefrontConfigured = data.configured;
-    const halfMile = !data.configured && data.half_mile_available;
+    storefrontHalfMileConfigured = data.half_mile_available;
     $("storefront-walking-options").hidden = !data.configured;
-    $("storefront-half-mile").hidden = !halfMile;
-    status.textContent = data.reason ?? data.warning ??
-      (data.origins.length ? "" : "No verified City street address is available for this parcel.");
-    if (halfMile) status.textContent += " You can check one place category at a time within a straight-line half-mile radius.";
+    $("storefront-half-mile").hidden = !storefrontHalfMileConfigured;
+    status.textContent = !data.origins.length
+      ? data.warning ?? "No verified City street address is available for this parcel."
+      : storefrontHalfMileConfigured ? "" : "Neighborhood analysis is awaiting the Preview Google Places Aggregate key.";
     updateStorefrontRun(form);
   } catch (error) {
     if (storefrontRequest === request) status.textContent = error.message;
@@ -2814,12 +2816,6 @@ $("storefront-opportunity-open")?.addEventListener("click", async () => {
       $("storefront-opportunity-fields").disabled = false;
     }
   }
-});
-
-$("storefront-half-mile")?.addEventListener("click", () => {
-  const originId = $("storefront-origin").value;
-  if (!originId || storefrontRequest) return;
-  void openNearbyBusinessResearch({ radiusMeters: 805, originId });
 });
 
 $("storefront-opportunity-form")?.addEventListener("change", (event) => {
@@ -2835,26 +2831,31 @@ $("storefront-opportunity-form")?.addEventListener("change", (event) => {
 
 $("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (storefrontRequest || !storefrontConfigured || !selected ||
+  const halfMile = event.submitter?.value === "half_mile";
+  if (storefrontRequest || !(halfMile ? storefrontHalfMileConfigured : storefrontConfigured) || !selected ||
       $("storefront-opportunity").hidden || !maplessRecords) return;
-  const { elements } = event.currentTarget;
+  const form = event.currentTarget;
+  const { elements } = form;
   if (!elements.origin.value || !elements.confirmed_vacancy.checked) return;
-  const area = elements.storefront_sq_ft.valueAsNumber;
   const payload = {
     ...Object.fromEntries(selectedQuery()), origin: elements.origin.value, confirmed_vacancy: true,
-    storefront_sq_ft: Number.isFinite(area) ? area : undefined,
-    space_checked_for: [...event.currentTarget.querySelectorAll('input[name="space_checked_for"]:checked')]
-      .map(({ value }) => value),
   };
+  if (halfMile) payload.mode = "half_mile";
+  else {
+    const area = elements.storefront_sq_ft.valueAsNumber;
+    payload.storefront_sq_ft = Number.isFinite(area) ? area : undefined;
+    payload.space_checked_for = [...form.querySelectorAll('input[name="space_checked_for"]:checked')]
+      .map(({ value }) => value);
+  }
   const request = new AbortController();
   storefrontRequest = request;
   const status = $("storefront-status");
   const report = $("storefront-report");
   report.hidden = true;
-  status.textContent = "Calculating walking areas and checking nearby places…";
+  status.textContent = halfMile ? "Checking each category within ½ mile…" : "Calculating walking areas and checking nearby places…";
   $("storefront-opportunity-fields").disabled = true;
   try {
-    const [{ renderStorefrontReport }, data] = await Promise.all([
+    const [{ renderStorefrontReport, renderHalfMileReport }, data] = await Promise.all([
       import("/storefront-opportunity.js"),
       api("/api/v1/parcel-opportunity", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
@@ -2862,7 +2863,8 @@ $("storefront-opportunity-form")?.addEventListener("submit", async (event) => {
       }),
     ]);
     if (storefrontRequest !== request) return;
-    renderStorefrontReport(report, data, { el, link, sourceNames });
+    const render = halfMile ? renderHalfMileReport : renderStorefrontReport;
+    render(report, data, { el, link, sourceNames });
     report.hidden = false;
     status.textContent = "";
   } catch (error) {

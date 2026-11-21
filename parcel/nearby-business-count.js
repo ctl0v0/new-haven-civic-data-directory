@@ -141,9 +141,9 @@ function googleError(error, apiName) {
   return new SourceError("Google Maps is unavailable for this search.");
 }
 
-async function businessInsights({ apiKey, origin, includedTypes, radius_meters: radius }, insights) {
+async function businessInsights({ apiKey, origin, includedTypes, radius_meters: radius }, insights, timeout) {
   const { latitude, longitude } = origin;
-  return placeInsights(apiKey, { circle: { latLng: { latitude, longitude }, radius } }, includedTypes, insights);
+  return placeInsights(apiKey, { circle: { latLng: { latitude, longitude }, radius } }, includedTypes, insights, timeout);
 }
 
 async function placeInsights(apiKey, locationFilter, includedTypes, insights, timeout = 8000) {
@@ -171,6 +171,11 @@ export async function countPlacesInWalkingArea(apiKey, ring, includedTypes, time
     customArea: { polygon: { coordinates: ring.map(([longitude, latitude]) => ({ latitude, longitude })) } },
   };
   const { count } = await placeInsights(apiKey, locationFilter, includedTypes, ["INSIGHT_COUNT"], timeout);
+  return count;
+}
+
+export async function countPlacesWithinRadius(apiKey, origin, radius, includedTypes, timeout) {
+  const { count } = await businessInsights({ apiKey, origin, radius_meters: radius, includedTypes }, ["INSIGHT_COUNT"], timeout);
   return count;
 }
 

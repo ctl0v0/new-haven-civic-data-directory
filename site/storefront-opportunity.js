@@ -9,6 +9,52 @@ const zoningLabel = {
   special_exception: "Listed as requiring a special exception in the City use table",
   review_needed: "Confirm this proposed use with City Planning",
 };
+const checkedDate = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
+});
+
+export function renderHalfMileReport(output, data, { el, link }) {
+  const countFormat = new Intl.NumberFormat("en-US");
+  const summary = el("p", "½ mile straight-line from the ", "meta");
+  summary.append(link(data.origin.source_url, "City address point"), " · Checked ",
+    checkedDate.format(new Date(data.checked_at)));
+  const note = el("p", "Google Maps counts listings marked operational. Categories can overlap. Use zero counts as leads to verify.", "meta");
+  const table = el("table", null, "storefront-table storefront-half-mile-table");
+  table.setAttribute("aria-label", "Half-mile neighborhood counts");
+  const header = el("tr");
+  for (const label of ["Place category", "Count", "Source"]) {
+    const cell = el("th", label);
+    cell.scope = "col";
+    header.append(cell);
+  }
+  const head = el("thead");
+  head.append(header);
+  table.append(head);
+  for (const [group, rows] of Map.groupBy(data.categories, ({ group }) => group)) {
+    const body = el("tbody");
+    const groupRow = el("tr");
+    const groupName = el("th", group, "storefront-category-group");
+    groupName.scope = "rowgroup";
+    groupName.colSpan = 3;
+    groupRow.append(groupName);
+    body.append(groupRow);
+    for (const category of rows) {
+      const row = el("tr");
+      const name = el("th", category.label);
+      name.scope = "row";
+      if (category.note) name.append(el("small", category.note, "meta"));
+      const count = el("td", null, "storefront-category-count");
+      count.append(el("strong", category.status === "ok" ? countFormat.format(category.count) : "Unavailable"));
+      const source = el("td");
+      source.append(link(category.source_url, category.attribution));
+      if (category.reason) source.append(el("small", category.reason, "meta"));
+      row.append(name, count, source);
+      body.append(row);
+    }
+    table.append(body);
+  }
+  output.replaceChildren(el("h3", `Neighborhood around ${data.origin.address}`), summary, note, table);
+}
 
 export function renderStorefrontReport(output, data, { el, link, sourceNames }) {
   const countFormat = new Intl.NumberFormat("en-US");
@@ -53,9 +99,7 @@ export function renderStorefrontReport(output, data, { el, link, sourceNames }) 
     details.open = open;
     details.append(el("summary", label));
     const attribution = el("p", null, "meta");
-    const checked = new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York",
-    }).format(new Date(data.google_maps.checked_at));
+    const checked = checkedDate.format(new Date(data.google_maps.checked_at));
     attribution.append(link(data.google_maps.source_url, data.google_maps.attribution), ` · Checked ${checked}`);
     const table = el("table", null, "storefront-table");
     const header = el("tr");

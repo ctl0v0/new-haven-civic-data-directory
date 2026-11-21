@@ -61,8 +61,9 @@ const storefrontResearch = previewToolsVisible ? `
           <label for="storefront-origin">Storefront address</label>
           <select name="origin" id="storefront-origin" required></select>
         </div>
+        <label class="storefront-check"><input type="checkbox" name="confirmed_vacancy" required> I’ve confirmed this storefront is vacant.</label>
+        <button id="storefront-half-mile" type="submit" value="half_mile" aria-controls="storefront-report" aria-describedby="storefront-status" formnovalidate hidden disabled>Run neighborhood analysis · ½ mile</button>
         <div id="storefront-walking-options" hidden>
-          <label class="storefront-check"><input type="checkbox" name="confirmed_vacancy" required> I’ve confirmed this storefront is vacant.</label>
           <details>
             <summary>Space and site checks <span class="meta">Optional</span></summary>
             <div class="storefront-input">
@@ -72,9 +73,8 @@ const storefrontResearch = previewToolsVisible ? `
             <p class="meta">Check a use if you’ve verified the space and basic building requirements for it.</p>
             <div id="storefront-space-checks" class="storefront-space-checks"></div>
           </details>
-          <button id="storefront-run" type="submit" aria-describedby="storefront-status" disabled>Run neighborhood analysis</button>
+          <button id="storefront-run" type="submit" class="secondary" aria-controls="storefront-report" aria-describedby="storefront-status" disabled>Run walking analysis</button>
         </div>
-        <button id="storefront-half-mile" type="button" aria-controls="nearby-business-research" aria-describedby="storefront-status" hidden disabled>Search within ½ mile</button>
       </fieldset>
     </form>
     <p id="storefront-status" role="status"></p>

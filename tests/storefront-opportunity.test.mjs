@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import route from "../api/v1/parcel-opportunity.js";
 import { LAYERS } from "../parcel/config.js";
+import { MAP_LAYERS } from "../parcel/map-context.js";
 
 const token = "fixture-opportunity-auth-123456";
 const env = {
@@ -19,6 +20,7 @@ const originalFetch = globalThis.fetch;
 const originalEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
 const origin = [-72.932, 41.31];
 const project = [-72.926, 41.312];
+const transitLayer = MAP_LAYERS.find(({ id }) => id === "transit-stops").url;
 let parcelId = 75598;
 let walks, google, maxInFlight, inFlight, longWest, longEast, invalidShort, quota, zoneCode;
 const ring = (west, east, south, north) => [
@@ -58,6 +60,15 @@ test.beforeEach(() => {
       return Response.json({ features: [{ attributes: { objectid: 7, zone_code: zoneCode } }] });
     if (url.href.startsWith(LAYERS.neighborhoods + "/query"))
       return Response.json({ features: [{ attributes: { objectid: 8, neighborhood: "Hill" } }] });
+    if (url.href.startsWith(transitLayer + "/query")) {
+      const envelope = JSON.parse(url.searchParams.get("geometry"));
+      assert.ok(Math.abs((envelope.xmin + envelope.xmax) / 2 - origin[0]) < 1e-9);
+      return Response.json({ features: [
+        { attributes: { OBJECTID: 1, StopId: 100 }, geometry: { x: -72.932, y: 41.315 } },
+        { attributes: { OBJECTID: 2, StopId: 101 }, geometry: { x: -72.923, y: 41.316 } },
+      ] });
+    }
+    if (url.origin + url.pathname === transitLayer) return Response.json({});
     if (url.hostname === "api.heigit.org") {
       assert.equal(url.pathname, "/openrouteservice/v2/isochrones/foot-walking");
       assert.equal(options.headers.Authorization, env.OPENROUTESERVICE_API_KEY);
@@ -78,6 +89,10 @@ test.beforeEach(() => {
       inFlight--;
       if (quota) return Response.json({}, { status: 429 });
       const { includedTypes } = query.filter.typeFilter;
+      if (query.filter.locationFilter.circle) {
+        if (includedTypes.includes("pharmacy")) return Response.json({}, { status: 502 });
+        return Response.json({ count: includedTypes.includes("grocery_store") ? "0" : "3" });
+      }
       const points = query.filter.locationFilter.customArea.polygon.coordinates;
       const west = Math.min(...points.map(({ longitude }) => longitude));
       if (includedTypes.length === 1 && includedTypes[0] === "pharmacy" && west === longWest)
@@ -133,6 +148,52 @@ test("analysis rejects unconfirmed vacancy, bad origins and missing Preview sett
   process.env.VERCEL_ENV = "production";
   assert.equal((await post()).status, 404);
   assert.equal(walks.length + google.length, 0);
+});
+
+test("one half-mile submission checks every category from a single verified City point", async () => {
+  delete process.env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED;
+  delete process.env.OPENROUTESERVICE_API_KEY;
+  const mode = "half_mile";
+  assert.equal((await post({ mode, confirmed_vacancy: false })).status, 400);
+  assert.equal((await post({ mode, parcel_id: [parcelId] })).status, 400);
+  assert.equal((await post({ mode, radius_meters: 1609 })).status, 400);
+  assert.equal((await post({ mode, origin: "city-address-98" })).status, 422);
+  assert.equal(google.length, 0);
+
+  const response = await post({ mode });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  const data = await response.json();
+  assert.equal(data.origin.id, "city-address-22");
+  assert.equal(data.radius_meters, 805);
+  assert.equal(data.categories.length, 15);
+  assert.equal(walks.length, 0);
+  assert.equal(google.length, 14);
+  assert.ok(maxInFlight <= 3);
+  const requestedTypes = google.map(({ filter }) => filter.typeFilter.includedTypes);
+  assert.deepEqual(requestedTypes, data.categories.filter(({ attribution }) => attribution === "Google Maps").map(({ types }) => types));
+  for (const { insights, filter } of google) {
+    assert.deepEqual(insights, ["INSIGHT_COUNT"]);
+    assert.deepEqual(filter.locationFilter, { circle: { latLng: { latitude: origin[1], longitude: origin[0] }, radius: 805 } });
+  }
+  const [groceries, , pharmacy] = data.categories;
+  assert.equal(groceries.status, "ok");
+  assert.equal(groceries.count, 0);
+  assert.equal(pharmacy.status, "unavailable");
+  assert.equal(pharmacy.count, null);
+  assert.equal(data.categories.at(-1).source_url, transitLayer);
+  assert.equal(data.categories.at(-1).count, 1);
+});
+
+test("a Google quota response stops further half-mile lookups and preserves the City count", async () => {
+  quota = true;
+  const response = await post({ mode: "half_mile" });
+  assert.equal(response.status, 200);
+  const { categories } = await response.json();
+  assert.equal(google.length, 3);
+  assert.ok(categories.slice(0, -1).every(({ status, count, reason }) =>
+    status === "unavailable" && count === null && reason.includes("quota")));
+  assert.equal(categories.at(-1).count, 1);
 });
 
 test("both modeled walking windows use the alternate City address and return 46 bounded Google count checks", async () => {

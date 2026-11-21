@@ -2,7 +2,7 @@ import { guarded, params } from "../../parcel/api.js";
 import { pilotPreviewEnabled } from "../../parcel/auth.js";
 import { readRequestText, SourceError } from "../../parcel/http.js";
 import { nearbyBusinessOrigins } from "../../parcel/nearby-business-count.js";
-import { analyzeStorefront, opportunityAvailability, storefrontConcepts } from "../../parcel/storefront-opportunity.js";
+import { analyzeHalfMile, analyzeStorefront, opportunityAvailability, storefrontConcepts } from "../../parcel/storefront-opportunity.js";
 
 export default guarded(async (request) => {
   if (!pilotPreviewEnabled()) throw new SourceError("Storefront analysis is available in the private Preview.", 404);
@@ -26,5 +26,6 @@ export default guarded(async (request) => {
   let input;
   try { input = JSON.parse(body); }
   catch { throw new SourceError("Invalid JSON", 400); }
-  return analyzeStorefront(input, { signal: request.signal });
+  const analyze = input?.mode === "half_mile" ? analyzeHalfMile : analyzeStorefront;
+  return analyze(input, { signal: request.signal });
 }, { methods: ["GET", "POST"] });

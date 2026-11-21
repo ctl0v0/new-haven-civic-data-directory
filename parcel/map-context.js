@@ -159,6 +159,11 @@ async function mapLayer(definition, parcel, center) {
   }
 }
 
+export function nearbyTransitStops({ longitude, latitude }, radiusMeters) {
+  const definition = MAP_LAYERS.find(({ id }) => id === "transit-stops");
+  return mapLayer({ ...definition, radiusMeters }, null, [longitude, latitude]);
+}
+
 export async function parcelMapContext(id, objectid = null) {
   const parcel = await loadParcel(id, objectid);
   const feature = parcelFeatureToGeoJSON(parcel);

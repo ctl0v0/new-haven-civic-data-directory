@@ -3,8 +3,9 @@ import { getSourceRecords } from "./adapters.js";
 import { markAddressEvidence } from "./address-evidence.js";
 import { LAYERS } from "./config.js";
 import { arcgis, cached, SourceError } from "./http.js";
+import { nearbyTransitStops } from "./map-context.js";
 import {
-  businessCategoryGroups, countPlacesInWalkingArea, GOOGLE_PLACES_SOURCE, nearbyBusinessOrigins,
+  businessCategoryGroups, countPlacesInWalkingArea, countPlacesWithinRadius, GOOGLE_PLACES_SOURCE, nearbyBusinessOrigins,
 } from "./nearby-business-count.js";
 import { loadParcel, normalizeAddress } from "./resolve.js";
 import { walkingAreas, walkingAreaContains, WALK_MINUTES, WALK_SOURCE } from "./walking-areas.js";
@@ -48,18 +49,41 @@ export const storefrontConcepts = [
 const MAX_GOOGLE_COUNTS = 46;
 const MAX_PARALLEL_COUNTS = 6;
 const COUNT_BUDGET_MS = 32_000;
+const HALF_MILE_METERS = 805;
+const HALF_MILE_CATEGORIES = [
+  { group: "Food and essentials", label: "Groceries", types: ["grocery_store", "supermarket", "discount_supermarket", "asian_grocery_store"] },
+  { group: "Food and essentials", label: "Convenience stores", types: ["convenience_store"] },
+  { group: "Food and essentials", label: "Pharmacies", types: ["pharmacy"] },
+  { group: "Everyday services", label: "Laundry services", types: ["laundry"],
+    note: "Includes listings such as laundromats and dry cleaners. Check individual services." },
+  { group: "Everyday services", label: "Banks and credit unions", types: ["bank"],
+    note: "Covers places Google classifies as banks. Credit unions have no separate Google type." },
+  { group: "Everyday services", label: "Barbers and salons", types: ["barber_shop", "beauty_salon", "hair_salon", "nail_salon"] },
+  { group: "Everyday services", label: "Hardware stores", types: ["hardware_store"] },
+  { group: "Health and care", label: "Doctors and medical clinics", types: ["doctor", "medical_clinic"],
+    note: "Check individual listings for primary care and whether they accept new patients." },
+  { group: "Health and care", label: "Dentists", types: ["dentist", "dental_clinic"] },
+  { group: "Health and care", label: "Child care and preschools", types: ["child_care_agency", "preschool"] },
+  { group: "Food and gathering", label: "Cafés and bakeries", types: ["cafe", "coffee_shop", "bakery"] },
+  { group: "Food and gathering", label: "Restaurants", types: ["restaurant"] },
+  { group: "Public amenities", label: "Parks and playgrounds", types: ["park", "city_park", "state_park", "playground"] },
+  { group: "Public amenities", label: "Libraries and community centers", types: ["library", "community_center"] },
+];
 const CITY_SCOPE = new Set(["HILL", "THE HILL", "HILL NORTH", "HILL SOUTH"]);
 const conceptId = z.enum(storefrontConcepts.filter(({ commercial }) => commercial).map(({ id }) => id));
 const parcelId = z.union([z.string().regex(/^\d{1,12}$/), z.number().int().nonnegative().max(999999999999)]);
-const submission = z.strictObject({
+const addressSubmission = z.strictObject({
   parcel_id: parcelId,
   objectid: parcelId.optional(),
   query_address: z.string().max(160).optional(),
   origin: z.string().regex(/^city-address-\d{1,12}$/).optional(),
   confirmed_vacancy: z.literal(true),
+});
+const submission = addressSubmission.extend({
   storefront_sq_ft: z.number().int().positive().max(1_000_000).optional(),
   space_checked_for: z.array(conceptId).max(5).default([]),
 }).refine(({ storefront_sq_ft, space_checked_for }) => !space_checked_for.length || storefront_sq_ft);
+const halfMileSubmission = addressSubmission.extend({ mode: z.literal("half_mile") });
 
 export function opportunityAvailability(env = process.env) {
   const reason = !env.OPENROUTESERVICE_API_KEY?.trim()
@@ -67,7 +91,7 @@ export function opportunityAvailability(env = process.env) {
     : !env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim()
       ? "Walking analysis is awaiting the Preview Google Places Aggregate key."
       : env.VERCEL_ENV === "preview" && env.PARCEL_OPPORTUNITY_RATE_LIMIT_CONFIGURED !== "1"
-        ? "Run neighborhood analysis is disabled until the Preview request limit is configured in Vercel."
+        ? "Walking analysis is disabled until the Preview request limit is configured in Vercel."
         : null;
   return { configured: reason === null, reason };
 }
@@ -212,19 +236,27 @@ async function countProfile(windows, key, signal) {
   const tasks = profiles.flatMap(({ types, counts }) => windows.flatMap(({ ring }, index) =>
     ring ? [{ types, ring, result: counts[index] }] : []));
   if (tasks.length > MAX_GOOGLE_COUNTS) throw new SourceError("The analysis exceeds the Preview search limit.", 503);
+  await collectCounts(tasks, ({ ring, types }, timeout) => countPlacesInWalkingArea(key, ring, types, timeout), {
+    parallel: MAX_PARALLEL_COUNTS, signal,
+  });
+  return profiles;
+}
+
+async function collectCounts(tasks, count, { parallel, signal }) {
   const deadline = Date.now() + COUNT_BUDGET_MS;
   let next = 0;
   let stop;
   async function worker() {
     while (next < tasks.length) {
-      const { ring, types, result } = tasks[next++];
+      const task = tasks[next++];
+      const { result } = task;
       const remaining = deadline - Date.now();
       if (stop || remaining <= 0 || signal?.aborted) {
         result.reason = stop ?? "The analysis request ended before this count ran.";
         continue;
       }
       try {
-        result.count = await countPlacesInWalkingArea(key, ring, types, Math.min(6000, remaining));
+        result.count = await count(task, Math.min(6000, remaining));
         result.status = "ok";
         result.reason = null;
       } catch (error) {
@@ -233,8 +265,43 @@ async function countProfile(windows, key, signal) {
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(tasks.length, MAX_PARALLEL_COUNTS) }, worker));
-  return profiles;
+  await Promise.all(Array.from({ length: Math.min(tasks.length, parallel) }, worker));
+}
+
+async function resolveStorefront({ parcel_id, objectid, query_address, origin: originId }, env) {
+  const addresses = await nearbyBusinessOrigins({ parcel_id, objectid, query_address }, env);
+  const origin = addresses.origins.find(({ id, method }) =>
+    id === (originId ?? addresses.default_origin) && method === "city-address-point");
+  if (!origin) throw new SourceError("Choose a verified City street address for this storefront.", 422);
+  return { parcel_id: addresses.parcel_id, objectid: addresses.objectid, origin, vacancy: "user_confirmed" };
+}
+
+export async function analyzeHalfMile(input, { env = process.env, signal } = {}) {
+  const parsed = halfMileSubmission.safeParse(input);
+  if (!parsed.success)
+    throw new SourceError("Confirm a vacant storefront and provide one valid parcel and City address.", 400);
+  const key = env.GOOGLE_PLACES_AGGREGATE_API_KEY?.trim();
+  if (!key) throw new SourceError("Half-mile analysis is awaiting the Preview Google Places Aggregate key.", 503);
+  const storefront = await resolveStorefront(parsed.data, env);
+  const { origin } = storefront;
+  const categories = HALF_MILE_CATEGORIES.map((category) => ({
+    ...category, status: "unavailable", count: null, reason: null,
+    source_url: GOOGLE_PLACES_SOURCE, attribution: "Google Maps",
+  }));
+  const [transit] = await Promise.all([
+    nearbyTransitStops(origin, HALF_MILE_METERS),
+    collectCounts(categories.map((result) => ({ result })),
+      ({ result }, timeout) => countPlacesWithinRadius(key, origin, HALF_MILE_METERS, result.types, timeout),
+      { parallel: 3, signal }),
+  ]);
+  const transitOk = ["ok", "no_records"].includes(transit.status);
+  categories.push({
+    group: "Public amenities", label: "Mapped CT Transit bus stops",
+    status: transitOk ? "ok" : "unavailable", count: transitOk ? transit.features.length : null,
+    source_url: transit.source_url, attribution: "City GIS", reason: transit.warning,
+    note: "Counts mapped stops. Check CT Transit for routes and current service.",
+  });
+  return { ...storefront, radius_meters: HALF_MILE_METERS, checked_at: new Date().toISOString(), categories };
 }
 
 export async function analyzeStorefront(input, { env = process.env, signal } = {}) {
@@ -243,12 +310,9 @@ export async function analyzeStorefront(input, { env = process.env, signal } = {
     throw new SourceError("Confirm a vacant storefront and provide a valid parcel, address and optional storefront area.", 400);
   const availability = opportunityAvailability(env);
   if (!availability.configured) throw new SourceError(availability.reason, 503);
-  const { parcel_id, objectid, query_address } = parsed.data;
-  const addresses = await nearbyBusinessOrigins({ parcel_id, objectid, query_address }, env);
-  const origin = addresses.origins.find(({ id, method }) =>
-    id === (parsed.data.origin ?? addresses.default_origin) && method === "city-address-point");
-  if (!origin) throw new SourceError("Choose a verified City street address for this storefront.", 422);
-  const parcel = await loadParcel(parcel_id, objectid ?? null);
+  const storefront = await resolveStorefront(parsed.data, env);
+  const { origin } = storefront;
+  const parcel = await loadParcel(parsed.data.parcel_id, parsed.data.objectid ?? null);
   const windows = await walkingAreas(origin, env.OPENROUTESERVICE_API_KEY.trim());
   const [site, profiles] = await Promise.all([
     collectSite(parcel, origin),
@@ -256,8 +320,7 @@ export async function analyzeStorefront(input, { env = process.env, signal } = {
   ]);
   const { neighborhoods, zoning, subareas, source_checks } = site;
   return {
-    parcel_id: addresses.parcel_id, objectid: addresses.objectid,
-    origin, vacancy: "user_confirmed", storefront_sq_ft: parsed.data.storefront_sq_ft ?? null,
+    ...storefront, storefront_sq_ft: parsed.data.storefront_sq_ft ?? null,
     walking: {
       source_url: WALK_SOURCE, attribution: "openrouteservice by HeiGIT · OpenStreetMap contributors",
       areas: windows.map(({ minutes, status, reason }) => ({ minutes, status, reason: reason ?? null })),
