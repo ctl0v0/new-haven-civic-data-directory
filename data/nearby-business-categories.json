@@ -374,6 +374,22 @@
       "tennis_court": "Tennis courts",
       "yoga_studio": "Yoga studios"
     },
+    "Parks & outdoor recreation": {
+      "athletic_field": "Athletic fields",
+      "botanical_garden": "Botanical gardens",
+      "city_park": "City parks",
+      "cycling_park": "Cycling parks",
+      "dog_park": "Dog parks",
+      "garden": "Gardens",
+      "hiking_area": "Hiking areas",
+      "national_park": "National parks",
+      "park": "Parks",
+      "picnic_ground": "Picnic grounds",
+      "playground": "Playgrounds",
+      "skateboard_park": "Skate parks",
+      "state_park": "State parks",
+      "wildlife_refuge": "Wildlife refuges"
+    },
     "Child care & education": {
       "child_care_agency": "Child care agencies",
       "childrens_camp": "Children’s camps",

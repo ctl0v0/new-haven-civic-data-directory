@@ -18,12 +18,12 @@ const previewToolsVisible = pilotPreviewEnabled();
 const askHidden = previewToolsVisible ? "" : " hidden";
 const nearbyBusinessResearch = previewToolsVisible ? `
   <section id="nearby-business-research" aria-labelledby="nearby-business-title" data-match-limit="${GOOGLE_BUSINESS_MATCH_LIMIT}" hidden>
-    <h2 id="nearby-business-title" tabindex="-1">Nearby business research</h2>
+    <h2 id="nearby-business-title" tabindex="-1">Nearby place research</h2>
     <form id="nearby-business-form">
-      <fieldset id="nearby-business-fields" aria-label="Nearby business filters" disabled>
+      <fieldset id="nearby-business-fields" aria-label="Nearby place filters" disabled>
         <div class="nearby-business-field"><label for="nearby-business-origin">Search from</label><select id="nearby-business-origin" name="origin" required><option value="">Choose a City address</option></select></div>
         <div class="nearby-business-field nearby-business-type-field">
-          <label for="nearby-business-category">Business category</label>
+          <label for="nearby-business-category">Place category</label>
           <select id="nearby-business-category" name="group" required>
             ${Object.keys(businessCategoryGroups).map((group) => `<option>${escapeHtml(group)}</option>`).join("")}
           </select>
@@ -41,7 +41,7 @@ const nearbyBusinessResearch = previewToolsVisible ? `
           <div id="nearby-business-type-list" role="group" aria-label="Subcategories"></div>
           <p id="nearby-business-no-types" class="meta" role="status" hidden>No subcategories match.</p>
         </details>
-        <button type="submit" id="nearby-business-count" disabled>Count businesses</button>
+        <button type="submit" id="nearby-business-count" disabled>Count places</button>
       </fieldset>
     </form>
     <template id="nearby-business-type-catalog">
@@ -84,7 +84,7 @@ const app = `
       <p id="parcel-identifiers" class="meta"></p>
       <p id="parcel-match" class="match-note" hidden></p>
       <p class="small parcel-overview-note">Records can be incomplete or old. A business address or license is evidence to check, not proof of current occupancy.</p>
-      ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby businesses</button>' : ""}
+      ${previewToolsVisible ? '<button id="nearby-business-open" class="secondary" type="button" aria-controls="nearby-business-research" aria-expanded="false">Research nearby places</button>' : ""}
     </div><figure id="parcel-photo" class="parcel-photo" hidden>
       <img id="parcel-photo-image" alt="Verified parcel photo">
       <figcaption>Official parcel photo · date not published. <a id="parcel-photo-source" target="_blank" rel="noopener noreferrer">View source</a></figcaption>

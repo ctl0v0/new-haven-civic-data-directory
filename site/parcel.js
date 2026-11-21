@@ -2575,7 +2575,7 @@ $("nearby-business-open")?.addEventListener("click", async () => {
       ? `A City point for ${searchedAddress} could not be verified. Choose a published address from this parcel.`
       : "The search uses a straight-line radius.");
     note.hidden = false;
-    status.textContent = !data.configured ? "Live business counts are awaiting a Places Aggregate API key for this Preview."
+    status.textContent = !data.configured ? "Live place counts are awaiting a Places Aggregate API key for this Preview."
       : !data.origins.length ? "No verified City address point is available for this search." : "";
     updateNearbyBusinessCountButton(form);
   } catch (error) {
@@ -2604,12 +2604,12 @@ function offerNearbyBusinessMatches(output, count, search) {
     return;
   }
   const list = el("ul", null, "nearby-business-matches");
-  list.setAttribute("aria-label", "Matching businesses from Google Maps");
+  list.setAttribute("aria-label", "Matching places from Google Maps");
   list.hidden = true;
   const matchStatus = el("p", null, "meta");
   matchStatus.setAttribute("role", "status");
   matchStatus.tabIndex = -1;
-  const button = el("button", "Show matching businesses", "secondary");
+  const button = el("button", "Show matching places", "secondary");
   button.type = "button";
   button.classList.add("nearby-business-match-button");
   output.append(matchStatus, list, button);
@@ -2621,7 +2621,7 @@ function offerNearbyBusinessMatches(output, count, search) {
     nearbyBusinessRequest = request;
     $("nearby-business-fields").disabled = true;
     button.disabled = true;
-    matchStatus.textContent = "Loading matching businesses…";
+    matchStatus.textContent = "Loading matching places…";
     try {
       const data = await api("/api/v1/nearby-business-matches", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: request.signal,
@@ -2634,13 +2634,13 @@ function offerNearbyBusinessMatches(output, count, search) {
         matchStatus.focus();
         return;
       }
-      for (const business of data.results) {
+      for (const place of data.results) {
         const row = el("li");
         const name = el("div");
-        name.append(el("strong", business.name));
-        if (business.address) name.append(el("span", business.address, "meta"));
-        const maps = link(business.maps_url, "Open in Google Maps");
-        maps.setAttribute("aria-label", `Open ${business.name} in Google Maps`);
+        name.append(el("strong", place.name));
+        if (place.address) name.append(el("span", place.address, "meta"));
+        const maps = link(place.maps_url, "Open in Google Maps");
+        maps.setAttribute("aria-label", `Open ${place.name} in Google Maps`);
         row.append(name, maps);
         list.append(row);
       }
@@ -2648,10 +2648,10 @@ function offerNearbyBusinessMatches(output, count, search) {
       list.hidden = displayed === 0;
       unavailable += data.unavailable;
       const missing = unavailable + data.missing_matches;
-      matchStatus.textContent = data.count === 0 ? "Google Maps currently lists no matching businesses for this search."
+      matchStatus.textContent = data.count === 0 ? "Google Maps currently lists no matching places for this search."
         : `Showing ${displayed} of ${data.count} Google Maps matches.${missing ? ` Details unavailable for ${missing}.` : ""}`;
       cursor = data.next_cursor;
-      button.textContent = "Load more businesses";
+      button.textContent = "Load more places";
       button.hidden = !cursor;
       if (button.hidden) matchStatus.focus();
     } catch (error) {
@@ -2689,11 +2689,11 @@ $("nearby-business-form")?.addEventListener("submit", async (event) => {
       body: JSON.stringify(search),
     });
     if (request !== nearbyBusinessRequest) return;
-    const heading = el("p", "matching businesses", "nearby-business-result-heading");
+    const heading = el("p", data.count === 1 ? "matching place" : "matching places", "nearby-business-result-heading");
     heading.prepend(el("strong", `${data.count} `));
     const scope = el("p", `${data.category_label} · ${types.map((type) => type.nextElementSibling.textContent).join(", ") || "All types"}`, "meta");
     const originLabel = data.origin.address ?? "the City parcel's mapped center";
-    const detail = el("p", `Listed as operating within ${data.radius_label} of ${originLabel}.`);
+    const detail = el("p", `Listed by Google Maps within ${data.radius_label} of ${originLabel}.`);
     const source = el("p", null, "meta");
     const checked = new Date(data.retrieved_at);
     const time = el("time", new Intl.DateTimeFormat("en-US", {

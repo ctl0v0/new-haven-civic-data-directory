@@ -20,13 +20,15 @@ For the invited pilot, generate one random token per person and store only its S
 
 After adding or changing Vercel variables, create a new deployment for the selected environment; an existing deployment keeps its original environment snapshot. For a branch-specific Preview pilot, scope all three values to the same Git branch.
 
-### Nearby business research
+### Nearby place research
 
-In parcel results, select **Research nearby businesses** to open a map-free form. Pick a City address point, one business category, and a radius. One mile is the default. The form sends one Google Places Aggregate API count request when you choose **Count businesses**. It shows how many listings Google reports as operating, the search origin, radius, and retrieval time. Choose a smaller radius to compare proximity. Google results stay in the current view and are excluded from the parcel index.
+In parcel results, select **Research nearby places** to open a map-free form. Pick a City address point, one place category, and a radius. One mile is the default. The form sends one Google Places Aggregate API count request when you choose **Count places**. It shows how many listings Google reports as operational, the search origin, radius, and retrieval time. Choose a smaller radius to compare proximity. Google results stay in the current view and are excluded from the parcel index.
 
 Open **Subcategories** to check one or more types within the selected category. For example, choose **Restaurants & cuisines** and check **Indian restaurants** and **Thai restaurants** to count listings that match either type. Leave all boxes unchecked to search the full category. **Filter subcategories** narrows the visible choices locally and keeps checked types selected. [Google place type filter behavior](https://developers.google.com/maps/documentation/places-aggregate/more-on-type-filters)
 
-For searches with 1–100 matches, **Show matching businesses** loads names, addresses when Google supplies them, and Maps links in pages of up to 10. Each page uses the chosen origin, type and radius. If the live match set changes during paging, rerun the count. The Preview key must allow both **Places Aggregate API** and **Places API (New)**. [Aggregate API match limit](https://developers.google.com/maps/documentation/places-aggregate/request-parameters)
+Choose **Parks & outdoor recreation** for places like parks, gardens, playgrounds, and hiking areas. For running tracks, **Athletic fields** is a broader search, and the place listing can help confirm which facilities have a track. [Supported Google place types](https://developers.google.com/maps/documentation/places/web-service/place-types#table-a)
+
+For searches with 1–100 matches, **Show matching places** loads names, addresses when Google supplies them, and Maps links in pages of up to 10. Each page uses the chosen origin, type and radius. If the live match set changes during paging, rerun the count. The Preview key must allow both **Places Aggregate API** and **Places API (New)**. [Aggregate API match limit](https://developers.google.com/maps/documentation/places-aggregate/request-parameters)
 
 To enable live counts, enable **Places Aggregate API** in a billing-enabled Google Cloud project and create a server key restricted to that API. Save the key as a Vercel Secret named `GOOGLE_PLACES_AGGREGATE_API_KEY` for Preview branch `codex/parcel-pilot` in `new-haven-civic-data-directory`, then redeploy. The form can verify City address options while the key is pending. [Google setup guide](https://developers.google.com/maps/documentation/places-aggregate/get-api-key)
 

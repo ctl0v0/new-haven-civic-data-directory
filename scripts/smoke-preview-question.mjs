@@ -179,7 +179,7 @@ try {
 
 // Only run a billable Google check on an explicitly marked Preview build.
 try {
-  const { nearbyBusinessCount, nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
+  const { nearbyBusinessCount, nearbyBusinessMatches, nearbyBusinessOrigins } = await import('../parcel/nearby-business-count.js');
   const parcel = { parcel_id: 10386, objectid: 20011, query_address: '3 Edwards St' };
   const result = await nearbyBusinessOrigins(parcel);
   const origin = result.origins.find(({ id }) => id === result.default_origin);
@@ -212,6 +212,18 @@ try {
         broad.subcategories.length || narrowed.subcategories.join() !== subcategories.join() || broad.count < narrowed.count)
       throw new Error('The live category search did not match its expected scope');
     console.log(JSON.stringify({ event: 'preview_nearby_business_group', status: 'ok', group, subcategories }));
+  }
+  if (process.env.VERCEL_GIT_COMMIT_MESSAGE?.includes('[places-outdoors-smoke]')) {
+    const group = 'Parks & outdoor recreation';
+    const subcategories = ['city_park', 'hiking_area', 'park'];
+    const [broad, named] = await Promise.all([
+      nearbyBusinessCount({ ...parcel, group }),
+      nearbyBusinessMatches({ ...parcel, group, subcategories }),
+    ]);
+    if (broad.group !== group || broad.origin.id !== origin?.id || broad.count < named.count ||
+        named.status !== 'ok' || !named.results.some(({ name, maps_url }) => name && maps_url))
+      throw new Error('The live outdoor category search did not return the expected count and names');
+    console.log(JSON.stringify({ event: 'preview_nearby_outdoor_places', status: 'ok', group, subcategories }));
   }
 } catch (error) {
   console.warn(JSON.stringify({ event: 'preview_nearby_business_check_failed', status: error?.status, message: error?.message }));

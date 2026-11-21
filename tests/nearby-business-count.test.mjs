@@ -4,7 +4,7 @@ import { load } from "cheerio";
 import route from "../api/v1/nearby-business-count.js";
 import matchesRoute from "../api/v1/nearby-business-matches.js";
 import { LAYERS } from "../parcel/config.js";
-import { businessCategories, businessCategoryGroups } from "../parcel/nearby-business-count.js";
+import { businessCategoryGroups } from "../parcel/nearby-business-count.js";
 
 const host = "https://pilot.example.test";
 const path = `${host}/api/v1/nearby-business-count`;
@@ -168,8 +168,11 @@ test("the Preview exposes a short category menu and all supported subcategories"
   const response = await pilot.fetch(new Request(`${host}/parcel`, { headers: auth }));
   const $ = load(await response.text());
   const catalog = load($("#nearby-business-type-catalog").html(), {}, false);
-  const options = catalog("input[name=subcategory]").toArray().map((option) => catalog(option).val());
-  assert.deepEqual(options, Object.keys(businessCategories));
+  const groups = catalog("[data-group]").toArray().map((group) => [
+    catalog(group).attr("data-group"),
+    catalog(group).find("input[name=subcategory]").toArray().map((option) => catalog(option).val()),
+  ]);
+  assert.deepEqual(groups, Object.entries(businessCategoryGroups).map(([group, types]) => [group, Object.keys(types)]));
   assert.deepEqual($("#nearby-business-category option").toArray().map((group) => $(group).val()),
     Object.keys(businessCategoryGroups));
   assert.equal($("#nearby-business-type-filter").attr("aria-controls"), "nearby-business-type-list");
@@ -201,6 +204,21 @@ test("a category queries all its types or the selected subset in one count reque
   assert.deepEqual((await selected.json()).subcategories, expected);
   assert.deepEqual(requests[2].filter.typeFilter.includedTypes, expected);
   assert.equal(requests.length, 3);
+});
+
+test("parks and outdoor facilities share the same selected types for counts and names", async () => {
+  const group = "Parks & outdoor recreation";
+  const subcategories = ["athletic_field", "city_park", "hiking_area"];
+  const query = { category: undefined, group, subcategories };
+  places = placeMatches(["park"]);
+  detailsResponses.set("park", Response.json({ displayName: { text: "Sample Park" } }));
+
+  const count = await (await countRequest(query)).json();
+  assert.equal(count.count, 1);
+  assert.deepEqual(count.subcategories, subcategories);
+  const named = await (await matchRequest(query)).json();
+  assert.equal(named.results[0].name, "Sample Park");
+  assert.deepEqual(requests.map(({ filter }) => filter.typeFilter.includedTypes), [subcategories, subcategories]);
 });
 
 test("one verified search returns live business names in bounded pages for the same match set", async () => {
