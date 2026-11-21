@@ -387,7 +387,7 @@ function clearBrowseDataMap() {
   }
   browseSelectedLayer = null;
   browseContextLayers = [];
-  $("browse-map-layers").hidden = true;
+  $("browse-context-layers").hidden = true;
   $("browse-map-layer-list").replaceChildren();
   $("browse-map-context-notes").replaceChildren();
 }
@@ -1004,7 +1004,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
   closeStorefrontOpportunity();
   const priorParams = restoreState ? new URL(location.href).searchParams : null;
   const browsing = viewer === "browse";
-  $("browse-record-actions").hidden = true;
+  $("browse-open-records").hidden = true;
   resetMap();
   clearBrowseDataMap();
   placeRecordContent(browsing);
@@ -1067,10 +1067,7 @@ async function choose(item, searchedQuery = null, viewer = "records", restoreSta
     const summary = await api(`/api/v1/parcel?${qs}`);
     if (version !== viewVersion) return;
     requestedParcelKey = parcelKey(summary.parcel);
-    if (browsing) {
-      $("browse-intro").textContent = "Official records for the selected parcel are below.";
-      $("browse-record-actions").hidden = false;
-    }
+    if (browsing) $("browse-open-records").hidden = false;
     $("parcel-summary").hidden = false;
     $("records-view").classList.add("has-parcel");
     $("snapshot").hidden = activeDataSection !== "overview";
@@ -1253,9 +1250,7 @@ async function loadMap(qs, version) {
   }
 }
 async function loadBrowseSelectedMap(qs, version, recenter = false) {
-  const layersPanel = $("browse-map-layers");
-  layersPanel.hidden = false;
-  layersPanel.open = false;
+  $("browse-context-layers").hidden = false;
   const list = $("browse-map-layer-list");
   list.replaceChildren(el("p", "Loading the selected City parcel boundary…", "meta"));
   try {
@@ -1661,8 +1656,7 @@ async function selectBrowseParcel(feature) {
     requestedParcelKey = null;
     $("record-content").hidden = true;
     $("browse-data-status").textContent = "";
-    $("browse-record-actions").hidden = true;
-    $("browse-intro").textContent = "Select Request parcel data to load the full records for this parcel.";
+    $("browse-open-records").hidden = true;
     clearBrowseDataMap();
     resetMap();
   }
@@ -1673,21 +1667,33 @@ async function selectBrowseParcel(feature) {
   previous?.setStyle(browseParcelStyle(previous.feature));
   const path = browsePaths.get(key);
   path?.setStyle(browseParcelStyle(feature)).bringToFront();
-  const aside = $("browse-selection");
-  if (window.matchMedia("(max-width: 44rem)").matches)
-    aside.scrollIntoView({ behavior: "smooth", block: "start" });
   const title = p.address?.trim() || `City parcel ${p.parcel_id}`;
+  const heading = el("h2", title);
+  heading.id = "browse-selection-title";
+  $("browse-selection-summary").replaceChildren(heading,
+    el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "t-caption"));
   const zoning = el("dd", "Checking City zoning districts…");
-  const facts = el("dl", null, "browse-selection-facts");
-  facts.append(el("dt", "Recorded use"), browseUseDetail(p.recorded_use), el("dt", "Mapped zoning"), zoning);
-  const photoStatus = el("p", "Checking official parcel photo sources…", "meta");
-  aside.replaceChildren(el("p", "Selected City parcel", "eyebrow"), el("h2", title),
-    el("p", `Parcel ID ${p.parcel_id}${p.mblu ? ` · MBLU ${p.mblu}` : ""}`, "meta"),
-    facts, photoStatus);
-  aside.append(link(p.source_url, "Open City parcel source"));
-  const button = el("button", requestedParcelKey === key ? "Refresh parcel data" : "Request parcel data");
-  button.type = "button";
-  button.addEventListener("click", async () => {
+  const facts = el("dl", null, "p-kv browse-selection-facts");
+  const useFact = el("div");
+  useFact.append(el("dt", "Recorded use"), browseUseDetail(p.recorded_use));
+  const zoningFact = el("div");
+  zoningFact.append(el("dt", "Mapped zoning"), zoning);
+  facts.append(useFact, zoningFact);
+  const previewFacts = el("div");
+  previewFacts.append(facts);
+  const parcelSource = link(p.source_url, "Open City parcel source");
+  parcelSource.className = "p-src";
+  if (parcelSource.hasAttribute("href")) previewFacts.append(parcelSource);
+  const photoStatus = el("p", "Checking official parcel photo sources…", "t-caption browse-photo-status");
+  const preview = $("browse-selection-preview");
+  preview.replaceChildren(previewFacts, photoStatus);
+  preview.hidden = false;
+
+  const button = $("browse-request-records");
+  button.textContent = requestedParcelKey === key ? "Refresh parcel data" : "Request parcel data";
+  button.disabled = false;
+  $("browse-selection-actions").hidden = false;
+  button.onclick = async () => {
     button.disabled = true;
     button.textContent = "Loading parcel data…";
     try {
@@ -1695,22 +1701,23 @@ async function selectBrowseParcel(feature) {
       await choose({ parcel_id: p.parcel_id, objectid: p.objectid,
         address: p.address, match: { method: "map-selection" } }, null, "browse",
       saved.get("parcel_id") === String(p.parcel_id) && saved.get("objectid") === String(p.objectid));
-      setMobileBrowseView("records");
+      if (version === browseSelectionVersion) setMobileBrowseView("records");
     } finally {
       if (version === browseSelectionVersion) {
         button.disabled = false;
         button.textContent = requestedParcelKey === key ? "Refresh parcel data" : "Request parcel data";
       }
     }
-  });
-  aside.append(button);
+  };
+  if (window.matchMedia("(max-width: 44rem)").matches)
+    $("browse-selection").scrollIntoView({ behavior: "smooth", block: "start" });
   const qs = new URLSearchParams({ parcel_id: p.parcel_id, objectid: p.objectid });
   void loadBrowseZoning(qs, version, zoning);
   try {
     const data = await api(`/api/v1/parcel-photo?${qs}`);
     if (version !== browseSelectionVersion) return;
     if (data.status !== "ok") {
-      photoStatus.textContent = "No verified municipal or assessor photo was returned for this parcel.";
+      photoStatus.textContent = "No verified parcel photo returned.";
       return;
     }
     const figure = el("figure", null, "parcel-photo");
@@ -1722,11 +1729,16 @@ async function selectBrowseParcel(feature) {
     source.rel = "noopener noreferrer";
     caption.append(source);
     figure.append(image, caption);
-    if (setVerifiedPhoto(figure, image, source, data)) photoStatus.replaceWith(figure);
-    else photoStatus.textContent = "No verified municipal or assessor photo was returned for this parcel.";
+    if (setVerifiedPhoto(figure, image, source, data)) {
+      photoStatus.replaceWith(figure);
+      image.addEventListener("error", () => {
+        photoStatus.textContent = "Parcel photo could not load.";
+        figure.replaceWith(photoStatus);
+      }, { once: true });
+    } else photoStatus.textContent = "No verified parcel photo returned.";
   } catch {
     if (version === browseSelectionVersion)
-      photoStatus.textContent = "Photo sources unavailable; the City parcel selection remains available.";
+      photoStatus.textContent = "Parcel photo sources unavailable.";
   }
 }
 async function fetchBrowseViewport(bounds, zoom, signal, depth = 0) {
@@ -1817,7 +1829,7 @@ async function loadBrowseParcels() {
     browsePaths = paths;
     browsePaths.get(parcelKey(selectedBrowseParcel))?.bringToFront();
     const message = data.warning ?? (data.features.length
-      ? "City parcel outlines loaded. Select one to preview it."
+      ? "City parcel outlines loaded."
       : "No City parcel outlines returned for this view.");
     status.textContent = message;
     browseCoverage = { zoom, bounds: data.viewport_limited ? view : bounds,

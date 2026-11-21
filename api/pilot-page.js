@@ -167,21 +167,32 @@ const app = `
     <div class="browse-mobile-switch" role="group" aria-label="Browse view"><button id="mobile-map-tab" type="button" aria-pressed="true">Map</button><button id="mobile-records-tab" type="button" aria-pressed="false">Records</button></div>
     <div class="browse-workspace">
       <aside class="browse-sidebar">
-        <p class="eyebrow">Official City parcel layer</p>
-        <div class="browse-sidebar-heading"><h1>Browse parcels</h1><button id="browse-panel-toggle" type="button" class="secondary" aria-expanded="false">Expand panel</button></div>
-        <p id="browse-intro">Pan and zoom, then select a parcel. Full records load only after you request them.</p>
-        <div class="browse-use-controls">
-          <label for="browse-parcel-display">Color parcels by</label>
-          <select id="browse-parcel-display"><option value="use">Recorded use</option><option value="outlines">Outlines</option></select>
-          <div id="browse-use-key"><ul id="browse-use-legend" aria-label="Recorded use legend"></ul><p class="meta">The ochre outline marks the selected parcel. Unclassified parcels lack a verified use classification.</p></div>
-        </div>
-        <div id="browse-selection" aria-live="polite"><h2>Select a parcel</h2><p>Click a parcel outline to see its City ID, address and official photo.</p></div>
-        <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
-        <div id="browse-record-actions" class="browse-record-actions" hidden><button id="browse-open-records" type="button">View full records without map</button></div>
-        <details id="browse-map-layers" class="browse-map-layers" hidden><summary>Map layers and sources</summary><p class="meta">The highlighted boundary is the selected City parcel. Nearby features are map context.</p><div id="browse-map-layer-list"></div><div id="browse-map-context-notes" class="map-context-notes"></div></details>
-        <div id="browse-data-slot"></div>
+        <div class="p-panel__head browse-sidebar-heading"><h1>Browse parcels</h1><button id="browse-panel-toggle" type="button" class="secondary" aria-expanded="false">Expand panel</button></div>
+        <section id="browse-selection" aria-labelledby="browse-selection-title">
+          <div id="browse-selection-summary" aria-live="polite"><h2 id="browse-selection-title">Select a parcel</h2><p class="meta">Choose an outline on the map to see the parcel address and official photo.</p></div>
+          <div id="browse-selection-actions" class="browse-selection-actions" hidden>
+            <button id="browse-request-records" type="button">Request parcel data</button>
+            <button id="browse-open-records" class="secondary" type="button" hidden>View full records without map</button>
+          </div>
+          <p id="browse-data-status" class="map-status" role="status" aria-live="polite"></p>
+          <div id="browse-selection-preview" class="browse-selection-preview" hidden></div>
+        </section>
+        <details id="browse-map-layers" class="browse-map-layers">
+          <summary>Map display and layers</summary>
+          <div class="browse-use-controls">
+            <label for="browse-parcel-display">Color parcels by</label>
+            <select id="browse-parcel-display"><option value="use">Recorded use</option><option value="outlines">Outlines</option></select>
+            <div id="browse-use-key"><ul id="browse-use-legend" aria-label="Recorded use legend"></ul><p class="meta">Unclassified parcels lack a verified use classification.</p></div>
+          </div>
+          <p class="meta">The ochre outline marks the selected City parcel.</p>
+          <div id="browse-context-layers" hidden>
+            <h2>Selected parcel layers</h2>
+            <div id="browse-map-layer-list"></div><div id="browse-map-context-notes" class="map-context-notes"></div>
+          </div>
+          <p class="meta">Parcel boundaries and labels: New Haven GIS. Background: Esri street map or CT ECO aerial imagery.</p>
+        </details>
         <p id="browse-map-status" class="map-status" role="status" aria-live="polite"></p>
-        <p class="meta">Parcel boundaries and labels: New Haven GIS. Background: Esri street map or CT ECO aerial imagery. A municipal street-view or assessor building photo appears only after an exact parcel match. Images do not establish current conditions.</p>
+        <div id="browse-data-slot"></div>
       </aside>
       <div id="browse-map" role="region" aria-label="Browse New Haven parcel boundaries" tabindex="0"></div>
     </div>
